@@ -5,9 +5,9 @@ export function FirstDropSection() {
     <section id="first-drop" className="section-pad bg-paper text-ink">
       <div className="mx-auto grid max-w-[82rem] gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <a
-          href={firstDrop.pdf}
+          href={firstDrop.href}
           className="group relative block focus:outline-none"
-          aria-label={`Open PDF source for ${firstDrop.title}`}
+          aria-label={`Open detail page for ${firstDrop.title}`}
         >
           <span className="absolute -inset-7 -z-10 rounded-[3rem] bg-blue-haze/10 blur-3xl" />
           <span className="block overflow-hidden border border-ink/12 bg-white p-3 shadow-poster transition duration-700 group-hover:-translate-y-2 group-hover:rotate-[-0.8deg] group-focus-visible:-translate-y-2 group-focus-visible:rotate-[-0.8deg]">
@@ -41,7 +41,7 @@ export function FirstDropSection() {
             material or release date is confirmed on this temporary site.
           </p>
           <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-            <a className="button-dark" href="#waitlist">
+            <a className="button-dark" href={`${firstDrop.href}#drop-interest`}>
               Follow this drop
             </a>
             <a className="button-outline-dark" href={firstDrop.pdf}>

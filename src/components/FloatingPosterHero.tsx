@@ -54,7 +54,7 @@ export function FloatingPosterHero() {
             <a className="button-primary" href="#waitlist">
               Get notified
             </a>
-            <a className="button-secondary" href="#first-drop">
+            <a className="button-secondary" href={firstDrop.href}>
               View first poster
               <ArrowDownRight className="h-4 w-4" aria-hidden="true" />
             </a>
@@ -82,7 +82,7 @@ export function FloatingPosterHero() {
           />
 
           <a
-            href="#first-drop"
+            href={firstDrop.href}
             className="absolute bottom-8 left-0 right-0 mx-auto max-w-sm rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-center text-xs uppercase tracking-[0.24em] text-white/58 backdrop-blur transition hover:border-white/24 hover:text-paper focus:outline-none focus:ring-2 focus:ring-paper md:bottom-3"
           >
             View first poster

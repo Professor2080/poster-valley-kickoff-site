@@ -41,7 +41,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -255,10 +257,12 @@ img {
     text-transform: uppercase;
   }
 
-  .field input {
+  .field input,
+  .field select,
+  .field textarea {
     min-height: 3.8rem;
     border: 1px solid rgba(242, 238, 231, 0.18);
-    border-radius: 999px;
+    border-radius: 1.3rem;
     background: rgba(242, 238, 231, 0.06);
     color: var(--paper);
     padding: 0 1.2rem;
@@ -267,14 +271,28 @@ img {
       background var(--motion-medium) ease;
   }
 
-  .field input:focus {
+  .field textarea {
+    min-height: 9rem;
+    padding-block: 1rem;
+    resize: vertical;
+  }
+
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
     border-color: rgba(242, 238, 231, 0.56);
     background: rgba(242, 238, 231, 0.1);
     outline: none;
   }
 
-  .field input::placeholder {
+  .field input::placeholder,
+  .field textarea::placeholder {
     color: rgba(242, 238, 231, 0.32);
+  }
+
+  .field option {
+    background: var(--ink);
+    color: var(--paper);
   }
 }
 
