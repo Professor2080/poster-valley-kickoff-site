@@ -152,6 +152,14 @@ img {
     transform: translateY(-2px);
   }
 
+  .button-primary:disabled,
+  .button-dark:disabled,
+  .button-outline-dark:disabled {
+    cursor: wait;
+    opacity: 0.72;
+    transform: none;
+  }
+
   .label-pill {
     border: 1px solid rgba(8, 11, 14, 0.14);
     border-radius: 999px;

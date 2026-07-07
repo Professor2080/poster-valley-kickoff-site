@@ -21,6 +21,9 @@ npm install
 npm run dev
 ```
 
+`npm run dev` is enough for visual frontend work. Use Vercel's local dev flow when testing the API
+functions with real Supabase environment variables.
+
 ## Checks
 
 ```bash
@@ -47,16 +50,34 @@ the artwork inside the preview; regenerate it from the PDF if the source file ch
 
 ## Waitlist
 
-The waitlist form is currently a frontend placeholder. It opens a prepared email to
-`studio@postervalley.com` and does not store data.
+The site has two separate collection flows:
 
-Before public launch, connect the form to the agreed storage path, preferably:
+- `drop_interest_requests` for poster-specific interest requests from a poster detail page.
+- `newsletter_signups` for the general update form at the bottom of the homepage.
+
+Both forms submit to Vercel API functions first. The browser never receives the Supabase
+service-role key.
+
+## Supabase Setup
+
+Create the tables by running:
 
 ```text
-Vercel API route -> Supabase reservations table
+supabase/schema.sql
 ```
 
-Do not expose a Supabase service-role key in browser code.
+The tables have Row Level Security enabled. No public select policy is added; submissions should go
+through the Vercel API endpoints.
+
+Required environment variables:
+
+```text
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+Set these in Vercel as server-side project environment variables for Production, Preview and
+Development as needed. Keep local values in `.env.local`; do not commit secrets.
 
 ## Deployment
 
@@ -66,3 +87,12 @@ Vercel is the intended deployment target for this standalone site. Use:
 - Output directory: `dist`
 
 Connect the GitHub repository to Vercel for automatic deploys from `main`.
+
+After setting environment variables, verify:
+
+```bash
+npm run lint
+npm run build
+```
+
+Then submit one poster-specific request and one general update signup from the deployed preview.

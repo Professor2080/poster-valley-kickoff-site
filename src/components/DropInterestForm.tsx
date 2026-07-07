@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Drop } from '../data/drops'
+import { submitJson } from '../lib/formSubmit'
 
 type InterestFormData = {
   name: string
@@ -10,6 +11,8 @@ type InterestFormData = {
   quantity: string
   address: string
   note: string
+  company: string
+  consentContact: boolean
 }
 
 const initialFormData: InterestFormData = {
@@ -20,38 +23,47 @@ const initialFormData: InterestFormData = {
   quantity: '1',
   address: '',
   note: '',
+  company: '',
+  consentContact: false,
 }
 
 export function DropInterestForm({ drop }: { drop: Drop }) {
   const [formData, setFormData] = useState(initialFormData)
-  const [status, setStatus] = useState<'idle' | 'opened'>('idle')
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState('')
 
-  const handleChange = (field: keyof InterestFormData, value: string) => {
+  const handleChange = (field: keyof InterestFormData, value: string | boolean) => {
     setFormData((current) => ({ ...current, [field]: value }))
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setStatus('submitting')
+    setErrorMessage('')
 
-    const subject = encodeURIComponent(`Drop interest - ${drop.title}`)
-    const body = encodeURIComponent(
-      [
-        `Specific drop interest request: ${drop.title}`,
-        '',
-        `Name: ${formData.name}`,
-        `Email: ${formData.email}`,
-        `Country: ${formData.country}`,
-        `Preferred format: ${formData.format}`,
-        `Quantity indication: ${formData.quantity}`,
-        `Shipping address indication: ${formData.address || 'Not provided yet'}`,
-        `Note: ${formData.note || '-'}`,
-        '',
-        'No payment has been made. Please send final price, print details and payment instructions before confirming the order.',
-      ].join('\n'),
-    )
+    const result = await submitJson('/api/interest', {
+      dropSlug: drop.slug,
+      dropTitle: drop.title,
+      name: formData.name,
+      email: formData.email,
+      country: formData.country,
+      format: formData.format,
+      quantity: formData.quantity,
+      address: formData.address,
+      note: formData.note,
+      company: formData.company,
+      consentContact: formData.consentContact,
+      sourcePath: window.location.pathname,
+    })
 
-    window.location.href = `mailto:studio@postervalley.com?subject=${subject}&body=${body}`
-    setStatus('opened')
+    if (!result.ok) {
+      setErrorMessage(result.message)
+      setStatus('error')
+      return
+    }
+
+    setFormData(initialFormData)
+    setStatus('success')
   }
 
   return (
@@ -68,6 +80,15 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
       </div>
 
       <div className="mt-10 grid gap-5 md:grid-cols-2">
+        <label className="hidden" aria-hidden="true">
+          Company
+          <input
+            tabIndex={-1}
+            autoComplete="off"
+            value={formData.company}
+            onChange={(event) => handleChange('company', event.target.value)}
+          />
+        </label>
         <Field label="Full name" value={formData.name} onChange={(value) => handleChange('name', value)} required />
         <Field
           label="Email"
@@ -115,20 +136,39 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         </label>
       </div>
 
+      <label className="mt-6 flex gap-3 text-sm leading-6 text-white/58">
+        <input
+          required
+          type="checkbox"
+          checked={formData.consentContact}
+          onChange={(event) => handleChange('consentContact', event.target.checked)}
+          className="mt-1 h-4 w-4 shrink-0 accent-white"
+        />
+        <span>
+          Poster Valley may contact me about this specific poster request, including final print
+          details, price, payment link and shipping steps.
+        </span>
+      </label>
+
       <div className="mt-7 rounded-[1.5rem] border border-white/12 bg-white/[0.045] p-5 text-sm leading-6 text-white/56">
         No payment is taken now. Final price, paper, availability and shipping details are confirmed
         before any payment link is sent.
       </div>
 
-      <button type="submit" className="button-primary mt-7 w-full justify-center md:w-auto">
-        Send drop interest
+      <button
+        type="submit"
+        className="button-primary mt-7 w-full justify-center md:w-auto"
+        disabled={status === 'submitting'}
+      >
+        {status === 'submitting' ? 'Saving interest...' : 'Send drop interest'}
       </button>
 
-      {status === 'opened' ? (
+      {status === 'success' ? (
         <p className="mt-4 text-sm leading-6 text-white/58">
-          Your email client should now contain this poster-specific interest request.
+          Saved. We will contact you before any payment or final order confirmation.
         </p>
       ) : null}
+      {status === 'error' ? <p className="mt-4 text-sm leading-6 text-white/58">{errorMessage}</p> : null}
     </form>
   )
 }

@@ -1,20 +1,36 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { submitJson } from '../lib/formSubmit'
 
 export function WaitlistCTA() {
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle' | 'opened'>('idle')
+  const [company, setCompany] = useState('')
+  const [consentNewsletter, setConsentNewsletter] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState('')
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setStatus('submitting')
+    setErrorMessage('')
 
-    const subject = encodeURIComponent('Poster Valley first drop notification')
-    const body = encodeURIComponent(
-      `Please notify me when the first Poster Valley drop opens.\n\nEmail: ${email}`,
-    )
+    const result = await submitJson('/api/newsletter', {
+      email,
+      company,
+      consentNewsletter,
+      sourcePath: window.location.pathname,
+    })
 
-    window.location.href = `mailto:studio@postervalley.com?subject=${subject}&body=${body}`
-    setStatus('opened')
+    if (!result.ok) {
+      setErrorMessage(result.message)
+      setStatus('error')
+      return
+    }
+
+    setEmail('')
+    setCompany('')
+    setConsentNewsletter(false)
+    setStatus('success')
   }
 
   return (
@@ -32,6 +48,15 @@ export function WaitlistCTA() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="hidden" aria-hidden="true">
+            Company
+            <input
+              tabIndex={-1}
+              autoComplete="off"
+              value={company}
+              onChange={(event) => setCompany(event.target.value)}
+            />
+          </label>
           <label className="field">
             <span>Email address</span>
             <input
@@ -43,18 +68,30 @@ export function WaitlistCTA() {
               autoComplete="email"
             />
           </label>
-          <button type="submit" className="button-primary w-full justify-center">
-            Get notified
+          <label className="flex gap-3 text-sm leading-6 text-white/50">
+            <input
+              required
+              type="checkbox"
+              checked={consentNewsletter}
+              onChange={(event) => setConsentNewsletter(event.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 accent-white"
+            />
+            <span>Poster Valley may send me launch updates and occasional release notes.</span>
+          </label>
+          <button
+            type="submit"
+            className="button-primary w-full justify-center"
+            disabled={status === 'submitting'}
+          >
+            {status === 'submitting' ? 'Saving...' : 'Get notified'}
           </button>
           <p className="text-sm leading-6 text-white/45">
-            Temporary placeholder: this opens your email client. Database storage should be
-            connected before public launch.
+            General updates only. Poster-specific requests are collected on each poster page.
           </p>
-          {status === 'opened' ? (
-            <p className="text-sm leading-6 text-white/60">
-              Your email client should now contain the prepared notification request.
-            </p>
+          {status === 'success' ? (
+            <p className="text-sm leading-6 text-white/60">Saved. You are on the update list.</p>
           ) : null}
+          {status === 'error' ? <p className="text-sm leading-6 text-white/60">{errorMessage}</p> : null}
         </form>
       </div>
     </section>
