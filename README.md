@@ -1,10 +1,10 @@
 # Poster Valley Kickoff Site
 
-Temporary standalone launch site for the first Poster Valley print reservations.
+Temporary standalone launch site for Poster Valley's first poster drop.
 
-This project is intentionally separate from the main Poster Valley MVP repository. It is a fast,
-promotional React/Vite/Tailwind site for collecting early reservation interest before the full
-Next.js, WordPress/WooCommerce and Open Edition platform is ready.
+This project is intentionally separate from the main Poster Valley MVP repository. It is a focused
+React/Vite/Tailwind site for presenting the first poster design before the full commerce platform is
+ready.
 
 ## Stack
 
@@ -12,7 +12,7 @@ Next.js, WordPress/WooCommerce and Open Edition platform is ready.
 - Vite
 - TypeScript
 - Tailwind CSS
-- lucide-react icons
+- lucide-react for the small amount of icon UI
 
 ## Local Development
 
@@ -28,25 +28,41 @@ npm run lint
 npm run build
 ```
 
-## Reservation Form
+## First Drop Assets
 
-The form is prepared for Netlify Forms:
+The first poster PDF is stored here:
 
-- `index.html` contains a hidden `reservation` form so Netlify can detect the fields at deploy time.
-- `src/App.tsx` submits URL-encoded form data to `/`.
-- On Netlify, submissions should appear under the site's Forms dashboard.
+```text
+public/posters/first-drop.pdf
+```
 
-If the site is deployed elsewhere, connect the form to a real endpoint before publishing. Do not
-collect real customer data until the destination, privacy text and retention process are approved.
+The web preview used by the site is:
 
-## Content Notes
+```text
+public/posters/first-drop-preview.webp
+```
 
-- Public wording uses `Reserve`, `First Print` and `First Edition` language, not `back`.
-- The page does not implement checkout, Mollie payments, refunds or Open Edition business logic.
-- The progress meters are static launch copy and must be replaced with real values before public use.
+The preview was rendered from page 1 of the PDF at the original portrait aspect ratio. Do not edit
+the artwork inside the preview; regenerate it from the PDF if the source file changes.
 
-## Recommended Deploy
+## Waitlist
 
-Netlify is the simplest first deploy target because the reservation form can work without custom
-backend code. Vercel is fine for the frontend, but needs a separate form endpoint or serverless
-function for storing reservation requests.
+The waitlist form is currently a frontend placeholder. It opens a prepared email to
+`studio@postervalley.com` and does not store data.
+
+Before public launch, connect the form to the agreed storage path, preferably:
+
+```text
+Vercel API route -> Supabase reservations table
+```
+
+Do not expose a Supabase service-role key in browser code.
+
+## Deployment
+
+Vercel is the intended deployment target for this standalone site. Use:
+
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Connect the GitHub repository to Vercel for automatic deploys from `main`.
