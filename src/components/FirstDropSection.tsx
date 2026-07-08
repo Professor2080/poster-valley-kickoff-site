@@ -43,7 +43,7 @@ export function FirstDropSection() {
           </p>
           <div className="mt-9 flex flex-col gap-4 sm:flex-row">
             <a className="button-dark" href={`${firstDrop.href}#drop-interest`}>
-              Reserveer deze poster
+              Reserve this poster
             </a>
             <a className="button-outline-dark" href={firstDrop.href}>
               View details

@@ -70,11 +70,11 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
       <div>
         <p className="eyebrow text-white/45">Poster reservation</p>
         <h2 className="mt-4 font-heading text-[clamp(3rem,6vw,6.4rem)] font-semibold leading-[0.9] tracking-[-0.075em]">
-          Reserveer je exemplaar.
+          Reserve your copy.
         </h2>
         <p className="mt-6 max-w-2xl text-lg leading-8 text-white/58">
-          Laat je gegevens achter voor deze specifieke poster. Geen betaling nu. Zodra de editie
-          definitief is, zetten we je reservering om naar een pre-order met betaallink.
+          Leave your details for this specific poster. No payment is taken now. Once the Edition is
+          confirmed, your reservation becomes a pre-order with a payment link.
         </p>
       </div>
 
@@ -160,13 +160,13 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         </label>
       </div>
 
-      <label className="mt-6 flex gap-3 text-sm leading-6 text-white/58">
+      <label className="consent-choice mt-7">
         <input
           required
           type="checkbox"
           checked={formData.consentContact}
           onChange={(event) => handleChange('consentContact', event.target.checked)}
-          className="mt-1 h-4 w-4 shrink-0 accent-white"
+          className="mt-0.5 h-6 w-6 shrink-0 accent-white"
         />
         <span>
           Poster Valley may contact me about this specific poster reservation, including final
@@ -175,8 +175,8 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
       </label>
 
       <div className="mt-7 rounded-[1.5rem] border border-white/12 bg-white/[0.045] p-5 text-sm leading-6 text-white/56">
-        Geen betaling nu. Je ontvangt prijs, printdetails, verzendkosten en betaallink voordat je
-        reservering definitief wordt.
+        No payment is taken now. You receive the price, print details, shipping costs and payment
+        link before your reservation becomes final.
       </div>
 
       <button
@@ -184,7 +184,7 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         className="button-primary mt-7 w-full justify-center md:w-auto"
         disabled={status === 'submitting'}
       >
-        {status === 'submitting' ? 'Saving reservation...' : 'Reserveer je exemplaar'}
+        {status === 'submitting' ? 'Saving reservation...' : 'Reserve your copy'}
       </button>
 
       {status === 'success' ? (

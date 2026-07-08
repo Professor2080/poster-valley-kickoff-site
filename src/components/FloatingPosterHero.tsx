@@ -52,10 +52,10 @@ export function FloatingPosterHero() {
           </p>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
             <a className="button-primary" href={`${firstDrop.href}#drop-interest`}>
-              Reserveer deze poster
+              Reserve this poster
             </a>
             <a className="button-secondary" href="#waitlist">
-              Ontvang updates
+              Get updates
               <ArrowDownRight className="h-4 w-4" aria-hidden="true" />
             </a>
           </div>
@@ -85,7 +85,7 @@ export function FloatingPosterHero() {
             href={`${firstDrop.href}#drop-interest`}
             className="absolute bottom-8 left-0 right-0 mx-auto max-w-sm rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-center text-xs uppercase tracking-[0.24em] text-white/58 backdrop-blur transition hover:border-white/24 hover:text-paper focus:outline-none focus:ring-2 focus:ring-paper md:bottom-3"
           >
-            Reserveer eerste poster
+            Reserve first poster
           </a>
         </div>
       </div>

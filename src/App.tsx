@@ -74,7 +74,7 @@ function Header({ isDetailPage }: { isDetailPage: boolean }) {
           className={isDetailPage ? 'button-outline-dark' : 'nav-cta'}
           href={isDetailPage ? routes.firstDropInterest : '#waitlist'}
         >
-          {isDetailPage ? 'Reserveer' : 'Ontvang updates'}
+          {isDetailPage ? 'Reserve' : 'Get updates'}
         </a>
       </nav>
     </header>

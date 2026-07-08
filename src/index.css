@@ -364,6 +364,26 @@ img {
     background: #fff;
     color: var(--ink);
   }
+
+  .consent-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    border-radius: 1.1rem;
+    padding: 0.95rem;
+    color: rgba(242, 238, 231, 0.64);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    transition:
+      background var(--motion-medium) ease,
+      color var(--motion-medium) ease;
+  }
+
+  .consent-choice:hover,
+  .consent-choice:focus-within {
+    background: rgba(242, 238, 231, 0.055);
+    color: rgba(242, 238, 231, 0.78);
+  }
 }
 
 @keyframes poster-float {

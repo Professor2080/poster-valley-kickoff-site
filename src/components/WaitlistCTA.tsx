@@ -37,13 +37,13 @@ export function WaitlistCTA() {
     <section id="waitlist" className="section-pad bg-ink text-paper">
       <div className="mx-auto grid max-w-[82rem] gap-10 border-y border-white/12 py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
         <div>
-          <p className="eyebrow text-white/45">Ontvang updates</p>
+          <p className="eyebrow text-white/45">Get updates</p>
           <h2 className="mt-5 max-w-4xl font-heading text-[clamp(3.4rem,7vw,7.3rem)] font-semibold leading-[0.88] tracking-[-0.08em]">
-            Blijf op de hoogte van nieuwe releases.
+            Stay updated on new releases.
           </h2>
           <p className="mt-7 max-w-xl text-lg leading-8 text-white/58">
-            Algemene updates over Poster Valley, nieuwe Designs en release notes. Poster-specifieke
-            reserveringen blijven op de detailpagina van de poster.
+            General updates about Poster Valley, new Designs and release notes. Poster-specific
+            reservations stay on each poster detail page.
           </p>
         </div>
 
@@ -83,7 +83,7 @@ export function WaitlistCTA() {
             className="button-primary w-full justify-center"
             disabled={status === 'submitting'}
           >
-            {status === 'submitting' ? 'Saving...' : 'Blijf op de hoogte'}
+            {status === 'submitting' ? 'Saving...' : 'Stay updated'}
           </button>
           <p className="text-sm leading-6 text-white/45">
             General updates only. Poster-specific requests are collected on each poster page.

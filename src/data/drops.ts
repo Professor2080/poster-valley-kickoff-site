@@ -36,25 +36,25 @@ export const firstDrop: Drop = {
     'A dramatic aviation poster built around the Eurofighter Typhoon, prepared as Poster Valley\'s first focused drop.',
   dimensions: ['A2 (42 x 60 cm)', 'One fixed format for this first release'],
   printInfo: [
-    'Geen betaling nu.',
-    'Zodra de editie definitief is, zetten we je reservering om naar een pre-order met betaallink.',
-    'Je reservering is specifiek voor deze poster.',
+    'No payment is taken now.',
+    'When the Edition is confirmed, your reservation becomes a pre-order with a payment link.',
+    'Your reservation is specific to this poster.',
   ],
   shipping: [
     {
-      region: 'Nederland',
-      estimate: 'Indicatie €6,95',
-      note: 'Thuisbezorgd als stevige posterzending.',
+      region: 'The Netherlands',
+      estimate: '€5,95',
+      note: 'Delivered as a protected poster shipment.',
     },
     {
-      region: 'Europa',
-      estimate: 'Indicatie €13,95-€17,95',
-      note: 'Afhankelijk van land en vervoerder.',
+      region: 'Europe',
+      estimate: 'From €9,50',
+      note: 'Final cost depends on country and carrier.',
     },
     {
-      region: 'Internationaal',
-      estimate: 'Indicatie vanaf €24,95',
-      note: 'Definitieve kosten worden bevestigd voor betaling.',
+      region: 'International',
+      estimate: 'From €21,00',
+      note: 'Final cost is confirmed before payment.',
     },
   ],
 }
@@ -87,11 +87,11 @@ export const processSteps = [
     body: 'Poster Valley introduces upcoming poster designs one at a time, with enough space to actually look.',
   },
   {
-    title: 'Reserveer je poster',
-    body: 'Laat per poster weten dat je een exemplaar wilt reserveren. Geen betaling nu, wel helderheid voor productie.',
+    title: 'Reserve your poster',
+    body: 'Reserve a copy for the specific poster you care about. No payment now, but clear production intent.',
   },
   {
-    title: 'Ontvang de pre-order',
-    body: 'Zodra de editie definitief is, sturen we printdetails, verzendkosten en een betaallink.',
+    title: 'Receive the pre-order',
+    body: 'Once the Edition is confirmed, we send print details, shipping costs and a payment link.',
   },
 ]
