@@ -80,6 +80,29 @@ export function DesignDetailPage() {
             </div>
           </div>
         </div>
+
+        <div className="mx-auto mt-16 grid max-w-[88rem] gap-10 border-t border-ink/12 pt-12 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
+          <div>
+            <p className="eyebrow text-ink/42">Room view</p>
+            <h2 className="mt-4 font-heading text-[clamp(2.8rem,5vw,5.4rem)] font-semibold leading-[0.9] tracking-[-0.075em]">
+              A real sense of scale.
+            </h2>
+            <p className="mt-5 max-w-md text-base leading-7 text-ink/58">
+              A framed room view helps show how the A2 poster sits on a wall. The first release is
+              sold as a poster; frame styling is shown for context only.
+            </p>
+          </div>
+          <div className="overflow-hidden border border-ink/12 bg-white p-3 shadow-poster">
+            <img
+              src="/posters/eurofighter-wall-frame.jpg"
+              alt="Eurofighter Typhoon poster shown framed on a wall for scale"
+              width="640"
+              height="480"
+              className="aspect-[4/3] w-full object-cover"
+              loading="lazy"
+            />
+          </div>
+        </div>
       </section>
 
       <section className="section-pad bg-ink text-paper">

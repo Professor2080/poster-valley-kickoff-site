@@ -68,13 +68,13 @@ export function WaitlistCTA() {
               autoComplete="email"
             />
           </label>
-          <label className="flex gap-3 text-sm leading-6 text-white/50">
+          <label className="consent-choice">
             <input
               required
               type="checkbox"
               checked={consentNewsletter}
               onChange={(event) => setConsentNewsletter(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 accent-white"
+              className="mt-0.5 h-6 w-6 shrink-0 accent-white"
             />
             <span>Poster Valley may send me launch updates and occasional release notes.</span>
           </label>
@@ -86,7 +86,12 @@ export function WaitlistCTA() {
             {status === 'submitting' ? 'Saving...' : 'Stay updated'}
           </button>
           <p className="text-sm leading-6 text-white/45">
-            General updates only. Poster-specific requests are collected on each poster page.
+            General updates only. Poster-specific requests are collected on each poster page. Read
+            the{' '}
+            <a className="underline underline-offset-4 transition hover:text-white" href="/privacy">
+              Privacy Notice
+            </a>
+            .
           </p>
           {status === 'success' ? (
             <p className="text-sm leading-6 text-white/60">Saved. You are on the update list.</p>

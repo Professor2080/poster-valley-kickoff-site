@@ -384,6 +384,14 @@ img {
     background: rgba(242, 238, 231, 0.055);
     color: rgba(242, 238, 231, 0.78);
   }
+
+  .privacy-title {
+    font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(3.6rem, 8vw, 7rem);
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 0.88;
+  }
 }
 
 @keyframes poster-float {

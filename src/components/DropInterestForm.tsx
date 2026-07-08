@@ -178,6 +178,13 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         No payment is taken now. You receive the price, print details, shipping costs and payment
         link before your reservation becomes final.
       </div>
+      <p className="mt-4 text-sm leading-6 text-white/45">
+        We use these details only for this poster reservation. Read the{' '}
+        <a className="underline underline-offset-4 transition hover:text-white" href="/privacy">
+          Privacy Notice
+        </a>
+        .
+      </p>
 
       <button
         type="submit"
