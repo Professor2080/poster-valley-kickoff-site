@@ -29,23 +29,24 @@ export function FirstDropSection() {
           </h2>
           <div className="mt-7 flex flex-wrap gap-2">
             <span className="label-pill">First drop</span>
-            <span className="label-pill">Coming soon</span>
-            <span className="label-pill">Collecting interest</span>
+            <span className="label-pill">A2</span>
+            <span className="label-pill">€17,75</span>
+            <span className="label-pill">Reservations open</span>
           </div>
           <p className="mt-8 text-xl leading-9 text-ink/64">
-            Our first poster drop is being prepared. Join the list to receive the launch date,
-            edition details and print information first.
+            Our first poster drop is being prepared as an A2 release. Reserve your copy now; no
+            payment is taken until the Edition is ready for pre-order.
           </p>
           <p className="mt-5 text-sm leading-7 text-ink/48">
-            Artist and production details are still to be announced. No price, edition size,
-            material or release date is confirmed on this temporary site.
+            Creator: {firstDrop.creator}. Final paper, shipping timing and payment link are shared
+            before your reservation becomes definitive.
           </p>
           <div className="mt-9 flex flex-col gap-4 sm:flex-row">
             <a className="button-dark" href={`${firstDrop.href}#drop-interest`}>
-              Follow this drop
+              Reserveer deze poster
             </a>
-            <a className="button-outline-dark" href={firstDrop.pdf}>
-              View PDF source
+            <a className="button-outline-dark" href={firstDrop.href}>
+              View details
             </a>
           </div>
         </div>

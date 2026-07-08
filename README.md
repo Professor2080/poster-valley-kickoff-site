@@ -33,20 +33,14 @@ npm run build
 
 ## First Drop Assets
 
-The first poster PDF is stored here:
-
-```text
-public/posters/first-drop.pdf
-```
-
 The web preview used by the site is:
 
 ```text
 public/posters/first-drop-preview.webp
 ```
 
-The preview was rendered from page 1 of the PDF at the original portrait aspect ratio. Do not edit
-the artwork inside the preview; regenerate it from the PDF if the source file changes.
+Do not place print-ready PDFs or other high-resolution source files in `public/`. Public assets are
+served directly by the website and can be downloaded if someone knows the URL.
 
 ## Waitlist
 

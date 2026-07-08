@@ -3,33 +3,59 @@ export type Drop = {
   title: string
   status: string
   image: string
-  pdf?: string
   href: string
   alt: string
   isFirstDrop?: boolean
+  creator?: string
+  size?: string
+  price?: string
   note: string
   summary?: string
   dimensions?: string[]
   printInfo?: string[]
+  shipping?: {
+    region: string
+    estimate: string
+    note: string
+  }[]
 }
 
 export const firstDrop: Drop = {
   slug: 'eurofighter-typhoon',
   title: 'Eurofighter Typhoon',
-  status: 'First drop - coming soon',
+  status: 'Preparing the First Edition',
   image: '/posters/first-drop-preview.webp',
-  pdf: '/posters/first-drop.pdf',
   href: '/designs/eurofighter-typhoon',
   alt: 'Poster artwork for Eurofighter Typhoon',
   isFirstDrop: true,
+  creator: 'Manou',
+  size: 'A2 (42 x 60 cm)',
+  price: '€17,75',
   note: 'The first Poster Valley design is being prepared as a focused print release.',
   summary:
     'A dramatic aviation poster built around the Eurofighter Typhoon, prepared as Poster Valley\'s first focused drop.',
-  dimensions: ['A2 source artwork', 'Additional print sizes to be confirmed'],
+  dimensions: ['A2 (42 x 60 cm)', 'One fixed format for this first release'],
   printInfo: [
-    'No payment is taken with this form.',
-    'Final price, paper, edition details and shipping timing will be confirmed before payment.',
-    'Your interest request is specific to this poster.',
+    'Geen betaling nu.',
+    'Zodra de editie definitief is, zetten we je reservering om naar een pre-order met betaallink.',
+    'Je reservering is specifiek voor deze poster.',
+  ],
+  shipping: [
+    {
+      region: 'Nederland',
+      estimate: 'Indicatie €6,95',
+      note: 'Thuisbezorgd als stevige posterzending.',
+    },
+    {
+      region: 'Europa',
+      estimate: 'Indicatie €13,95-€17,95',
+      note: 'Afhankelijk van land en vervoerder.',
+    },
+    {
+      region: 'Internationaal',
+      estimate: 'Indicatie vanaf €24,95',
+      note: 'Definitieve kosten worden bevestigd voor betaling.',
+    },
   ],
 }
 
@@ -61,11 +87,11 @@ export const processSteps = [
     body: 'Poster Valley introduces upcoming poster designs one at a time, with enough space to actually look.',
   },
   {
-    title: 'Follow the drop',
-    body: 'Join the list for the Designs you care about. No fake urgency, no noisy launch mechanics.',
+    title: 'Reserveer je poster',
+    body: 'Laat per poster weten dat je een exemplaar wilt reserveren. Geen betaling nu, wel helderheid voor productie.',
   },
   {
-    title: 'Get notified',
-    body: 'Launch date, print details and availability are shared when the release is ready.',
+    title: 'Ontvang de pre-order',
+    body: 'Zodra de editie definitief is, sturen we printdetails, verzendkosten en een betaallink.',
   },
 ]
