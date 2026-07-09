@@ -127,7 +127,7 @@ function statusCopy(invitation: InvitationData, isReturn: boolean) {
   }
 
   if (isReturn) {
-    return 'We are checking your payment status. Mollie webhook confirmation is the final source of truth.'
+    return 'We are checking your payment status. This usually updates within a few moments.'
   }
 
   if (invitation.status === 'expired') {
@@ -354,7 +354,7 @@ export function OrderInvitationPage({ token }: { token: string }) {
               {quote.supported ? (
                 <>
                   Shipping: {quote.shippingLabel}. {quote.shippingNote}
-                  {quote.reviewNeeded ? ' Rates are configured for review before launch.' : ''}
+                  {quote.reviewNeeded ? ' Your total is shown before you continue to payment.' : ''}
                 </>
               ) : (
                 quote.reason
