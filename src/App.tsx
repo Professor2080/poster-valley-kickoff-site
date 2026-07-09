@@ -6,7 +6,7 @@ import { FloatingPosterHero } from './components/FloatingPosterHero'
 import { HowItWorks } from './components/HowItWorks'
 import { PrivacyPage } from './components/PrivacyPage'
 import { WaitlistCTA } from './components/WaitlistCTA'
-import { isFirstDropRoute, isPrivacyRoute, routes } from './lib/routes'
+import { getDropRoute, isPrivacyRoute, routes } from './lib/routes'
 
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname)
@@ -18,15 +18,16 @@ function App() {
     return () => window.removeEventListener('popstate', handleNavigation)
   }, [])
 
-  const isDetailPage = isFirstDropRoute(pathname)
+  const detailDrop = getDropRoute(pathname)
+  const isDetailPage = Boolean(detailDrop)
   const isPrivacyPage = isPrivacyRoute(pathname)
   const isLightPage = isDetailPage || isPrivacyPage
 
   return (
     <main className="min-h-screen overflow-hidden bg-ink text-paper">
       <Header isLightPage={isLightPage} />
-      {isDetailPage ? (
-        <DesignDetailPage />
+      {detailDrop ? (
+        <DesignDetailPage drop={detailDrop} />
       ) : isPrivacyPage ? (
         <PrivacyPage />
       ) : (

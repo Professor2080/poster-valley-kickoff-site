@@ -1,7 +1,7 @@
 import { ArrowDownRight } from 'lucide-react'
 import { useRef } from 'react'
 import type { CSSProperties, PointerEvent } from 'react'
-import { firstDrop, upcomingDrops } from '../data/drops'
+import { featuredDrop, upcomingDrops } from '../data/drops'
 import { PosterFloatCard } from './PosterFloatCard'
 
 type PosterMotionStyle = CSSProperties & {
@@ -11,6 +11,7 @@ type PosterMotionStyle = CSSProperties & {
 
 export function FloatingPosterHero() {
   const heroRef = useRef<HTMLElement | null>(null)
+  const drop = featuredDrop
 
   const handlePointerMove = (event: PointerEvent<HTMLElement>) => {
     const section = heroRef.current
@@ -51,7 +52,7 @@ export function FloatingPosterHero() {
             first design, reserve a copy, or join the general update list for future releases.
           </p>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-            <a className="button-primary" href={`${firstDrop.href}#drop-interest`}>
+            <a className="button-primary" href={`${drop.href}#drop-interest`}>
               Reserve this poster
             </a>
             <a className="button-secondary" href="#waitlist">
@@ -63,7 +64,7 @@ export function FloatingPosterHero() {
 
         <div className="poster-stage relative order-first min-h-[37rem] w-full lg:order-none lg:min-h-[52rem]">
           <PosterFloatCard
-            drop={firstDrop}
+            drop={drop}
             variant="hero"
             className="floating-artwork main-poster absolute left-1/2 top-[45%] z-20 w-[min(78vw,21rem)] -translate-x-1/2 -translate-y-1/2 text-paper sm:w-[25rem] lg:w-[28rem]"
           />
@@ -82,7 +83,7 @@ export function FloatingPosterHero() {
           />
 
           <a
-            href={`${firstDrop.href}#drop-interest`}
+            href={`${drop.href}#drop-interest`}
             className="absolute bottom-8 left-0 right-0 mx-auto max-w-sm rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-center text-xs uppercase tracking-[0.24em] text-white/58 backdrop-blur transition hover:border-white/24 hover:text-paper focus:outline-none focus:ring-2 focus:ring-paper md:bottom-3"
           >
             Reserve first poster

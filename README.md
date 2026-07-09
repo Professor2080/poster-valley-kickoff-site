@@ -42,15 +42,21 @@ public/posters/first-drop-preview.webp
 Do not place print-ready PDFs or other high-resolution source files in `public/`. Public assets are
 served directly by the website and can be downloaded if someone knows the URL.
 
-## Waitlist
+## Reservations and Updates
 
 The site has two separate collection flows:
 
-- `drop_interest_requests` for poster-specific interest requests from a poster detail page.
+- `drop_interest_requests` for poster-specific reservations from a poster detail page.
 - `newsletter_signups` for the general update form at the bottom of the homepage.
 
 Both forms submit to Vercel API functions first. The browser never receives the Supabase
 service-role key.
+
+Poster reservations are intentionally lightweight. A visitor reserves interest in a specific poster
+without payment, without checkout and without address details. The API derives poster title, price,
+format and shipping profile on the server from `dropSlug`; the browser only sends customer fields
+and consent values. If a drop goes into production, Poster Valley can later send a personal order
+invitation with final price, shipping and payment details.
 
 ## Supabase Setup
 
@@ -69,6 +75,7 @@ Required server-side environment variables:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 RESEND_API_KEY=
+VERSEL_RESEND_API_KEY=
 FORM_NOTIFICATION_TO=
 FORM_NOTIFICATION_FROM=
 FORM_NOTIFICATION_REPLY_TO=
@@ -80,9 +87,11 @@ Development as needed. Keep local values in `.env.local`; do not commit secrets.
 service-role key must remain server-side only and must never be exposed through browser-prefixed
 environment variables.
 
-`RESEND_API_KEY` enables internal form-copy emails. `FORM_NOTIFICATION_FROM` must use a sender that
-is verified in Resend. Keep actual recipient, sender and reply-to values in Vercel environment
-variables rather than hard-coding them in the repository.
+`RESEND_API_KEY` enables internal form-copy emails and customer reservation confirmations.
+`VERSEL_RESEND_API_KEY` is still supported as a backwards-compatible alias until the Vercel
+environment has been normalized. `FORM_NOTIFICATION_FROM` must use a sender domain verified in
+Resend, currently `auth.hetprojectmakersbureau.nl`. Keep actual recipient, sender and reply-to
+values in Vercel environment variables rather than hard-coding secrets in the repository.
 
 ## Deployment
 

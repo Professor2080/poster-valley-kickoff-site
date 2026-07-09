@@ -13,7 +13,8 @@ type InterestFormData = {
   quantity: string
   note: string
   company: string
-  consentContact: boolean
+  acceptedReservationTerms: boolean
+  marketingOptIn: boolean
 }
 
 const initialFormData: InterestFormData = {
@@ -24,7 +25,8 @@ const initialFormData: InterestFormData = {
   quantity: '1',
   note: '',
   company: '',
-  consentContact: false,
+  acceptedReservationTerms: false,
+  marketingOptIn: false,
 }
 
 export function DropInterestForm({ drop }: { drop: Drop }) {
@@ -41,18 +43,25 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
     setStatus('submitting')
     setErrorMessage('')
 
+    const country = formData.country.trim()
+
+    if (!countries.includes(country)) {
+      setErrorMessage('Please select a country from the list.')
+      setStatus('error')
+      return
+    }
+
     const result = await submitJson('/api/interest', {
       dropSlug: drop.slug,
-      dropTitle: drop.title,
-      name: `${formData.firstName} ${formData.lastName}`.trim(),
+      firstName: formData.firstName,
+      lastName: formData.lastName,
       email: formData.email,
-      country: formData.country,
-      format: drop.size ?? 'A2 (42 x 60 cm)',
+      country,
       quantity: formData.quantity,
-      address: '',
       note: formData.note,
       company: formData.company,
-      consentContact: formData.consentContact,
+      acceptedReservationTerms: formData.acceptedReservationTerms,
+      marketingOptIn: formData.marketingOptIn,
       sourcePath: window.location.pathname,
     })
 
@@ -74,17 +83,21 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
           Reserve your copy.
         </h2>
         <p className="mt-6 max-w-2xl text-lg leading-8 text-white/58">
-          Leave your details for this specific poster. No payment is taken now. Once the Edition is
-          confirmed, your reservation becomes a pre-order with a payment link.
+          Leave your details for this specific poster. No payment is taken now and this is not a
+          binding order. If the poster goes into production, we send a personal order link before
+          you enter address details or pay.
         </p>
       </div>
 
       <div className="mt-10 rounded-[1.5rem] border border-white/12 bg-white/[0.045] p-5 text-sm leading-6 text-white/62 md:p-7">
         <div className="grid gap-5 md:grid-cols-3">
           <SummaryItem label="Poster" value={drop.title} />
-          <SummaryItem label="Size" value={drop.size ?? 'A2 (42 x 60 cm)'} />
-          <SummaryItem label="Poster price" value={drop.price ?? '€17,75'} />
+          <SummaryItem label="Size" value={drop.dimensions.display} />
+          <SummaryItem label="Current poster price" value={drop.priceLabel} />
         </div>
+        <p className="mt-5 text-sm leading-6 text-white/48">
+          Shipping is calculated later. Final price including shipping will be sent before payment.
+        </p>
       </div>
 
       {status === 'success' ? (
@@ -93,11 +106,12 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
           <div>
             <p className="eyebrow text-white/45">Reservation saved</p>
             <h3 className="mt-4 font-heading text-[clamp(2.4rem,4.5vw,4.8rem)] font-semibold leading-[0.92] tracking-[-0.065em]">
-              We have reserved your place for {drop.title}.
+              We have saved your reservation for {drop.title}.
             </h3>
             <p className="mt-5 max-w-2xl text-base leading-7 text-white/62">
-              No payment has been taken. We will contact you before any payment request or final
-              pre-order confirmation, including print details and shipping costs.
+              No payment has been taken. If this poster goes into production, we will send a
+              personal order invitation with final price, shipping and address steps before you
+              decide whether to order.
             </p>
             <button type="button" className="button-secondary mt-7" onClick={() => setStatus('idle')}>
               Reserve another copy
@@ -106,115 +120,132 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         </div>
       ) : (
         <>
-      <div className="mt-12 grid gap-8">
-        <label className="hidden" aria-hidden="true">
-          Company
-          <input
-            tabIndex={-1}
-            autoComplete="off"
-            value={formData.company}
-            onChange={(event) => handleChange('company', event.target.value)}
-          />
-        </label>
-        <Field
-          label="First Name"
-          value={formData.firstName}
-          onChange={(value) => handleChange('firstName', value)}
-          autoComplete="given-name"
-          required
-        />
-        <Field
-          label="Last Name"
-          value={formData.lastName}
-          onChange={(value) => handleChange('lastName', value)}
-          autoComplete="family-name"
-          required
-        />
-        <Field
-          label="Email Address"
-          type="email"
-          value={formData.email}
-          onChange={(value) => handleChange('email', value)}
-          autoComplete="email"
-          required
-        />
-        <Field
-          label="Country"
-          value={formData.country}
-          onChange={(value) => handleChange('country', value)}
-          autoComplete="country-name"
-          list="country-options"
-          placeholder="Start typing to search your country"
-          required
-        />
-        <datalist id="country-options">
-          {countries.map((country) => (
-            <option key={country} value={country} />
-          ))}
-        </datalist>
-        <label className="reservation-field">
-          <span className="reservation-field-head">
-            <span>Quantity</span>
-            <span className="reservation-required" aria-hidden="true">
-              *
+          <div className="mt-12 grid gap-8">
+            <label className="hidden" aria-hidden="true">
+              Company
+              <input
+                tabIndex={-1}
+                autoComplete="off"
+                value={formData.company}
+                onChange={(event) => handleChange('company', event.target.value)}
+              />
+            </label>
+            <Field
+              label="First Name"
+              value={formData.firstName}
+              onChange={(value) => handleChange('firstName', value)}
+              autoComplete="given-name"
+              required
+            />
+            <Field
+              label="Last Name"
+              value={formData.lastName}
+              onChange={(value) => handleChange('lastName', value)}
+              autoComplete="family-name"
+              required
+            />
+            <Field
+              label="Email Address"
+              type="email"
+              value={formData.email}
+              onChange={(value) => handleChange('email', value)}
+              autoComplete="email"
+              required
+            />
+            <Field
+              label="Country"
+              value={formData.country}
+              onChange={(value) => handleChange('country', value)}
+              autoComplete="country-name"
+              list="country-options"
+              placeholder="Start typing to search your country"
+              required
+            />
+            <datalist id="country-options">
+              {countries.map((country) => (
+                <option key={country} value={country} />
+              ))}
+            </datalist>
+            <label className="reservation-field">
+              <span className="reservation-field-head">
+                <span>Quantity</span>
+                <span className="reservation-required" aria-hidden="true">
+                  *
+                </span>
+              </span>
+              <select
+                required
+                value={formData.quantity}
+                onChange={(event) => handleChange('quantity', event.target.value)}
+              >
+                <option value="1">1 poster</option>
+                <option value="2">2 posters</option>
+                <option value="3">3 posters</option>
+                <option value="4">4 posters</option>
+                <option value="5">5 posters</option>
+              </select>
+            </label>
+            <label className="reservation-field">
+              <span className="reservation-field-head">
+                <span>Note optional</span>
+              </span>
+              <textarea
+                value={formData.note}
+                onChange={(event) => handleChange('note', event.target.value)}
+                placeholder="Anything we should know before sending production details?"
+                rows={4}
+              />
+            </label>
+          </div>
+
+          <label className="consent-choice mt-7">
+            <input
+              required
+              type="checkbox"
+              checked={formData.acceptedReservationTerms}
+              onChange={(event) => handleChange('acceptedReservationTerms', event.target.checked)}
+              className="mt-0.5 h-6 w-6 shrink-0 accent-white"
+            />
+            <span>
+              I understand this is a reservation of interest, not an order or payment, and Poster
+              Valley may contact me about this specific poster if it moves into production.
             </span>
-          </span>
-          <select required value={formData.quantity} onChange={(event) => handleChange('quantity', event.target.value)}>
-            <option value="1">1 poster</option>
-            <option value="2">2 posters</option>
-            <option value="3">3 posters</option>
-            <option value="4">4 posters</option>
-            <option value="5">5 posters</option>
-          </select>
-        </label>
-        <label className="reservation-field">
-          <span className="reservation-field-head">
-            <span>Note optional</span>
-          </span>
-          <textarea
-            value={formData.note}
-            onChange={(event) => handleChange('note', event.target.value)}
-            placeholder="Anything we should know before sending print details and the payment link?"
-            rows={4}
-          />
-        </label>
-      </div>
+          </label>
 
-      <label className="consent-choice mt-7">
-        <input
-          required
-          type="checkbox"
-          checked={formData.consentContact}
-          onChange={(event) => handleChange('consentContact', event.target.checked)}
-          className="mt-0.5 h-6 w-6 shrink-0 accent-white"
-        />
-        <span>
-          Poster Valley may contact me about this specific poster reservation, including final
-          print details, shipping costs, payment link and production updates.
-        </span>
-      </label>
+          <label className="consent-choice mt-3">
+            <input
+              type="checkbox"
+              checked={formData.marketingOptIn}
+              onChange={(event) => handleChange('marketingOptIn', event.target.checked)}
+              className="mt-0.5 h-6 w-6 shrink-0 accent-white"
+            />
+            <span>Keep me updated about future Poster Valley drops.</span>
+          </label>
 
-      <div className="mt-7 rounded-[1.5rem] border border-white/12 bg-white/[0.045] p-5 text-sm leading-6 text-white/56">
-        No payment is taken now. You receive the price, print details, shipping costs and payment
-        link before your reservation becomes final.
-      </div>
-      <p className="mt-4 text-sm leading-6 text-white/45">
-        We use these details only for this poster reservation. Read the{' '}
-        <a className="underline underline-offset-4 transition hover:text-white" href="/privacy">
-          Privacy Notice
-        </a>
-        .
-      </p>
+          <div className="mt-7 rounded-[1.5rem] border border-white/12 bg-white/[0.045] p-5 text-sm leading-6 text-white/56">
+            Address details are only requested later if you choose to confirm an order. You receive
+            final print details, shipping costs and a payment link before anything becomes final.
+          </div>
+          <p className="mt-4 text-sm leading-6 text-white/45">
+            We use these details only for this poster reservation and the optional drop-update flag.
+            Read the{' '}
+            <a className="underline underline-offset-4 transition hover:text-white" href="/privacy">
+              Privacy Notice
+            </a>
+            .
+          </p>
 
-      <button
-        type="submit"
-        className="button-primary mt-7 w-full justify-center md:w-auto"
-        disabled={status === 'submitting'}
-      >
-        {status === 'submitting' ? 'Saving reservation...' : 'Reserve your copy'}
-      </button>
+          <button
+            type="submit"
+            className="button-primary mt-7 w-full justify-center md:w-auto"
+            disabled={status === 'submitting'}
+          >
+            {status === 'submitting' ? 'Saving reservation...' : 'Reserve your copy'}
+          </button>
 
-      {status === 'error' ? <p className="mt-4 text-sm leading-6 text-white/58">{errorMessage}</p> : null}
+          {status === 'error' ? (
+            <p className="mt-4 text-sm font-semibold leading-6 text-white/76">{errorMessage}</p>
+          ) : null}
         </>
       )}
     </form>
