@@ -12,8 +12,9 @@ export function PrivacyPage() {
         <h1 className="privacy-title mt-5 max-w-4xl">How we handle your details.</h1>
         <p className="mt-8 max-w-3xl text-xl leading-9 text-ink/62">
           This temporary Poster Valley kickoff site collects only the information needed to handle
-          poster reservations and general release updates. We do not collect payment details or full
-          shipping addresses on this site.
+          poster reservations, personal order invitations and general release updates. Initial
+          reservations stay lightweight; shipping details are only requested later on a personal
+          order page.
         </p>
 
         <div className="mt-14 grid gap-8 border-t border-ink/12 pt-10 md:grid-cols-2">
@@ -26,12 +27,12 @@ export function PrivacyPage() {
             body="For poster reservations we collect first name, last name, email address, country, requested quantity, optional note, selected poster or drop, source page, reservation consent and optional future-drop update preference."
           />
           <PrivacyBlock
-            title="What we do not collect yet"
-            body="A reservation is not a paid order. Street address, house number, postcode, city, phone number and payment details are only requested later if you choose to confirm an order through a personal order invitation."
+            title="Personal order invitations"
+            body="If a reserved poster moves toward production, we may send a personal order invitation. On that page we collect shipping name, country, street address, postal code, city, optional region and order terms acceptance before starting payment."
           />
           <PrivacyBlock
             title="Why we use it"
-            body="We use reservation details to follow up on the specific poster, estimate production and shipping interest by country, send production updates and send a personal order invitation if the poster moves into production."
+            body="We use reservation details to follow up on the specific poster, estimate production interest, send production updates and prepare personal order invitations. We use order details to calculate shipping, create the payment, confirm the order and prepare fulfilment."
           />
           <PrivacyBlock
             title="General updates"
@@ -39,11 +40,11 @@ export function PrivacyPage() {
           />
           <PrivacyBlock
             title="Processors"
-            body="The site is hosted on Vercel, reservation and update details are stored in Supabase, and reservation or notification emails may be sent through Resend. These services process data for hosting, storage and email delivery."
+            body="The site is hosted on Vercel, reservation and order details are stored in Supabase, emails may be sent through Resend, and payments are handled by Mollie Checkout. We do not store card or bank details ourselves."
           />
           <PrivacyBlock
             title="Retention"
-            body="Reservation requests are kept for up to 24 months after the last contact, unless you ask us to delete them earlier or a later paid order requires a longer legal retention period. Newsletter subscriptions are kept until you unsubscribe or ask us to delete them."
+            body="Reservation requests are kept for up to 24 months after the last contact, unless you ask us to delete them earlier or a later paid order requires a longer legal retention period. Paid order and payment status records may be kept for legal, tax and fulfilment administration. Newsletter subscriptions are kept until you unsubscribe or ask us to delete them."
           />
           <PrivacyBlock
             title="Your rights"

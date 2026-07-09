@@ -95,6 +95,50 @@ function customerHtml({ firstName, drop, quantity, country }) {
   `
 }
 
+function orderInvitationHtml({ firstName, dropTitle, orderUrl, expiresAt }) {
+  const expiryText = expiresAt
+    ? `This personal link expires on ${new Date(expiresAt).toLocaleDateString('en-GB')}.`
+    : 'This personal link is valid for a limited time.'
+
+  return `
+    <div style="margin:0;background:#f2eee7;padding:32px 20px;font-family:Inter,Arial,sans-serif;color:#080b0e;">
+      <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ded7cc;padding:30px;">
+        <p style="margin:0 0 14px;color:#6d665d;font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">Poster Valley</p>
+        <h1 style="margin:0 0 18px;font-size:30px;line-height:1.05;">Your Poster Valley order invitation</h1>
+        <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Hi ${escapeHtml(firstName)}, your reservation for <strong>${escapeHtml(dropTitle)}</strong> is ready to move toward production.</p>
+        <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Use your personal order page to confirm shipping details, see the total price including shipping and complete payment.</p>
+        <p style="margin:24px 0;"><a href="${escapeHtml(orderUrl)}" style="display:inline-block;background:#080b0e;color:#f2eee7;text-decoration:none;padding:14px 22px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;">Open personal order page</a></p>
+        <p style="margin:0;color:#6d665d;font-size:13px;line-height:1.7;">${escapeHtml(expiryText)}</p>
+      </div>
+    </div>
+  `
+}
+
+function orderConfirmationHtml({ order, payment }) {
+  return `
+    <div style="margin:0;background:#f2eee7;padding:32px 20px;font-family:Inter,Arial,sans-serif;color:#080b0e;">
+      <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ded7cc;padding:30px;">
+        <p style="margin:0 0 14px;color:#6d665d;font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">Poster Valley</p>
+        <h1 style="margin:0 0 18px;font-size:30px;line-height:1.05;">Your Poster Valley order is confirmed.</h1>
+        <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Thank you, ${escapeHtml(order.first_name)}. Your order is paid and confirmed.</p>
+        <table style="width:100%;border-collapse:collapse;background:#fbfaf8;margin:24px 0;">
+          <tbody>
+            ${rowsHtml([
+              ['Poster', order.drop_title],
+              ['Quantity', order.quantity],
+              ['Total paid', `${order.currency} ${Number(payment.amount ?? order.total_amount).toFixed(2)}`],
+              ['Shipping country', order.shipping_country],
+              ['Shipping city', order.city],
+            ])}
+          </tbody>
+        </table>
+        <p style="margin:0 0 16px;color:#4f4840;font-size:15px;line-height:1.7;">We will prepare the next production and shipping steps. A shipping confirmation follows later when the poster is ready to send.</p>
+        <p style="margin:24px 0 0;color:#15120f;font-size:15px;line-height:1.7;">Poster Valley<br/>Curated poster drops, released with intention.</p>
+      </div>
+    </div>
+  `
+}
+
 async function sendEmail({ to, replyTo, subject, html, text }) {
   if (!RESEND_API_KEY) {
     console.warn('Resend notification skipped: RESEND_API_KEY is not configured.')
@@ -200,5 +244,72 @@ export async function sendNewsletterNotification(row) {
     title: 'New update signup',
     intro: 'A visitor joined the general Poster Valley update list.',
     rows,
+  })
+}
+
+export async function sendOrderInvitationEmail({ email, firstName, dropTitle, token, expiresAt }) {
+  const orderUrl = `${SITE_URL.replace(/\/$/, '')}/order/${encodeURIComponent(token)}`
+  const text = [
+    `Hi ${firstName},`,
+    '',
+    `Your reservation for ${dropTitle} is ready to move toward production.`,
+    'Use your personal order page to confirm shipping details, see the total including shipping and complete payment.',
+    '',
+    orderUrl,
+    '',
+    expiresAt ? `This personal link expires on ${new Date(expiresAt).toLocaleDateString('en-GB')}.` : '',
+    '',
+    'Poster Valley',
+  ].join('\n')
+
+  return sendEmail({
+    to: email,
+    replyTo: FORM_NOTIFICATION_REPLY_TO,
+    subject: 'Your Poster Valley order invitation',
+    html: orderInvitationHtml({ firstName, dropTitle, orderUrl, expiresAt }),
+    text,
+  })
+}
+
+export async function sendOrderConfirmationEmail(order, payment) {
+  const text = [
+    `Hi ${order.first_name},`,
+    '',
+    'Your Poster Valley order is confirmed.',
+    '',
+    `Poster: ${order.drop_title}`,
+    `Quantity: ${order.quantity}`,
+    `Total paid: ${order.currency} ${Number(payment.amount ?? order.total_amount).toFixed(2)}`,
+    `Shipping country: ${order.shipping_country}`,
+    `Shipping city: ${order.city}`,
+    '',
+    'We will prepare the next production and shipping steps. A shipping confirmation follows later when the poster is ready to send.',
+    '',
+    'Poster Valley',
+  ].join('\n')
+
+  return sendEmail({
+    to: order.email,
+    replyTo: FORM_NOTIFICATION_REPLY_TO,
+    subject: 'Your Poster Valley order is confirmed',
+    html: orderConfirmationHtml({ order, payment }),
+    text,
+  })
+}
+
+export async function sendInternalPaidNotification(order, payment) {
+  return sendAdminNotification({
+    subject: `Paid Poster Valley order: ${order.drop_title}`,
+    title: 'Paid order',
+    intro: 'A personal order invitation has been paid.',
+    rows: [
+      ['Poster', order.drop_title],
+      ['Quantity', order.quantity],
+      ['Total', `${order.currency} ${Number(payment.amount ?? order.total_amount).toFixed(2)}`],
+      ['Shipping country', order.shipping_country],
+      ['Payment provider', payment.provider],
+      ['Provider payment id', payment.provider_payment_id],
+      ['Paid at', payment.paid_at],
+    ],
   })
 }

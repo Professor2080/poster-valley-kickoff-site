@@ -23,6 +23,16 @@ export function ensurePost(req, res) {
   return false
 }
 
+export function ensureGet(req, res) {
+  if (req.method === 'GET') {
+    return true
+  }
+
+  res.setHeader('Allow', 'GET')
+  sendJson(res, 405, { error: 'Method not allowed.' })
+  return false
+}
+
 export function parseBody(body) {
   if (!body) {
     return {}
@@ -113,10 +123,69 @@ export function readCountry(value) {
   return country
 }
 
-export async function insertRow(table, row, options = {}) {
+export function readCountryCode(value) {
+  const countryCode = readText(value, 'Country', 2).toUpperCase()
+
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    throw new PublicRequestError('Please select a valid country.')
+  }
+
+  return countryCode
+}
+
+function requireSupabaseConfig() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('Supabase environment variables are missing.')
   }
+}
+
+function buildQuery(params = {}) {
+  const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null)
+
+  if (entries.length === 0) {
+    return ''
+  }
+
+  return `?${entries
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&')}`
+}
+
+async function supabaseRequest(table, { method, query, body, prefer = 'return=minimal' } = {}) {
+  requireSupabaseConfig()
+
+  const url = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${table}${buildQuery(query)}`
+  const headers = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    'Content-Type': 'application/json',
+  }
+
+  if (prefer) {
+    headers.Prefer = prefer
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+
+  const text = await response.text()
+
+  if (!response.ok) {
+    throw new Error(`Supabase ${method} failed with ${response.status}: ${text}`)
+  }
+
+  if (!text) {
+    return null
+  }
+
+  return JSON.parse(text)
+}
+
+export async function insertRow(table, row, options = {}) {
+  requireSupabaseConfig()
 
   const baseUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${table}`
   const url = options.onConflict
@@ -140,6 +209,37 @@ export async function insertRow(table, row, options = {}) {
     const detail = await response.text()
     throw new Error(`Supabase insert failed with ${response.status}: ${detail}`)
   }
+}
+
+export async function createRow(table, row) {
+  const result = await supabaseRequest(table, {
+    method: 'POST',
+    body: row,
+    prefer: 'return=representation',
+  })
+
+  return Array.isArray(result) ? result[0] : null
+}
+
+export async function selectRows(table, query = {}) {
+  const result = await supabaseRequest(table, {
+    method: 'GET',
+    query,
+    prefer: undefined,
+  })
+
+  return Array.isArray(result) ? result : []
+}
+
+export async function updateRows(table, query, row) {
+  const result = await supabaseRequest(table, {
+    method: 'PATCH',
+    query,
+    body: row,
+    prefer: 'return=representation',
+  })
+
+  return Array.isArray(result) ? result : []
 }
 
 export function handleEndpointError(res, error) {

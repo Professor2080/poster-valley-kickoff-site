@@ -4,9 +4,10 @@ import { FeaturedDesigns } from './components/FeaturedDesigns'
 import { FirstDropSection } from './components/FirstDropSection'
 import { FloatingPosterHero } from './components/FloatingPosterHero'
 import { HowItWorks } from './components/HowItWorks'
+import { OrderInvitationPage } from './components/OrderInvitationPage'
 import { PrivacyPage } from './components/PrivacyPage'
 import { WaitlistCTA } from './components/WaitlistCTA'
-import { getDropRoute, isPrivacyRoute, routes } from './lib/routes'
+import { getDropRoute, getOrderTokenRoute, isPrivacyRoute, routes } from './lib/routes'
 
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname)
@@ -19,15 +20,19 @@ function App() {
   }, [])
 
   const detailDrop = getDropRoute(pathname)
+  const orderToken = getOrderTokenRoute(pathname)
   const isDetailPage = Boolean(detailDrop)
   const isPrivacyPage = isPrivacyRoute(pathname)
-  const isLightPage = isDetailPage || isPrivacyPage
+  const isOrderPage = Boolean(orderToken)
+  const isLightPage = isDetailPage || isPrivacyPage || isOrderPage
 
   return (
     <main className="min-h-screen overflow-hidden bg-ink text-paper">
       <Header isLightPage={isLightPage} />
       {detailDrop ? (
         <DesignDetailPage drop={detailDrop} />
+      ) : orderToken ? (
+        <OrderInvitationPage token={orderToken} />
       ) : isPrivacyPage ? (
         <PrivacyPage />
       ) : (

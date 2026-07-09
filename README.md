@@ -58,6 +58,26 @@ format and shipping profile on the server from `dropSlug`; the browser only send
 and consent values. If a drop goes into production, Poster Valley can later send a personal order
 invitation with final price, shipping and payment details.
 
+## Personal Order Invitations
+
+The second phase is a personal order invitation. It is not a public shop or cart. A visitor opens a
+personal `/order/<token>` link, confirms shipping details, sees a server-calculated shipping quote
+and total, and is sent to Mollie Checkout for payment.
+
+The token itself is never stored in Supabase. The database stores only a SHA-256 `token_hash`. This
+is practical for the current stack because order links use high-entropy random tokens and the server
+can hash the incoming token before lookup.
+
+Current shipping rates are configured in code and must be reviewed before production use:
+
+- The Netherlands: EUR 5.95
+- European Union: EUR 9.50
+- Rest of world: EUR 21.00
+- Unsupported/manual-review territories: configured in `api/_drops.js`
+
+The serverless API recalculates prices and shipping on every quote/payment request. The client never
+decides product price, shipping amount or total price.
+
 ## Supabase Setup
 
 Create the tables by running:
@@ -80,6 +100,8 @@ FORM_NOTIFICATION_TO=
 FORM_NOTIFICATION_FROM=
 FORM_NOTIFICATION_REPLY_TO=
 SITE_URL=
+MOLLIE_API_KEY=
+MOLLIE_TEST_MODE=
 ```
 
 Set these in Vercel as server-side project environment variables for Production, Preview and
@@ -92,6 +114,95 @@ environment variables.
 environment has been normalized. `FORM_NOTIFICATION_FROM` must use a sender domain verified in
 Resend, currently `auth.hetprojectmakersbureau.nl`. Keep actual recipient, sender and reply-to
 values in Vercel environment variables rather than hard-coding secrets in the repository.
+
+`MOLLIE_API_KEY` enables Mollie Checkout payment creation and webhook status lookup. Keep it
+server-side only. Do not expose it as a `VITE_` variable. If it is missing, the order page still
+loads, quote calculation still works, and the payment button returns a clear "Payment is not
+configured yet" message.
+
+`MOLLIE_TEST_MODE=true` is only needed for organization-level Mollie credentials that support an
+explicit testmode parameter. For normal `test_...` or `live_...` API keys, Mollie already derives
+mode from the key and this variable can stay empty.
+
+## Manual Test Invitation
+
+No admin UI exists yet. For a controlled test, create one invitation manually in Supabase SQL. Use a
+fresh high-entropy token and do not reuse it.
+
+```sql
+-- Example token for local/preview testing only:
+-- pv_test_replace_with_32_plus_random_chars
+
+insert into public.order_invitations (
+  interest_request_id,
+  drop_id,
+  drop_slug,
+  drop_title,
+  email,
+  email_normalized,
+  first_name,
+  last_name,
+  quantity,
+  currency,
+  unit_price,
+  subtotal_amount,
+  status,
+  token_hash,
+  expires_at,
+  sent_at,
+  metadata
+)
+select
+  id,
+  drop_id,
+  drop_slug,
+  drop_title,
+  email,
+  lower(email),
+  first_name,
+  last_name,
+  quantity,
+  'EUR',
+  17.75,
+  17.75 * quantity,
+  'sent',
+  encode(digest('pv_test_replace_with_32_plus_random_chars', 'sha256'), 'hex'),
+  now() + interval '14 days',
+  now(),
+  jsonb_build_object('created_for', 'manual_test')
+from public.drop_interest_requests
+where drop_slug = 'eurofighter-typhoon'
+order by created_at desc
+limit 1;
+```
+
+Then open:
+
+```text
+https://<preview-or-production-domain>/order/pv_test_replace_with_32_plus_random_chars
+```
+
+Remove test records from `payments`, `orders`, and `order_invitations` after verification.
+
+## Mollie Webhook Testing
+
+Mollie webhooks are received at:
+
+```text
+/api/mollie/webhook
+```
+
+For local development, Mollie must be able to reach the webhook URL. Use a tunnel such as ngrok, or
+test on a Vercel preview deployment. The webhook is idempotent for customer/internal paid emails by
+checking sent timestamp columns on the order before sending.
+
+## Not Production-Ready Yet
+
+- Shipping rates are example review-needed rates.
+- No admin UI exists for creating invitations.
+- No batch email sending exists.
+- Mollie live payments should only be enabled after testmode verification and explicit production
+  approval.
 
 ## Deployment
 

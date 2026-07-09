@@ -4,11 +4,25 @@ export type ShippingEstimate = {
   note: string
 }
 
+export type ShippingRate = {
+  region: 'nl' | 'eu' | 'world'
+  label: string
+  amount: number
+  amountLabel: string
+  countries?: string[]
+  note: string
+}
+
 export type ShippingProfile = {
   id: string
   label: string
   summary: string
+  reviewNeeded: boolean
+  packageClass: string
+  weightGrams: number
   estimates: ShippingEstimate[]
+  rates: ShippingRate[]
+  unsupportedCountries: string[]
 }
 
 export type DropDimensions = {
@@ -27,6 +41,7 @@ export type Drop = {
   statusLabel: string
   editionLabel: string
   productType: 'poster'
+  productStatus: 'pre-production' | 'upcoming' | 'available'
   format: string
   dimensions: DropDimensions
   basePrice?: number
@@ -40,6 +55,7 @@ export type Drop = {
   alt: string
   isFirstDrop?: boolean
   reservationEnabled: boolean
+  orderInvitationEnabled: boolean
   reservationCtaLabel: string
   orderMode: 'reservation-interest'
   note: string
@@ -55,6 +71,9 @@ export const shippingProfiles = {
     label: 'Protected A2 poster shipment',
     summary:
       'Shipping is calculated when the poster goes into production. The final price including shipping is sent before payment.',
+    reviewNeeded: true,
+    packageClass: 'a2-poster-tube',
+    weightGrams: 350,
     estimates: [
       {
         region: 'The Netherlands',
@@ -72,6 +91,59 @@ export const shippingProfiles = {
         note: 'Final cost is confirmed before payment.',
       },
     ],
+    rates: [
+      {
+        region: 'nl',
+        label: 'The Netherlands',
+        amount: 5.95,
+        amountLabel: '€5,95',
+        countries: ['NL'],
+        note: 'Protected poster shipment within The Netherlands.',
+      },
+      {
+        region: 'eu',
+        label: 'European Union',
+        amount: 9.5,
+        amountLabel: '€9,50',
+        countries: [
+          'AT',
+          'BE',
+          'BG',
+          'CY',
+          'CZ',
+          'DE',
+          'DK',
+          'EE',
+          'ES',
+          'FI',
+          'FR',
+          'GR',
+          'HR',
+          'HU',
+          'IE',
+          'IT',
+          'LT',
+          'LU',
+          'LV',
+          'MT',
+          'PL',
+          'PT',
+          'RO',
+          'SE',
+          'SI',
+          'SK',
+        ],
+        note: 'Review-needed example rate for EU shipments.',
+      },
+      {
+        region: 'world',
+        label: 'Rest of world',
+        amount: 21,
+        amountLabel: '€21,00',
+        note: 'Review-needed example rate for non-EU shipments.',
+      },
+    ],
+    unsupportedCountries: ['AQ', 'BV', 'HM', 'TF', 'UM'],
   },
 } satisfies Record<string, ShippingProfile>
 
@@ -85,6 +157,7 @@ export const drops: Drop[] = [
     statusLabel: 'Preparing',
     editionLabel: 'First Edition',
     productType: 'poster',
+    productStatus: 'pre-production',
     format: 'A2',
     dimensions: {
       label: 'A2',
@@ -103,6 +176,7 @@ export const drops: Drop[] = [
     alt: 'Poster artwork for Eurofighter Typhoon',
     isFirstDrop: true,
     reservationEnabled: true,
+    orderInvitationEnabled: true,
     reservationCtaLabel: 'Reserve your copy',
     orderMode: 'reservation-interest',
     note: 'The first Poster Valley design is being prepared as a focused print release.',
@@ -144,6 +218,7 @@ export const upcomingDrops: Drop[] = [
     statusLabel: 'Upcoming',
     editionLabel: 'Future Edition',
     productType: 'poster',
+    productStatus: 'upcoming',
     format: 'TBC',
     dimensions: {
       label: 'TBC',
@@ -159,6 +234,7 @@ export const upcomingDrops: Drop[] = [
     href: '#waitlist',
     alt: 'Abstract placeholder for an upcoming Poster Valley design',
     reservationEnabled: false,
+    orderInvitationEnabled: false,
     reservationCtaLabel: 'Get updates',
     orderMode: 'reservation-interest',
     note: 'A quiet placeholder for the next curated poster study.',
@@ -175,6 +251,7 @@ export const upcomingDrops: Drop[] = [
     statusLabel: 'Upcoming',
     editionLabel: 'Future Edition',
     productType: 'poster',
+    productStatus: 'upcoming',
     format: 'TBC',
     dimensions: {
       label: 'TBC',
@@ -190,6 +267,7 @@ export const upcomingDrops: Drop[] = [
     href: '#waitlist',
     alt: 'Abstract placeholder for a future Poster Valley design',
     reservationEnabled: false,
+    orderInvitationEnabled: false,
     reservationCtaLabel: 'Get updates',
     orderMode: 'reservation-interest',
     note: 'Reserved for a future drop once the next design is selected.',
