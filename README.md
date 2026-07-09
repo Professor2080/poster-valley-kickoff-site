@@ -63,34 +63,42 @@ supabase/schema.sql
 The tables have Row Level Security enabled. No public select policy is added; submissions should go
 through the Vercel API endpoints.
 
-Required environment variables:
+Required server-side environment variables:
 
 ```text
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 RESEND_API_KEY=
-FORM_NOTIFICATION_TO=studio@postervalley.nl
-FORM_NOTIFICATION_FROM="Poster Valley <onboarding@resend.dev>"
-FORM_NOTIFICATION_REPLY_TO=studio@postervalley.nl
-SITE_URL=https://www.postervalley.nl
+FORM_NOTIFICATION_TO=
+FORM_NOTIFICATION_FROM=
+FORM_NOTIFICATION_REPLY_TO=
+SITE_URL=
 ```
 
 Set these in Vercel as server-side project environment variables for Production, Preview and
-Development as needed. Keep local values in `.env.local`; do not commit secrets.
+Development as needed. Keep local values in `.env.local`; do not commit secrets. The Supabase
+service-role key must remain server-side only and must never be exposed through browser-prefixed
+environment variables.
 
-`RESEND_API_KEY` enables internal form-copy emails. Until `postervalley.nl` is verified in Resend,
-use a verified Resend sender such as `onboarding@resend.dev` for `FORM_NOTIFICATION_FROM`. After
-domain verification, set the sender to a branded address such as
-`Poster Valley <studio@postervalley.nl>` or `Poster Valley <notifications@postervalley.nl>`.
+`RESEND_API_KEY` enables internal form-copy emails. `FORM_NOTIFICATION_FROM` must use a sender that
+is verified in Resend. Keep actual recipient, sender and reply-to values in Vercel environment
+variables rather than hard-coding them in the repository.
 
 ## Deployment
 
-Vercel is the intended deployment target for this standalone site. Use:
+Production runs at:
+
+```text
+https://www.postervalley.nl
+```
+
+Vercel is the deployment target for this standalone site. The Vercel project is connected to the
+GitHub repository, and production should deploy from `main`.
+
+Use:
 
 - Build command: `npm run build`
 - Output directory: `dist`
-
-Connect the GitHub repository to Vercel for automatic deploys from `main`.
 
 After setting environment variables, verify:
 
@@ -99,4 +107,5 @@ npm run lint
 npm run build
 ```
 
-Then submit one poster-specific request and one general update signup from the deployed preview.
+Then smoke-test one poster-specific request and one general update signup on the deployed site, and
+remove any test records from Supabase after verification.
