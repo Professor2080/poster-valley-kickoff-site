@@ -1,15 +1,22 @@
+import { getReservableDropBySlug } from './_drops.js'
 import {
   ensurePost,
   handleEndpointError,
   insertRow,
   parseBody,
+  PublicRequestError,
   readConsent,
+  readCountry,
   readEmail,
+  readOptionalBoolean,
   readQuantity,
   readText,
   sendJson,
 } from './_supabase.js'
-import { sendDropInterestNotification } from './_notifications.js'
+import {
+  sendCustomerReservationConfirmation,
+  sendDropInterestNotification,
+} from './_notifications.js'
 
 export default async function handler(req, res) {
   if (!ensurePost(req, res)) {
@@ -24,27 +31,61 @@ export default async function handler(req, res) {
       return
     }
 
+    const dropSlug = readText(body.dropSlug, 'Drop', 120)
+    const drop = getReservableDropBySlug(dropSlug)
+
+    if (!drop) {
+      throw new PublicRequestError('This poster is not accepting reservations.')
+    }
+
+    const firstName = readText(body.firstName, 'First name', 120)
+    const lastName = readText(body.lastName, 'Last name', 120)
+    const email = readEmail(body.email)
+    const country = readCountry(body.country)
+    const quantity = readQuantity(body.quantity)
+    const acceptedReservationTerms = readConsent(
+      body.acceptedReservationTerms,
+      'Please confirm that this is a reservation of interest, not an order or payment.',
+    )
+    const marketingOptIn = readOptionalBoolean(body.marketingOptIn)
+
     const row = {
-      drop_slug: readText(body.dropSlug, 'Drop', 120),
-      drop_title: readText(body.dropTitle, 'Drop title', 180),
-      full_name: readText(body.name, 'Full name', 180),
-      email: readEmail(body.email),
-      country: readText(body.country, 'Country', 120),
-      preferred_format: readText(body.format, 'Preferred format', 80),
-      quantity: readQuantity(body.quantity),
-      shipping_address: readText(body.address, 'Shipping address', 1200, { required: false }),
+      drop_id: drop.id,
+      drop_slug: drop.slug,
+      drop_title: drop.title,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`,
+      email,
+      email_normalized: email,
+      country,
+      country_code: null,
+      preferred_format: drop.dimensionsLabel,
+      quantity,
+      shipping_address: null,
       note: readText(body.note, 'Note', 1200, { required: false }),
       source_path: readText(body.sourcePath, 'Source path', 240, { required: false }),
-      consent_contact: readConsent(
-        body.consentContact,
-        'Please confirm that Poster Valley may contact you about this poster request.',
-      ),
+      consent_contact: acceptedReservationTerms,
+      accepted_reservation_terms: acceptedReservationTerms,
+      marketing_opt_in: marketingOptIn,
+      reservation_status: 'new',
       status: 'new',
+      metadata: {
+        product_type: drop.productType,
+        edition_label: drop.editionLabel,
+        base_price: drop.basePrice,
+        currency: drop.currency,
+        price_label: drop.priceLabel,
+        shipping_profile_id: drop.shippingProfileId,
+        order_mode: drop.orderMode,
+      },
     }
 
     await insertRow('drop_interest_requests', row)
     await sendDropInterestNotification(row)
-    sendJson(res, 200, { ok: true })
+    const customerEmailSent = await sendCustomerReservationConfirmation(row, drop)
+
+    sendJson(res, 200, { ok: true, customerEmailSent })
   } catch (error) {
     handleEndpointError(res, error)
   }

@@ -98,6 +98,21 @@ export function readConsent(value, label) {
   return true
 }
 
+export function readOptionalBoolean(value) {
+  return value === true
+}
+
+export function readCountry(value) {
+  const country = readText(value, 'Country', 120)
+  const countryPattern = /^[\p{L}\p{M}\s.'()&,-]{2,120}$/u
+
+  if (!countryPattern.test(country)) {
+    throw new PublicRequestError('Please select a valid country.')
+  }
+
+  return country
+}
+
 export async function insertRow(table, row, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('Supabase environment variables are missing.')

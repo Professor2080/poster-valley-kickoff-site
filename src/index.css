@@ -355,6 +355,13 @@ img {
     outline: none;
   }
 
+  .reservation-field input:focus-visible,
+  .reservation-field select:focus-visible,
+  .reservation-field textarea:focus-visible {
+    outline: 2px solid rgba(242, 238, 231, 0.72);
+    outline-offset: 4px;
+  }
+
   .reservation-field input::placeholder,
   .reservation-field textarea::placeholder {
     color: rgba(8, 11, 14, 0.36);
@@ -383,6 +390,11 @@ img {
   .consent-choice:focus-within {
     background: rgba(242, 238, 231, 0.055);
     color: rgba(242, 238, 231, 0.78);
+  }
+
+  .consent-choice:focus-within {
+    outline: 2px solid rgba(242, 238, 231, 0.42);
+    outline-offset: 3px;
   }
 
   .confirmation-card {
