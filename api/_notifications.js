@@ -1,4 +1,4 @@
-const RESEND_API_KEY = process.env.RESEND_API_KEY
+const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.VERSEL_RESEND_API_KEY
 const FORM_NOTIFICATION_TO = process.env.FORM_NOTIFICATION_TO || 'studio@postervalley.nl'
 const FORM_NOTIFICATION_FROM =
   process.env.FORM_NOTIFICATION_FROM || 'Poster Valley <onboarding@resend.dev>'
