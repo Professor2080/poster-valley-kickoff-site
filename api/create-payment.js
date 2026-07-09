@@ -12,9 +12,9 @@ import {
   createRow,
   ensurePost,
   handleEndpointError,
-  parseBody,
   PublicRequestError,
   readConsent,
+  readRequestBody,
   selectRows,
   sendJson,
   updateRows,
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = parseBody(req.body)
+    const body = readRequestBody(req)
     const token = readInvitationToken(body.token)
     const invitation = await findInvitation(token)
 

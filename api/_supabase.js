@@ -53,6 +53,26 @@ export function parseBody(body) {
   throw new PublicRequestError('Invalid request body.')
 }
 
+export function readRequestBody(req) {
+  try {
+    return parseBody(req.body)
+  } catch (error) {
+    if (error instanceof PublicRequestError) {
+      throw error
+    }
+
+    if (
+      error?.statusCode === 400 &&
+      typeof error.message === 'string' &&
+      error.message.toLowerCase().includes('invalid json')
+    ) {
+      throw new PublicRequestError('Invalid request body.')
+    }
+
+    throw error
+  }
+}
+
 export function readText(value, label, maxLength, { required = true } = {}) {
   if (typeof value !== 'string') {
     if (required) {

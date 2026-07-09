@@ -2,9 +2,9 @@ import {
   ensurePost,
   handleEndpointError,
   insertRow,
-  parseBody,
   readConsent,
   readEmail,
+  readRequestBody,
   readText,
   sendJson,
 } from './_supabase.js'
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = parseBody(req.body)
+    const body = readRequestBody(req)
 
     if (body.company) {
       sendJson(res, 200, { ok: true })
