@@ -68,10 +68,20 @@ Required environment variables:
 ```text
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+RESEND_API_KEY=
+FORM_NOTIFICATION_TO=studio@postervalley.nl
+FORM_NOTIFICATION_FROM="Poster Valley <onboarding@resend.dev>"
+FORM_NOTIFICATION_REPLY_TO=studio@postervalley.nl
+SITE_URL=https://www.postervalley.nl
 ```
 
 Set these in Vercel as server-side project environment variables for Production, Preview and
 Development as needed. Keep local values in `.env.local`; do not commit secrets.
+
+`RESEND_API_KEY` enables internal form-copy emails. Until `postervalley.nl` is verified in Resend,
+use a verified Resend sender such as `onboarding@resend.dev` for `FORM_NOTIFICATION_FROM`. After
+domain verification, set the sender to a branded address such as
+`Poster Valley <studio@postervalley.nl>` or `Poster Valley <notifications@postervalley.nl>`.
 
 ## Deployment
 

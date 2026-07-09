@@ -28,7 +28,7 @@ export const firstDrop: Drop = {
   href: '/designs/eurofighter-typhoon',
   alt: 'Poster artwork for Eurofighter Typhoon',
   isFirstDrop: true,
-  creator: 'Manou',
+  creator: 'PosterValley',
   size: 'A2 (42 x 60 cm)',
   price: '€17,75',
   note: 'The first Poster Valley design is being prepared as a focused print release.',

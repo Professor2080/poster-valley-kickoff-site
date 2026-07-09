@@ -9,6 +9,7 @@ import {
   readText,
   sendJson,
 } from './_supabase.js'
+import { sendDropInterestNotification } from './_notifications.js'
 
 export default async function handler(req, res) {
   if (!ensurePost(req, res)) {
@@ -42,6 +43,7 @@ export default async function handler(req, res) {
     }
 
     await insertRow('drop_interest_requests', row)
+    await sendDropInterestNotification(row)
     sendJson(res, 200, { ok: true })
   } catch (error) {
     handleEndpointError(res, error)

@@ -21,7 +21,7 @@ export function PrivacyPage() {
         <div className="mt-14 grid gap-8 border-t border-ink/12 pt-10 md:grid-cols-2">
           <PrivacyBlock
             title="Controller"
-            body="Poster Valley is responsible for the processing described here. You can contact us at studio@postervalley.com."
+            body="Poster Valley is responsible for the processing described here. You can contact us at studio@postervalley.nl."
           />
           <PrivacyBlock
             title="What we collect"
@@ -49,7 +49,7 @@ export function PrivacyPage() {
           />
           <PrivacyBlock
             title="Questions or complaints"
-            body="Email studio@postervalley.com for privacy questions or requests. You also have the right to contact the Dutch Data Protection Authority if you believe your data is not handled correctly."
+            body="Email studio@postervalley.nl for privacy questions or requests. You also have the right to contact the Dutch Data Protection Authority if you believe your data is not handled correctly."
           />
         </div>
 

@@ -92,8 +92,8 @@ function Footer() {
       <div className="mx-auto flex max-w-[88rem] flex-col gap-5 md:flex-row md:items-center md:justify-between">
         <p>Poster Valley - curated poster drops, released with intention.</p>
         <div className="flex flex-wrap gap-5">
-          <a className="nav-link" href="mailto:studio@postervalley.com">
-            studio@postervalley.com
+          <a className="nav-link" href="mailto:studio@postervalley.nl">
+            studio@postervalley.nl
           </a>
           <a className="nav-link" href={routes.privacy}>
             Privacy

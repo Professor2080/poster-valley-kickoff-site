@@ -43,7 +43,7 @@ export function DesignDetailPage() {
 
             <div className="mt-9 grid gap-4 sm:grid-cols-2">
               <InfoBlock label="Status" value="Preparing" />
-              <InfoBlock label="Creator" value={firstDrop.creator ?? 'Manou'} />
+              <InfoBlock label="Creator" value={firstDrop.creator ?? 'PosterValley'} />
               <InfoBlock label="Size" value={firstDrop.size ?? 'A2 (42 x 60 cm)'} />
               <InfoBlock label="Price" value={firstDrop.price ?? '€17,75'} />
             </div>

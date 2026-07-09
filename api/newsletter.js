@@ -8,6 +8,7 @@ import {
   readText,
   sendJson,
 } from './_supabase.js'
+import { sendNewsletterNotification } from './_notifications.js'
 
 export default async function handler(req, res) {
   if (!ensurePost(req, res)) {
@@ -33,6 +34,7 @@ export default async function handler(req, res) {
     }
 
     await insertRow('newsletter_signups', row, { onConflict: 'email_normalized' })
+    await sendNewsletterNotification(row)
     sendJson(res, 200, { ok: true })
   } catch (error) {
     handleEndpointError(res, error)
