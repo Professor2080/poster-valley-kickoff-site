@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { CheckCircle2 } from 'lucide-react'
 import type { Drop } from '../data/drops'
 import { countries } from '../data/countries'
 import { submitJson } from '../lib/formSubmit'
@@ -86,6 +87,25 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         </div>
       </div>
 
+      {status === 'success' ? (
+        <div className="confirmation-card mt-10" role="status" aria-live="polite">
+          <CheckCircle2 className="h-8 w-8 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="eyebrow text-white/45">Reservation saved</p>
+            <h3 className="mt-4 font-heading text-[clamp(2.4rem,4.5vw,4.8rem)] font-semibold leading-[0.92] tracking-[-0.065em]">
+              We have reserved your place for {drop.title}.
+            </h3>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-white/62">
+              No payment has been taken. We will contact you before any payment request or final
+              pre-order confirmation, including print details and shipping costs.
+            </p>
+            <button type="button" className="button-secondary mt-7" onClick={() => setStatus('idle')}>
+              Reserve another copy
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="mt-12 grid gap-8">
         <label className="hidden" aria-hidden="true">
           Company
@@ -194,12 +214,9 @@ export function DropInterestForm({ drop }: { drop: Drop }) {
         {status === 'submitting' ? 'Saving reservation...' : 'Reserve your copy'}
       </button>
 
-      {status === 'success' ? (
-        <p className="mt-4 text-sm leading-6 text-white/58">
-          Saved. We will contact you before any payment or final pre-order confirmation.
-        </p>
-      ) : null}
       {status === 'error' ? <p className="mt-4 text-sm leading-6 text-white/58">{errorMessage}</p> : null}
+        </>
+      )}
     </form>
   )
 }
