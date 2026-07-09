@@ -54,7 +54,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const token = readInvitationToken(req.query?.token)
+    const requestUrl = new URL(req.url, 'https://postervalley.local')
+    const token = readInvitationToken(requestUrl.searchParams.get('token'))
     const invitation = await findInvitation(token)
 
     if (!invitation) {
