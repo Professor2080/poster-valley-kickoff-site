@@ -152,6 +152,14 @@ img {
     transform: translateY(-2px);
   }
 
+  .button-primary:disabled,
+  .button-dark:disabled,
+  .button-outline-dark:disabled {
+    cursor: wait;
+    opacity: 0.72;
+    transform: none;
+  }
+
   .label-pill {
     border: 1px solid rgba(8, 11, 14, 0.14);
     border-radius: 999px;
@@ -294,6 +302,127 @@ img {
     background: var(--ink);
     color: var(--paper);
   }
+
+  .reservation-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .reservation-field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    color: rgba(242, 238, 231, 0.92);
+    font-size: 1.02rem;
+    font-weight: 800;
+  }
+
+  .reservation-required {
+    color: #ff756b;
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .reservation-field input,
+  .reservation-field select,
+  .reservation-field textarea {
+    min-height: 4.35rem;
+    border: 1px solid rgba(242, 238, 231, 0.16);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--ink);
+    padding: 0 1.2rem;
+    box-shadow: inset 0 0 0 1px rgba(8, 11, 14, 0.02);
+    transition:
+      border-color var(--motion-medium) ease,
+      box-shadow var(--motion-medium) ease,
+      transform var(--motion-medium) ease;
+  }
+
+  .reservation-field textarea {
+    min-height: 10rem;
+    padding-block: 1rem;
+    resize: vertical;
+  }
+
+  .reservation-field input:focus,
+  .reservation-field select:focus,
+  .reservation-field textarea:focus {
+    border-color: rgba(242, 238, 231, 0.62);
+    box-shadow: 0 0 0 4px rgba(242, 238, 231, 0.12);
+    outline: none;
+  }
+
+  .reservation-field input::placeholder,
+  .reservation-field textarea::placeholder {
+    color: rgba(8, 11, 14, 0.36);
+  }
+
+  .reservation-field option {
+    background: #fff;
+    color: var(--ink);
+  }
+
+  .consent-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    border-radius: 1.1rem;
+    padding: 0.95rem;
+    color: rgba(242, 238, 231, 0.64);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    transition:
+      background var(--motion-medium) ease,
+      color var(--motion-medium) ease;
+  }
+
+  .consent-choice:hover,
+  .consent-choice:focus-within {
+    background: rgba(242, 238, 231, 0.055);
+    color: rgba(242, 238, 231, 0.78);
+  }
+
+  .confirmation-card {
+    display: flex;
+    gap: 1.15rem;
+    align-items: flex-start;
+    border: 1px solid rgba(242, 238, 231, 0.16);
+    border-radius: 1.6rem;
+    background:
+      radial-gradient(circle at 10% 0%, rgba(242, 238, 231, 0.16), transparent 32%),
+      linear-gradient(135deg, rgba(242, 238, 231, 0.1), rgba(242, 238, 231, 0.04));
+    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(242, 238, 231, 0.13);
+    color: var(--paper);
+    padding: 1.5rem;
+    animation: confirmation-in 420ms ease both;
+  }
+
+  .confirmation-card svg {
+    color: var(--paper);
+    filter: drop-shadow(0 0 18px rgba(242, 238, 231, 0.26));
+  }
+
+  .privacy-title {
+    font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(3.6rem, 8vw, 7rem);
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 0.88;
+  }
+}
+
+@keyframes confirmation-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes poster-float {
@@ -307,6 +436,11 @@ img {
 }
 
 @media (max-width: 767px) {
+  .confirmation-card {
+    flex-direction: column;
+    padding: 1.25rem;
+  }
+
   .floating-artwork {
     animation-duration: 10s;
   }

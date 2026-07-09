@@ -19,7 +19,7 @@ export function FeaturedDesigns() {
           </div>
           <p className="max-w-md text-lg leading-8 text-white/54">
             This is not a product grid. It is a preview room for Designs being considered,
-            prepared, or followed.
+            prepared, or reserved.
           </p>
         </div>
 
