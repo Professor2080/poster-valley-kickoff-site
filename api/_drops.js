@@ -5,6 +5,13 @@ export const serverShippingProfiles = {
     summary:
       'Shipping is calculated when the poster goes into production. The final price including shipping is sent before payment.',
     reviewNeeded: true,
+    manualReview: {
+      label: 'Outside the EU',
+      message:
+        "Shipping outside the EU is currently handled manually. Contact us and we'll confirm availability and shipping costs.",
+      disabledAutomaticRate: 21,
+      note: 'Rest-of-world automatic shipping can be re-enabled after business review.',
+    },
     packageClass: 'a2-poster-tube',
     weightGrams: 350,
     rates: [
@@ -48,12 +55,6 @@ export const serverShippingProfiles = {
           'SK',
         ],
         note: 'Protected poster shipment within the European Union.',
-      },
-      {
-        region: 'world',
-        label: 'Rest of world',
-        amount: 21,
-        note: 'Protected international poster shipment.',
       },
     ],
     unsupportedCountries: ['AQ', 'BV', 'HM', 'TF', 'UM'],

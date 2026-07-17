@@ -5,6 +5,7 @@ export const routes = {
   firstDrop: featuredDrop.href,
   firstDropInterest: `${featuredDrop.href}#drop-interest`,
   privacy: '/privacy',
+  terms: '/terms',
   order: '/order',
 }
 
@@ -18,6 +19,10 @@ export function getDropRoute(pathname: string) {
 
 export function isPrivacyRoute(pathname: string) {
   return pathname === routes.privacy
+}
+
+export function isTermsRoute(pathname: string) {
+  return pathname === routes.terms
 }
 
 export function getOrderTokenRoute(pathname: string) {

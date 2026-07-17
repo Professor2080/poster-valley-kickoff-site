@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { countryOptions } from '../data/countries'
+import { routes } from '../lib/routes'
 
 type Quote = {
   supported: boolean
@@ -123,11 +124,22 @@ function money(value: number | null, currency = 'EUR') {
 
 function statusCopy(invitation: InvitationData, isReturn: boolean) {
   if (invitation.payment?.status === 'paid' || invitation.order?.status === 'paid') {
-    return 'Payment confirmed. Your order is now reserved for production.'
+    return 'Payment confirmed. Your poster order is confirmed.'
+  }
+
+  if (
+    ['failed', 'canceled', 'expired'].includes(invitation.payment?.status ?? '') ||
+    ['payment_failed', 'payment_expired', 'cancelled'].includes(invitation.order?.status ?? '')
+  ) {
+    return 'Payment was not completed. You can try again or contact Poster Valley if you need help.'
   }
 
   if (isReturn) {
     return 'We are checking your payment status. This usually updates within a few moments.'
+  }
+
+  if (invitation.payment?.status === 'open' || invitation.order?.status === 'payment_open') {
+    return 'Payment is open. Complete it in Mollie Checkout or start again if the previous session expired.'
   }
 
   if (invitation.status === 'expired') {
@@ -299,7 +311,12 @@ export function OrderInvitationPage({ token }: { token: string }) {
     )
   }
 
-  const canPay = invitation.canOrder && quote?.supported && !submitting
+  const isPaid = invitation.payment?.status === 'paid' || invitation.order?.status === 'paid'
+  const canPay = !isPaid && invitation.canOrder && quote?.supported && !submitting
+  const confirmationTotal = money(
+    invitation.payment?.amount ?? invitation.order?.total ?? quote?.total ?? null,
+    invitation.payment?.currency ?? quote?.currency ?? 'EUR',
+  )
 
   return (
     <section className="min-h-screen bg-paper px-5 pb-20 pt-28 text-ink sm:px-8 lg:px-12">
@@ -320,8 +337,9 @@ export function OrderInvitationPage({ token }: { token: string }) {
             {invitation.drop.title}
           </h1>
           <p className="mt-8 max-w-3xl text-xl leading-9 text-ink/68">
-            Confirm your shipping details and complete payment to turn your reservation into an
-            order.
+            {isPaid
+              ? 'Your payment has been confirmed. We will continue with the next production and shipping steps.'
+              : 'Confirm your shipping details and complete payment to turn your reservation into an order.'}
           </p>
 
           <div className="mt-8 border-y border-ink/12 py-6 text-base leading-7 text-ink/62">
@@ -332,7 +350,7 @@ export function OrderInvitationPage({ token }: { token: string }) {
             <SummaryRow label="Format" value={invitation.drop.dimensionsLabel} />
             <SummaryRow label="Quantity" value={`${invitation.quantity}`} />
             <SummaryRow
-              label="Unit price"
+              label="Poster price"
               value={money(invitation.unitPrice, quote?.currency ?? 'EUR')}
             />
             <SummaryRow
@@ -354,7 +372,9 @@ export function OrderInvitationPage({ token }: { token: string }) {
               {quote.supported ? (
                 <>
                   Shipping: {quote.shippingLabel}. {quote.shippingNote}
-                  {quote.reviewNeeded ? ' Your total is shown before you continue to payment.' : ''}
+                  {quote.reviewNeeded
+                    ? ' Prices include VAT where applicable. Your total is shown before you continue to payment.'
+                    : ''}
                 </>
               ) : (
                 quote.reason
@@ -362,10 +382,17 @@ export function OrderInvitationPage({ token }: { token: string }) {
             </div>
           ) : null}
 
-          <form
-            className="mt-12 rounded-[1.5rem] bg-ink p-5 text-paper shadow-2xl md:p-8"
-            onSubmit={handleSubmit}
-          >
+          {isPaid ? (
+            <PaidConfirmationCard
+              posterTitle={invitation.drop.title}
+              quantity={invitation.quantity}
+              total={confirmationTotal}
+            />
+          ) : (
+            <form
+              className="mt-12 rounded-[1.5rem] bg-ink p-5 text-paper shadow-2xl md:p-8"
+              onSubmit={handleSubmit}
+            >
             <div>
               <p className="eyebrow text-white/42">Shipping details</p>
               <h2 className="mt-5 font-heading text-5xl font-semibold leading-none tracking-[-0.055em]">
@@ -446,28 +473,56 @@ export function OrderInvitationPage({ token }: { token: string }) {
               />
             </div>
 
-            <label className="consent-choice mt-8">
-              <input
-                required
-                type="checkbox"
-                checked={formData.acceptedTerms}
-                onChange={(event) => handleChange('acceptedTerms', event.target.checked)}
-                className="mt-0.5 h-6 w-6 shrink-0 accent-white"
-              />
-              <span>
-                I confirm these shipping details are correct and agree that payment confirms this
-                poster order.
-              </span>
-            </label>
+            {!quote || quote.supported ? (
+              <label className="consent-choice mt-8">
+                <input
+                  required
+                  type="checkbox"
+                  checked={formData.acceptedTerms}
+                  onChange={(event) => handleChange('acceptedTerms', event.target.checked)}
+                  className="mt-0.5 h-6 w-6 shrink-0 accent-white"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a
+                    className="underline underline-offset-4 transition hover:text-white focus-visible:text-white"
+                    href={routes.terms}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Terms
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    className="underline underline-offset-4 transition hover:text-white focus-visible:text-white"
+                    href={routes.privacy}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Privacy Notice
+                  </a>{' '}
+                  and understand that payment confirms my order.
+                </span>
+              </label>
+            ) : null}
 
-            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-              <button type="submit" className="button-primary justify-center" disabled={!canPay}>
-                {submitting ? 'Starting payment...' : 'Confirm and pay'}
-              </button>
-              <p className="text-sm leading-6 text-white/46">
-                Payment is handled securely by Mollie Checkout.
-              </p>
-            </div>
+            {quote && !quote.supported ? (
+              <div className="mt-8 rounded-[1.5rem] border border-white/12 bg-white/[0.055] p-5 text-sm leading-6 text-white/62">
+                <p>{quote.reason}</p>
+                <a className="button-primary mt-5" href="mailto:studio@postervalley.nl">
+                  Contact us
+                </a>
+              </div>
+            ) : (
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <button type="submit" className="button-primary justify-center" disabled={!canPay}>
+                  {submitting ? 'Starting payment...' : 'Confirm and pay'}
+                </button>
+                <p className="text-sm leading-6 text-white/46">
+                  Payment is handled securely by Mollie Checkout.
+                </p>
+              </div>
+            )}
 
             {errorMessage ? (
               <p className="mt-5 text-sm font-semibold leading-6 text-white/80">{errorMessage}</p>
@@ -477,10 +532,50 @@ export function OrderInvitationPage({ token }: { token: string }) {
                 {paymentMessage}
               </p>
             ) : null}
-          </form>
+            </form>
+          )}
         </div>
       </div>
     </section>
+  )
+}
+
+function PaidConfirmationCard({
+  posterTitle,
+  quantity,
+  total,
+}: {
+  posterTitle: string
+  quantity: number
+  total: string
+}) {
+  return (
+    <div className="mt-12 rounded-[1.5rem] bg-ink p-5 text-paper shadow-2xl md:p-8">
+      <p className="eyebrow text-white/42">Order confirmed</p>
+      <h2 className="mt-5 font-heading text-5xl font-semibold leading-none tracking-[-0.055em]">
+        Payment confirmed.
+      </h2>
+      <div className="mt-8 grid gap-4 text-sm leading-6 text-white/62 md:grid-cols-3">
+        <ConfirmationItem label="Poster" value={posterTitle} />
+        <ConfirmationItem label="Quantity" value={`${quantity}`} />
+        <ConfirmationItem label="Total paid" value={total} />
+      </div>
+      <p className="mt-8 max-w-2xl text-base leading-7 text-white/62">
+        We'll email you when your poster is ready to ship.
+      </p>
+      <a className="button-primary mt-8" href="/">
+        Back to Poster Valley
+      </a>
+    </div>
+  )
+}
+
+function ConfirmationItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-t border-white/14 pt-4">
+      <p className="eyebrow text-white/38">{label}</p>
+      <p className="mt-2 text-lg font-semibold text-paper">{value}</p>
+    </div>
   )
 }
 

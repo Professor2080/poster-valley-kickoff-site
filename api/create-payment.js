@@ -59,10 +59,6 @@ export default async function handler(req, res) {
       throw new PublicRequestError('This order invitation can no longer be used.', 409)
     }
 
-    if (!isMollieConfigured()) {
-      throw new PublicRequestError('Payment is not configured yet.', 503)
-    }
-
     const acceptedTerms = readConsent(
       body.acceptedTerms,
       'Please confirm the order terms before continuing.',
@@ -77,6 +73,10 @@ export default async function handler(req, res) {
 
     if (!quote.supported) {
       throw new PublicRequestError(quote.reason, 400)
+    }
+
+    if (!isMollieConfigured()) {
+      throw new PublicRequestError('Payment is not configured yet.', 503)
     }
 
     const now = new Date().toISOString()

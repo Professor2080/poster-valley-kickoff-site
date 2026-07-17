@@ -71,12 +71,28 @@ can hash the incoming token before lookup.
 Current shipping rates are configured in code and must be reviewed before production use:
 
 - The Netherlands: EUR 5.95
-- European Union: EUR 9.50
-- Rest of world: EUR 21.00
-- Unsupported/manual-review territories: configured in `api/_drops.js`
+- European Union pilot: EUR 9.50
+- Outside the EU: manual review/contact first, no automatic payment
+- Unsupported/special territories: manual review or blocked from automatic payment
 
 The serverless API recalculates prices and shipping on every quote/payment request. The client never
-decides product price, shipping amount or total price.
+decides product price, shipping amount, manual-review status or total price.
+
+The previous rest-of-world automatic shipping amount is retained only as disabled review metadata in
+`api/_drops.js`. It should not be used for payment until shipping policy is reviewed.
+
+## Terms and Privacy
+
+The temporary order terms are available at:
+
+```text
+/terms
+```
+
+The payment checkbox links to `/terms` and `/privacy`. The terms page includes the current seller
+details for Het Projectmakersbureau, including Chamber of Commerce and VAT number. Before broader
+production sales, final VAT wording, cancellation wording and operational retention rules still need
+business and legal review.
 
 ## Supabase Setup
 
@@ -198,11 +214,14 @@ checking sent timestamp columns on the order before sending.
 
 ## Not Production-Ready Yet
 
-- Shipping rates are example review-needed rates.
+- Shipping rates remain review-needed; outside-EU shipping is manual review only.
+- Seller details are documented; definitive VAT wording still needs business/legal review.
 - No admin UI exists for creating invitations.
 - No batch email sending exists.
 - Mollie live payments should only be enabled after testmode verification and explicit production
   approval.
+- PR #3 should remain draft until the release decision and production environment approval are
+  explicit.
 
 ## Deployment
 

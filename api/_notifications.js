@@ -52,6 +52,10 @@ function rowsText(rows) {
   return rows.map(([label, value]) => `${label}: ${valueOrDash(value)}`).join('\n')
 }
 
+function emailMoney(amount, currency = 'EUR') {
+  return `${currency} ${Number(amount).toFixed(2)}`
+}
+
 function notificationHtml(title, intro, rows) {
   return `
     <div style="margin:0;background:#f2eee7;padding:32px 20px;font-family:Inter,Arial,sans-serif;color:#080b0e;">
@@ -83,10 +87,11 @@ function customerHtml({ firstName, drop, quantity, country }) {
               ['Quantity', quantity],
               ['Country', country],
               ['Format', drop.dimensionsLabel],
-              ['Current poster price', `${drop.priceLabel} excl. shipping`],
+              ['Poster price', `${drop.priceLabel} excl. shipping`],
             ])}
           </tbody>
         </table>
+        <p style="margin:0 0 16px;color:#4f4840;font-size:15px;line-height:1.7;">Prices include VAT where applicable.</p>
         <p style="margin:0 0 16px;color:#4f4840;font-size:15px;line-height:1.7;">This is a reservation of interest, not an order and not a payment. If this poster goes into production, we will send you a personal order invitation with the final price including shipping.</p>
         <p style="margin:0 0 16px;color:#4f4840;font-size:15px;line-height:1.7;">You only enter address details later, when you choose to confirm the order through that personal link.</p>
         <p style="margin:24px 0 0;color:#15120f;font-size:15px;line-height:1.7;">Poster Valley<br/>Curated poster drops, released with intention.</p>
@@ -106,7 +111,8 @@ function orderInvitationHtml({ firstName, dropTitle, orderUrl, expiresAt }) {
         <p style="margin:0 0 14px;color:#6d665d;font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">Poster Valley</p>
         <h1 style="margin:0 0 18px;font-size:30px;line-height:1.05;">Your Poster Valley order invitation</h1>
         <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Hi ${escapeHtml(firstName)}, your reservation for <strong>${escapeHtml(dropTitle)}</strong> is ready to move toward production.</p>
-        <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Use your personal order page to confirm shipping details, see the total price including shipping and complete payment.</p>
+        <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Use your personal order page to confirm shipping details, see the poster price, shipping and total before payment, and complete the order through Mollie Checkout.</p>
+        <p style="margin:0 0 18px;color:#4f4840;font-size:15px;line-height:1.7;">Prices include VAT where applicable.</p>
         <p style="margin:24px 0;"><a href="${escapeHtml(orderUrl)}" style="display:inline-block;background:#080b0e;color:#f2eee7;text-decoration:none;padding:14px 22px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;">Open personal order page</a></p>
         <p style="margin:0;color:#6d665d;font-size:13px;line-height:1.7;">${escapeHtml(expiryText)}</p>
       </div>
@@ -126,12 +132,15 @@ function orderConfirmationHtml({ order, payment }) {
             ${rowsHtml([
               ['Poster', order.drop_title],
               ['Quantity', order.quantity],
-              ['Total paid', `${order.currency} ${Number(payment.amount ?? order.total_amount).toFixed(2)}`],
+              ['Poster price', emailMoney(order.unit_price, order.currency)],
+              ['Shipping', emailMoney(order.shipping_amount, order.currency)],
+              ['Total paid', emailMoney(payment.amount ?? order.total_amount, order.currency)],
               ['Shipping country', order.shipping_country],
               ['Shipping city', order.city],
             ])}
           </tbody>
         </table>
+        <p style="margin:0 0 16px;color:#4f4840;font-size:15px;line-height:1.7;">Prices include VAT where applicable.</p>
         <p style="margin:0 0 16px;color:#4f4840;font-size:15px;line-height:1.7;">We will prepare the next production and shipping steps. A shipping confirmation follows later when the poster is ready to send.</p>
         <p style="margin:24px 0 0;color:#15120f;font-size:15px;line-height:1.7;">Poster Valley<br/>Curated poster drops, released with intention.</p>
       </div>
@@ -213,7 +222,8 @@ export async function sendCustomerReservationConfirmation(row, drop) {
     `Quantity: ${row.quantity}`,
     `Country: ${row.country}`,
     `Format: ${drop.dimensionsLabel}`,
-    `Current poster price: ${drop.priceLabel} excl. shipping`,
+    `Poster price: ${drop.priceLabel} excl. shipping`,
+    'Prices include VAT where applicable.',
     '',
     'This is a reservation of interest, not an order and not a payment.',
     'If this poster goes into production, we will send you a personal order invitation with the final price including shipping.',
@@ -253,7 +263,8 @@ export async function sendOrderInvitationEmail({ email, firstName, dropTitle, to
     `Hi ${firstName},`,
     '',
     `Your reservation for ${dropTitle} is ready to move toward production.`,
-    'Use your personal order page to confirm shipping details, see the total including shipping and complete payment.',
+    'Use your personal order page to confirm shipping details, see the poster price, shipping and total before payment, and complete the order through Mollie Checkout.',
+    'Prices include VAT where applicable.',
     '',
     orderUrl,
     '',
@@ -279,9 +290,12 @@ export async function sendOrderConfirmationEmail(order, payment) {
     '',
     `Poster: ${order.drop_title}`,
     `Quantity: ${order.quantity}`,
-    `Total paid: ${order.currency} ${Number(payment.amount ?? order.total_amount).toFixed(2)}`,
+    `Poster price: ${emailMoney(order.unit_price, order.currency)}`,
+    `Shipping: ${emailMoney(order.shipping_amount, order.currency)}`,
+    `Total paid: ${emailMoney(payment.amount ?? order.total_amount, order.currency)}`,
     `Shipping country: ${order.shipping_country}`,
     `Shipping city: ${order.city}`,
+    'Prices include VAT where applicable.',
     '',
     'We will prepare the next production and shipping steps. A shipping confirmation follows later when the poster is ready to send.',
     '',
@@ -305,7 +319,7 @@ export async function sendInternalPaidNotification(order, payment) {
     rows: [
       ['Poster', order.drop_title],
       ['Quantity', order.quantity],
-      ['Total', `${order.currency} ${Number(payment.amount ?? order.total_amount).toFixed(2)}`],
+      ['Total', emailMoney(payment.amount ?? order.total_amount, order.currency)],
       ['Shipping country', order.shipping_country],
       ['Payment provider', payment.provider],
       ['Provider payment id', payment.provider_payment_id],

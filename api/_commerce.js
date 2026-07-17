@@ -92,6 +92,35 @@ export function getInvitationDrop(invitation) {
   return drop
 }
 
+function manualReviewQuote({
+  invitation,
+  drop,
+  shippingProfile,
+  countryCode,
+  quantity,
+  unitCents,
+  subtotalCents,
+  reason,
+  label = 'Manual shipping review',
+}) {
+  return {
+    supported: false,
+    reason,
+    currency: invitation.currency ?? drop.currency,
+    countryCode,
+    countryName: getCountryName(countryCode),
+    quantity,
+    unitPrice: fromCents(unitCents),
+    subtotal: fromCents(subtotalCents),
+    shipping: null,
+    total: null,
+    shippingProfileId: shippingProfile.id,
+    shippingLabel: label,
+    shippingNote: reason,
+    reviewNeeded: true,
+  }
+}
+
 export function quoteForInvitation(invitation, countryCode) {
   const drop = getInvitationDrop(invitation)
   const shippingProfile = getShippingProfile(drop.shippingProfileId)
@@ -107,32 +136,37 @@ export function quoteForInvitation(invitation, countryCode) {
   const unsupported = shippingProfile.unsupportedCountries.includes(normalizedCountryCode)
 
   if (unsupported) {
-    return {
-      supported: false,
-      reason:
-        'Shipping to this country is not available through this checkout yet. Please contact Poster Valley.',
-      currency: invitation.currency ?? drop.currency,
+    return manualReviewQuote({
+      invitation,
+      drop,
+      shippingProfile,
       countryCode: normalizedCountryCode,
-      countryName: getCountryName(normalizedCountryCode),
       quantity,
-      unitPrice: fromCents(unitCents),
-      subtotal: fromCents(subtotalCents),
-      shipping: null,
-      total: null,
-      shippingProfileId: shippingProfile.id,
-      shippingLabel: null,
-      shippingNote: 'Manual shipping review required.',
-      reviewNeeded: shippingProfile.reviewNeeded,
-    }
+      unitCents,
+      subtotalCents,
+      reason:
+        'Shipping to this destination requires manual review. Contact us and we will confirm availability and shipping costs.',
+    })
   }
 
-  const rate =
-    shippingProfile.rates.find((candidate) =>
-      candidate.countries?.includes(normalizedCountryCode),
-    ) ?? shippingProfile.rates.find((candidate) => candidate.region === 'world')
+  const rate = shippingProfile.rates.find((candidate) =>
+    candidate.countries?.includes(normalizedCountryCode),
+  )
 
   if (!rate) {
-    throw new PublicRequestError('Shipping is not configured for this country.', 400)
+    return manualReviewQuote({
+      invitation,
+      drop,
+      shippingProfile,
+      countryCode: normalizedCountryCode,
+      quantity,
+      unitCents,
+      subtotalCents,
+      reason:
+        shippingProfile.manualReview?.message ??
+        "Shipping outside the EU is currently handled manually. Contact us and we'll confirm availability and shipping costs.",
+      label: shippingProfile.manualReview?.label,
+    })
   }
 
   const shippingCents = toCents(rate.amount)

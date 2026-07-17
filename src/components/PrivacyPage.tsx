@@ -1,3 +1,5 @@
+import { routes } from '../lib/routes'
+
 export function PrivacyPage() {
   return (
     <section className="section-pad min-h-screen bg-paper pt-32 text-ink">
@@ -20,7 +22,7 @@ export function PrivacyPage() {
         <div className="mt-14 grid gap-8 border-t border-ink/12 pt-10 md:grid-cols-2">
           <PrivacyBlock
             title="Controller"
-            body="Poster Valley is responsible for the processing described here. You can contact us at studio@postervalley.nl."
+            body="Poster Valley is operated by Het Projectmakersbureau, Hogeweg 15, 6862 WV Oosterbeek, The Netherlands. Chamber of Commerce: 97787280. VAT number: NL005288659B42. You can contact us at studio@postervalley.nl."
           />
           <PrivacyBlock
             title="What we collect"
@@ -28,7 +30,7 @@ export function PrivacyPage() {
           />
           <PrivacyBlock
             title="Personal order invitations"
-            body="If a reserved poster moves toward production, we may send a personal order invitation. On that page we collect shipping name, country, street address, postal code, city, optional region and order terms acceptance before starting payment."
+            body="If a reserved poster moves toward production, we may send a personal order invitation. On that page we collect shipping name, country, street address, postal code, city, optional region and terms acceptance before starting payment."
           />
           <PrivacyBlock
             title="Why we use it"
@@ -41,6 +43,10 @@ export function PrivacyPage() {
           <PrivacyBlock
             title="Processors"
             body="The site is hosted on Vercel, reservation and order details are stored in Supabase, emails may be sent through Resend, and payments are handled by Mollie Checkout. We do not store card or bank details ourselves."
+          />
+          <PrivacyBlock
+            title="Terms"
+            body="The personal order page links to the temporary order terms before payment. Those terms explain when a reservation becomes a paid order and how shipping or production issues are handled."
           />
           <PrivacyBlock
             title="Retention"
@@ -57,9 +63,13 @@ export function PrivacyPage() {
         </div>
 
         <div className="mt-12 rounded-[1.5rem] border border-ink/12 bg-white/55 p-6 text-sm leading-7 text-ink/56">
-          Last updated: 9 July 2026. This notice is intended for the temporary kickoff site. Before
-          public launch, the formal legal entity and final operational retention rules should be
-          reviewed and completed.
+          Last updated: 17 July 2026. This notice is intended for the temporary kickoff site. Before
+          broader public launch, final operational retention rules should be reviewed and completed.
+          Read the{' '}
+          <a className="underline underline-offset-4 transition hover:text-ink" href={routes.terms}>
+            Terms
+          </a>{' '}
+          for the temporary order and cancellation wording.
         </div>
       </div>
     </section>
