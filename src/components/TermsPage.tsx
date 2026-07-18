@@ -1,3 +1,4 @@
+import { legalDetails } from '../data/legal'
 import { routes } from '../lib/routes'
 
 export function TermsPage() {
@@ -20,7 +21,7 @@ export function TermsPage() {
         <div className="mt-14 grid gap-8 border-t border-ink/12 pt-10 md:grid-cols-2">
           <TermsBlock
             title="Seller"
-            body="Poster Valley is operated by Het Projectmakersbureau, Hogeweg 15, 6862 WV Oosterbeek, The Netherlands. Chamber of Commerce: 97787280. VAT number: NL005288659B42."
+            body={`Poster Valley is part of ${legalDetails.sellerName} (${legalDetails.englishName}). The seller and legal entity is ${legalDetails.sellerName}, registered at ${legalDetails.addressLines.join(', ')}. Chamber of Commerce: ${legalDetails.chamberOfCommerce}. VAT number: ${legalDetails.vatNumber}. Contact: ${legalDetails.email}.`}
           />
           <TermsBlock
             title="Personal invitations"
@@ -31,8 +32,14 @@ export function TermsPage() {
             body="A reservation is an expression of interest, not an order and not a payment. An order or pre-order is confirmed only after you review the poster price, shipping and total, accept these terms and complete payment."
           />
           <TermsBlock
-            title="Price before payment"
-            body="Before payment, the order page shows the poster price, shipping and total. Prices include VAT where applicable. If shipping is not available through the automated flow, we ask you to contact us first."
+            id="payment-terms"
+            title="Currency and payment terms"
+            body="All prices and payments are in EUR. Before payment, the order page shows the poster price, shipping and total. Prices include VAT where applicable. Payment through Mollie Checkout confirms the order or pre-order."
+          />
+          <TermsBlock
+            id="shipping-and-returns"
+            title="Shipping and returns"
+            body="Automatic shipping quotes are currently available for the Netherlands and supported European Union destinations. Shipping outside the EU is handled by manual review: contact us before ordering so we can confirm availability and shipping costs. To request a cancellation, withdrawal or return after payment, email studio@postervalley.nl as soon as possible. We will confirm the available next steps based on the order and fulfilment status. This does not limit any statutory consumer rights."
           />
           <TermsBlock
             title="Address details"
@@ -52,12 +59,12 @@ export function TermsPage() {
           />
           <TermsBlock
             title="Cancellation"
-            body="If you want to cancel after payment, contact us as soon as possible at studio@postervalley.nl. Cancellation and withdrawal rights can depend on production and fulfilment status, and the final policy must be reviewed before broader production sales."
+            body="If you want to cancel after payment, contact us as soon as possible at studio@postervalley.nl. Cancellation and withdrawal rights can depend on production and fulfilment status. We will provide return instructions where applicable."
           />
         </div>
 
         <div className="mt-12 rounded-[1.5rem] border border-ink/12 bg-white/55 p-6 text-sm leading-7 text-ink/56">
-          Last updated: 17 July 2026.{' '}
+          Last updated: 18 July 2026.{' '}
           Read the{' '}
           <a className="underline underline-offset-4 transition hover:text-ink" href={routes.privacy}>
             Privacy Notice
@@ -76,9 +83,9 @@ export function TermsPage() {
   )
 }
 
-function TermsBlock({ title, body }: { title: string; body: string }) {
+function TermsBlock({ id, title, body }: { id?: string; title: string; body: string }) {
   return (
-    <div className="border-t border-ink/12 pt-5">
+    <div id={id} className="scroll-mt-28 border-t border-ink/12 pt-5">
       <h2 className="font-heading text-3xl tracking-[-0.055em]">{title}</h2>
       <p className="mt-4 leading-7 text-ink/58">{body}</p>
     </div>
