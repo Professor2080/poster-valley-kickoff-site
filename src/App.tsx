@@ -4,9 +4,11 @@ import { FeaturedDesigns } from './components/FeaturedDesigns'
 import { FirstDropSection } from './components/FirstDropSection'
 import { FloatingPosterHero } from './components/FloatingPosterHero'
 import { HowItWorks } from './components/HowItWorks'
+import { OrderInvitationPage } from './components/OrderInvitationPage'
 import { PrivacyPage } from './components/PrivacyPage'
+import { TermsPage } from './components/TermsPage'
 import { WaitlistCTA } from './components/WaitlistCTA'
-import { getDropRoute, isPrivacyRoute, routes } from './lib/routes'
+import { getDropRoute, getOrderTokenRoute, isPrivacyRoute, isTermsRoute, routes } from './lib/routes'
 
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname)
@@ -19,17 +21,24 @@ function App() {
   }, [])
 
   const detailDrop = getDropRoute(pathname)
+  const orderToken = getOrderTokenRoute(pathname)
   const isDetailPage = Boolean(detailDrop)
   const isPrivacyPage = isPrivacyRoute(pathname)
-  const isLightPage = isDetailPage || isPrivacyPage
+  const isTermsPage = isTermsRoute(pathname)
+  const isOrderPage = Boolean(orderToken)
+  const isLightPage = isDetailPage || isPrivacyPage || isTermsPage || isOrderPage
 
   return (
     <main className="min-h-screen overflow-hidden bg-ink text-paper">
       <Header isLightPage={isLightPage} />
       {detailDrop ? (
         <DesignDetailPage drop={detailDrop} />
+      ) : orderToken ? (
+        <OrderInvitationPage token={orderToken} />
       ) : isPrivacyPage ? (
         <PrivacyPage />
+      ) : isTermsPage ? (
+        <TermsPage />
       ) : (
         <>
           <FloatingPosterHero />
@@ -98,6 +107,9 @@ function Footer() {
           </a>
           <a className="nav-link" href={routes.privacy}>
             Privacy
+          </a>
+          <a className="nav-link" href={routes.terms}>
+            Terms
           </a>
           <a className="nav-link" href={routes.home}>
             Back to top

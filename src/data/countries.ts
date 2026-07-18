@@ -252,6 +252,13 @@ const countryCodes = [
 
 const countryNameFormatter = new Intl.DisplayNames(['en'], { type: 'region' })
 
-export const countries = countryCodes
-  .map((code) => countryNameFormatter.of(code) ?? code)
+export const countryOptions = countryCodes
+  .map((code) => ({
+    code,
+    name: countryNameFormatter.of(code) ?? code,
+  }))
+  .sort((first, second) => first.name.localeCompare(second.name))
+
+export const countries = countryOptions
+  .map((country) => country.name)
   .sort((first, second) => first.localeCompare(second))

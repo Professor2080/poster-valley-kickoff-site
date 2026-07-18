@@ -5,6 +5,8 @@ export const routes = {
   firstDrop: featuredDrop.href,
   firstDropInterest: `${featuredDrop.href}#drop-interest`,
   privacy: '/privacy',
+  terms: '/terms',
+  order: '/order',
 }
 
 export function isFirstDropRoute(pathname: string) {
@@ -17,4 +19,13 @@ export function getDropRoute(pathname: string) {
 
 export function isPrivacyRoute(pathname: string) {
   return pathname === routes.privacy
+}
+
+export function isTermsRoute(pathname: string) {
+  return pathname === routes.terms
+}
+
+export function getOrderTokenRoute(pathname: string) {
+  const match = pathname.match(/^\/order\/([A-Za-z0-9_-]{24,160})$/)
+  return match?.[1] ?? null
 }
