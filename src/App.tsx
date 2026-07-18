@@ -8,6 +8,7 @@ import { OrderInvitationPage } from './components/OrderInvitationPage'
 import { PrivacyPage } from './components/PrivacyPage'
 import { TermsPage } from './components/TermsPage'
 import { WaitlistCTA } from './components/WaitlistCTA'
+import { legalDetails } from './data/legal'
 import { getDropRoute, getOrderTokenRoute, isPrivacyRoute, isTermsRoute, routes } from './lib/routes'
 
 function App() {
@@ -98,23 +99,66 @@ function Header({ isLightPage }: { isLightPage: boolean }) {
 
 function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-ink px-5 py-10 text-sm text-white/46 sm:px-8">
-      <div className="mx-auto flex max-w-[88rem] flex-col gap-5 md:flex-row md:items-center md:justify-between">
-        <p>Poster Valley - curated poster drops, released with intention.</p>
-        <div className="flex flex-wrap gap-5">
-          <a className="nav-link" href="mailto:studio@postervalley.nl">
-            studio@postervalley.nl
-          </a>
-          <a className="nav-link" href={routes.privacy}>
-            Privacy
-          </a>
-          <a className="nav-link" href={routes.terms}>
-            Terms
-          </a>
-          <a className="nav-link" href={routes.home}>
-            Back to top
+    <footer
+      id="legal-details"
+      className="border-t border-white/10 bg-ink px-5 py-12 text-sm text-white/52 sm:px-8 lg:px-12"
+    >
+      <div className="mx-auto grid max-w-[88rem] gap-10 md:grid-cols-[0.8fr_1.25fr_0.75fr] md:gap-8 lg:gap-16">
+        <div>
+          <p className="text-sm uppercase tracking-[0.24em] text-paper">Poster Valley</p>
+          <p className="mt-4 max-w-xs leading-6">
+            Curated poster drops, released with intention.
+          </p>
+        </div>
+
+        <div>
+          <p className="eyebrow text-white/38">Seller / Legal entity</p>
+          <p className="mt-4 font-semibold text-white/82">
+            {legalDetails.sellerName} ({legalDetails.englishName})
+          </p>
+          <p className="mt-1 leading-6">Poster Valley is part of {legalDetails.sellerName}.</p>
+          <address className="mt-4 not-italic leading-6">
+            {legalDetails.addressLines.map((line) => (
+              <span className="block" key={line}>
+                {line}
+              </span>
+            ))}
+          </address>
+          <dl className="mt-4 grid gap-x-6 gap-y-1 leading-6 sm:grid-cols-2">
+            <div>
+              <dt className="inline">Chamber of Commerce: </dt>
+              <dd className="inline text-white/76">{legalDetails.chamberOfCommerce}</dd>
+            </div>
+            <div>
+              <dt className="inline">VAT number: </dt>
+              <dd className="inline text-white/76">{legalDetails.vatNumber}</dd>
+            </div>
+          </dl>
+          <a className="nav-link mt-3 inline-block text-white/76" href={`mailto:${legalDetails.email}`}>
+            {legalDetails.email}
           </a>
         </div>
+
+        <nav aria-label="Legal, payment and contact information">
+          <p className="eyebrow text-white/38">Information</p>
+          <div className="mt-4 flex flex-col items-start gap-3">
+            <a className="nav-link" href={routes.terms}>
+              Terms
+            </a>
+            <a className="nav-link" href={`${routes.terms}#payment-terms`}>
+              Payment terms
+            </a>
+            <a className="nav-link" href={`${routes.terms}#shipping-and-returns`}>
+              Shipping &amp; returns
+            </a>
+            <a className="nav-link" href={routes.privacy}>
+              Privacy Notice
+            </a>
+            <a className="nav-link" href={`mailto:${legalDetails.email}`}>
+              Contact
+            </a>
+          </div>
+        </nav>
       </div>
     </footer>
   )

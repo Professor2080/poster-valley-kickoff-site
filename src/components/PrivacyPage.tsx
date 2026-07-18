@@ -1,3 +1,4 @@
+import { legalDetails } from '../data/legal'
 import { routes } from '../lib/routes'
 
 export function PrivacyPage() {
@@ -22,7 +23,7 @@ export function PrivacyPage() {
         <div className="mt-14 grid gap-8 border-t border-ink/12 pt-10 md:grid-cols-2">
           <PrivacyBlock
             title="Controller"
-            body="Poster Valley is operated by Het Projectmakersbureau, Hogeweg 15, 6862 WV Oosterbeek, The Netherlands. Chamber of Commerce: 97787280. VAT number: NL005288659B42. You can contact us at studio@postervalley.nl."
+            body={`Poster Valley is part of ${legalDetails.sellerName} (${legalDetails.englishName}), the legal entity responsible for this site and your personal data. Registered address: ${legalDetails.addressLines.join(', ')}. Chamber of Commerce: ${legalDetails.chamberOfCommerce}. VAT number: ${legalDetails.vatNumber}. Contact: ${legalDetails.email}.`}
           />
           <PrivacyBlock
             title="What we collect"
@@ -58,12 +59,12 @@ export function PrivacyPage() {
           />
           <PrivacyBlock
             title="Questions or complaints"
-            body="Email studio@postervalley.nl for privacy questions or requests. You also have the right to contact the Dutch Data Protection Authority if you believe your data is not handled correctly."
+            body={`Email ${legalDetails.email} for privacy questions or requests. You also have the right to contact the Dutch Data Protection Authority if you believe your data is not handled correctly.`}
           />
         </div>
 
         <div className="mt-12 rounded-[1.5rem] border border-ink/12 bg-white/55 p-6 text-sm leading-7 text-ink/56">
-          Last updated: 17 July 2026. This notice is intended for the temporary kickoff site. Before
+          Last updated: 18 July 2026. This notice is intended for the temporary kickoff site. Before
           broader public launch, final operational retention rules should be reviewed and completed.
           Read the{' '}
           <a className="underline underline-offset-4 transition hover:text-ink" href={routes.terms}>
