@@ -116,6 +116,7 @@ FORM_NOTIFICATION_TO=
 FORM_NOTIFICATION_FROM=
 FORM_NOTIFICATION_REPLY_TO=
 SITE_URL=
+ADMIN_ACTION_SECRET=
 MOLLIE_API_KEY=
 MOLLIE_TEST_MODE=
 ```
@@ -139,6 +140,31 @@ configured yet" message.
 `MOLLIE_TEST_MODE=true` is only needed for organization-level Mollie credentials that support an
 explicit testmode parameter. For normal `test_...` or `live_...` API keys, Mollie already derives
 mode from the key and this variable can stay empty.
+
+Production uses a Mollie live key. Calling the payment endpoint there can create a real payment and
+must only happen for a confirmed customer order.
+
+## Send One Order Invitation
+
+`POST /api/admin/send-order-invitation` sends exactly one existing invitation through the existing
+Resend template. It is a server-side admin endpoint with no public UI and requires
+`ADMIN_ACTION_SECRET` in the `x-admin-action-secret` header. The JSON body accepts one raw order
+token and an optional boolean `force` flag:
+
+```json
+{
+  "token": "raw-personal-order-token",
+  "force": false
+}
+```
+
+Use this endpoint only from a controlled server-side/admin request. Never put the admin secret or
+raw order token in client code, URLs, shared command history or logs. The raw token is held only for
+the request; Supabase continues to store only its SHA-256 hash. The endpoint does not accept arrays
+or provide batch sending.
+
+By default, an invitation with `sent_at` is not sent again. A retry returns `alreadySent: true`.
+`force: true` is an explicit administrative override for resending that same invitation.
 
 ## Manual Test Invitation
 
