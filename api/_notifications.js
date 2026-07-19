@@ -6,6 +6,10 @@ const FORM_NOTIFICATION_REPLY_TO =
   process.env.FORM_NOTIFICATION_REPLY_TO || 'studio@postervalley.nl'
 const SITE_URL = process.env.SITE_URL || 'https://www.postervalley.nl'
 
+export function isResendConfigured() {
+  return Boolean(RESEND_API_KEY)
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -149,7 +153,7 @@ function orderConfirmationHtml({ order, payment }) {
 }
 
 async function sendEmail({ to, replyTo, subject, html, text }) {
-  if (!RESEND_API_KEY) {
+  if (!isResendConfigured()) {
     console.warn('Resend notification skipped: RESEND_API_KEY is not configured.')
     return false
   }

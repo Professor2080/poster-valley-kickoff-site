@@ -160,6 +160,13 @@ img {
     transform: none;
   }
 
+  .payment-button:disabled {
+    cursor: not-allowed;
+    background: rgba(242, 238, 231, 0.42);
+    color: rgba(8, 11, 14, 0.58);
+    opacity: 1;
+  }
+
   .label-pill {
     border: 1px solid rgba(8, 11, 14, 0.14);
     border-radius: 999px;

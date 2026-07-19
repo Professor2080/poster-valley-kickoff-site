@@ -87,6 +87,24 @@ const initialAddressForm: AddressForm = {
   acceptedTerms: false,
 }
 
+function isAddressFormValid(formData: AddressForm) {
+  const requiredValues = [
+    formData.firstName,
+    formData.lastName,
+    formData.email,
+    formData.countryCode,
+    formData.addressLine1,
+    formData.postalCode,
+    formData.city,
+  ]
+
+  return (
+    requiredValues.every((value) => value.trim().length > 0) &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) &&
+    /^[A-Z]{2}$/.test(formData.countryCode)
+  )
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
   try {
     const response = await fetch(url, init)
@@ -165,6 +183,21 @@ export function OrderInvitationPage({ token }: { token: string }) {
   const isReturn = useMemo(
     () => new URLSearchParams(window.location.search).get('payment') === 'return',
     [],
+  )
+  const isPaid =
+    invitation?.payment?.status === 'paid' || invitation?.order?.status === 'paid'
+  const addressFormValid = isAddressFormValid(formData)
+  const quoteIsCurrent = quote?.countryCode === formData.countryCode
+  const canPay = Boolean(
+    invitation &&
+      !isPaid &&
+      invitation.canOrder &&
+      addressFormValid &&
+      formData.acceptedTerms &&
+      quote?.supported &&
+      quoteIsCurrent &&
+      !quoteLoading &&
+      !submitting,
   )
 
   useEffect(() => {
@@ -252,8 +285,23 @@ export function OrderInvitationPage({ token }: { token: string }) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    if (!addressFormValid) {
+      setErrorMessage('Please complete all required shipping details before continuing.')
+      return
+    }
+
+    if (!formData.acceptedTerms) {
+      setErrorMessage('Please accept the Terms and Privacy Notice before continuing.')
+      return
+    }
+
     if (!quote?.supported) {
       setErrorMessage(quote?.reason ?? 'Shipping is not available for this country yet.')
+      return
+    }
+
+    if (!canPay) {
+      setErrorMessage('Please wait until the current shipping quote is ready.')
       return
     }
 
@@ -311,8 +359,6 @@ export function OrderInvitationPage({ token }: { token: string }) {
     )
   }
 
-  const isPaid = invitation.payment?.status === 'paid' || invitation.order?.status === 'paid'
-  const canPay = !isPaid && invitation.canOrder && quote?.supported && !submitting
   const confirmationTotal = money(
     invitation.payment?.amount ?? invitation.order?.total ?? quote?.total ?? null,
     invitation.payment?.currency ?? quote?.currency ?? 'EUR',
@@ -515,7 +561,11 @@ export function OrderInvitationPage({ token }: { token: string }) {
               </div>
             ) : (
               <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-                <button type="submit" className="button-primary justify-center" disabled={!canPay}>
+                <button
+                  type="submit"
+                  className="button-primary payment-button justify-center"
+                  disabled={!canPay}
+                >
                   {submitting ? 'Starting payment...' : 'Confirm and pay'}
                 </button>
                 <p className="text-sm leading-6 text-white/46">
