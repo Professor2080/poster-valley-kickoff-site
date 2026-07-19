@@ -113,11 +113,11 @@ function Footer() {
 
         <div>
           <p className="eyebrow text-white/38">Seller / Legal entity</p>
-          <p className="mt-4 font-semibold text-white/82">
-            {legalDetails.sellerName} ({legalDetails.englishName})
+          <p className="mt-4 leading-6">
+            Poster Valley is part of {legalDetails.englishName}:
           </p>
-          <p className="mt-1 leading-6">Poster Valley is part of {legalDetails.sellerName}.</p>
           <address className="mt-4 not-italic leading-6">
+            <span className="block">{legalDetails.sellerName}</span>
             {legalDetails.addressLines.map((line) => (
               <span className="block" key={line}>
                 {line}
