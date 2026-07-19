@@ -51,17 +51,26 @@ create unique index entity_events_idempotency_idx on public.entity_events (sourc
 create table public.product_registry (
   product_code text primary key check (product_code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
   title text not null,
-  lifecycle_status text not null check (lifecycle_status in ('draft', 'active', 'retired')),
-  selling_mode text not null check (selling_mode in ('custom_drop', 'woocommerce')),
+  lifecycle_mode text not null check (lifecycle_mode in ('interest', 'preorder', 'in_stock', 'sold_out', 'archived')),
+  -- Derived rather than editable: one lifecycle mode has one commerce authority.
+  commerce_authority text generated always as (
+    case lifecycle_mode
+      when 'interest' then 'custom'
+      when 'preorder' then 'custom'
+      when 'in_stock' then 'woocommerce'
+      when 'sold_out' then 'none'
+      when 'archived' then 'historical'
+    end
+  ) stored,
   woo_product_id text,
   woo_product_url text check (woo_product_url is null or woo_product_url ~ '^https://'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check ((selling_mode = 'woocommerce') or (woo_product_id is null and woo_product_url is null))
+  check ((lifecycle_mode = 'in_stock') or (woo_product_id is null and woo_product_url is null))
 );
-create index product_registry_active_idx on public.product_registry (lifecycle_status, product_code);
-insert into public.product_registry (product_code, title, lifecycle_status, selling_mode)
-values ('eurofighter-typhoon-a2', 'Eurofighter Typhoon / A2', 'active', 'custom_drop')
+create index product_registry_lifecycle_idx on public.product_registry (lifecycle_mode, product_code);
+insert into public.product_registry (product_code, title, lifecycle_mode)
+values ('eurofighter-typhoon-a2', 'Eurofighter Typhoon / A2', 'interest')
 on conflict (product_code) do nothing;
 
 -- Product codes and event history are append-only identifiers/history, not browser-owned state.

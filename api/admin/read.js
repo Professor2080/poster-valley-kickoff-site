@@ -7,7 +7,7 @@ const resources = {
   orders: ['orders', 'id,invitation_id,drop_slug,status,quantity,currency,subtotal_amount,shipping_amount,total_amount,shipping_country_code,created_at,updated_at', ['status']],
   payments: ['payments', 'id,order_id,provider,status,amount,currency,webhook_received_at,paid_at,created_at,updated_at', ['status']],
   events: ['entity_events', 'id,occurred_at,actor_user_id,source,event_type,entity_type,entity_id,correlation_id', ['entity_type', 'entity_id'], 'occurred_at.desc'],
-  products: ['product_registry', 'product_code,title,lifecycle_status,selling_mode,woo_product_id,woo_product_url,created_at,updated_at', ['lifecycle_status', 'selling_mode']],
+  products: ['product_registry', 'product_code,title,lifecycle_mode,commerce_authority,woo_product_id,woo_product_url,created_at,updated_at', ['lifecycle_mode', 'commerce_authority']],
 }
 
 export default async function handler(req, res) {

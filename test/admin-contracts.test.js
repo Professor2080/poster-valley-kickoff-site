@@ -9,6 +9,17 @@ test('migration establishes protected append-only foundations and product code',
   assert.match(migration, /No INSERT\/UPDATE\/DELETE policies/)
 })
 
+test('product lifecycle matches the accepted custom and WooCommerce authority model', () => {
+  assert.match(migration, /lifecycle_mode in \('interest', 'preorder', 'in_stock', 'sold_out', 'archived'\)/)
+  assert.match(migration, /when 'interest' then 'custom'/)
+  assert.match(migration, /when 'preorder' then 'custom'/)
+  assert.match(migration, /when 'in_stock' then 'woocommerce'/)
+  assert.match(migration, /when 'sold_out' then 'none'/)
+  assert.match(migration, /when 'archived' then 'historical'/)
+  assert.match(migration, /'eurofighter-typhoon-a2'.*'interest'/)
+  assert.doesNotMatch(migration, /lifecycle_status|selling_mode/)
+})
+
 test('status compatibility deliberately preserves legacy and reservation values', async () => {
   const doc = await readFile(new URL('../docs/admin-a1-staging-runbook.md', import.meta.url), 'utf8')
   assert.match(doc, /payment_link_sent.*order_invited/)
