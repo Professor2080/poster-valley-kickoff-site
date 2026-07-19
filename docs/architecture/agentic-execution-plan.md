@@ -1,0 +1,5 @@
+# Agentic execution plan
+
+Codex Cloud can execute a single task in an isolated runtime and produce a branch/PR; this task’s environment exposes no durable external task supervisor or local Git remote. Therefore do not represent one task as autonomously creating, monitoring and merging independent implementation workers. Pascal starts each approved Cloud task, supplies its brief, and reviews its draft PR. A coordinator later resolves integration.
+
+Execution is explicit: A1 starts first. After ADR freeze, QA/threat modelling and documentation-only Woo research may run in parallel with A1; A2 may create frozen mocks after A1 contracts are reviewed, but real API integration waits for A1 merge. A3 starts only after A1 and the relevant A2 shell exist. A4 starts only when payment, email and fulfilment event semantics are reliable. No agent may independently alter frozen shared status contracts. All dashboard/migration/operational tests use ADR-006 staging, never Production. One branch/PR per workstream prevents shared-directory collisions. Local `git worktree` is optional for humans; separate Cloud branch/PR runs are the relevant isolation mechanism.

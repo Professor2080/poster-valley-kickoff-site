@@ -1,0 +1,9 @@
+# Codex Cloud task: Commerce QA, Security and Integration Review
+
+Repository: `Professor2080/poster-valley-kickoff-site`; base `main`; branch `codex/commerce-qa-security-review`; draft PR **Review: Commerce security and integration gates**. Goal: independently review A1 contracts/candidates and cross-track safety; remediation only if separately assigned.
+
+Context: custom Supabase/Vercel/Resend/Mollie flow is real production; accepted ADR-001..006 govern magic-link roles (Pascal manager), custom/Woo separation, preorder, server shipping authority, Woo topology/SKU and mandatory staging isolation. QA may begin in parallel with A1 after ADR freeze; it does not change shared status contracts. Own `docs/reviews/**` (create), test plans and explicitly agreed non-invasive test additions. Do not modify production config/data, migrations, payment/email code, Woo setup, public UI or worker briefs.
+
+Review threat model for Auth/RLS/PII/invitation tokens/webhooks/idempotency; validate lifecycle and paid-only reporting semantics; review staging migrations for forward/rollback/compatibility/RLS; verify shipping price authority, manual-quote manager/expiry guard, internal fulfilment states and no manual paid changes; check Woo no-sync/outage boundary. Require staging-only tests, identifiable/removable fixtures, no real mail or live payments.
+
+Allowed: local/staging-safe inspection/tests/docs and draft PR. Forbidden: Production Supabase/service-role access, secrets, deploy/merge, email/payment, migration execution outside staging, external provisioning. Run standard npm checks where code changes plus diff/conflict scan and document negative cases. Final report: findings ranked with evidence/owner, tests, staging limitations, gate recommendation and no-production confirmation. Done: actionable review and coordinator handoff.

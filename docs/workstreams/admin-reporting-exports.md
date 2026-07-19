@@ -1,0 +1,9 @@
+# Codex Cloud task: Admin Reporting and Controlled Exports (A4)
+
+Repository: `Professor2080/poster-valley-kickoff-site`; base: merged A1–A3; branch `codex/admin-reporting-exports`; draft PR **A4: Add admin reporting and controlled exports**. Goal: create trustworthy custom-operations reporting and minimal, auditable exports.
+
+Context: custom and Woo order/stock ownership stays separate; payment truth remains Mollie/webhook; Auth/RLS uses Pascal as manager initially; staging-only development applies. Start only when payment, email and fulfilment event semantics are reliable and A3 has merged. Own `src/admin/**` reporting views, scoped `api/admin/**` report/export endpoints, report tests and A4 docs. Do not modify payment/webhook logic, public UI, Woo systems, production configuration, shared status contracts or unrelated schema.
+
+Implement period/filter reporting for paid-only revenue, AOV, reservation/invitation/payment conversion, country/product analysis and fulfilment queues. CSV exports must be permissioned, audited, field-minimized, paginated/limited and clearly non-accounting output. Never make accounting/tax claims, include unnecessary PII, manually alter payment state, or write Woo operational data.
+
+Allowed: scoped code/tests/docs and staging-safe sample data. Forbidden: Production data/service key, real mail/payment, deployment/merge, external provisioning, production schema execution. Test paid-only calculations, filters/time zones, authorization/export audit, PII minimization and empty/error states; run standard npm checks plus diff/conflict scan. Final report: metrics definitions, included fields, test/staging evidence, limits, blockers and no-production confirmation. Done: accurate audited reporting/exports with clear data ownership and coordinator handoff.
