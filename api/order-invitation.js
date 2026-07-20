@@ -3,7 +3,7 @@ import {
   hashInvitationToken,
   isInvitationExpired,
   publicOrderSummary,
-  quoteForInvitation,
+  quoteFromOrder,
   readInvitationToken,
 } from './_commerce.js'
 import {
@@ -90,9 +90,7 @@ export default async function handler(req, res) {
     }
 
     const { order, payment } = await latestOrderAndPayment(currentInvitation.id)
-    const quote = order?.shipping_country_code
-      ? quoteForInvitation(currentInvitation, order.shipping_country_code)
-      : null
+    const quote = quoteFromOrder(order)
 
     sendJson(res, 200, {
       ok: true,

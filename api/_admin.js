@@ -54,3 +54,33 @@ export async function adminSelect(table, select, { limit, offset, filters = {}, 
   const total = Number((response.headers.get('content-range') ?? '*/0').split('/')[1]) || 0
   return { items: await response.json(), page: { limit, offset, total } }
 }
+
+export async function adminRpc(functionName, body) {
+  if (!SUPABASE_URL || !SERVICE_KEY) throw new AdminRequestError(503, 'admin_unavailable', 'Admin service is not configured.')
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/${functionName}`, { method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const databaseCode = typeof payload?.message === 'string' ? payload.message : ''
+    const known = {
+      forbidden: [403, 'forbidden', 'You do not have permission to perform this action.'],
+      insufficient_role: [403, 'insufficient_role', 'Manager role is required.'],
+      not_found: [404, 'not_found', 'The requested record was not found.'],
+      idempotency_conflict: [409, 'idempotency_conflict', 'This retry key was already used for different details.'],
+      operation_in_progress: [409, 'operation_in_progress', 'This operation is already in progress. Retry with the same details.'],
+      stale_transition: [409, 'stale_transition', 'The record changed after preview. Reload it before trying again.'],
+      invalid_transition: [409, 'invalid_transition', 'This action is no longer available for the current lifecycle state.'],
+      payment_not_confirmed: [409, 'payment_not_confirmed', 'A provider-confirmed paid payment is required.'],
+      quote_in_use: [409, 'quote_in_use', 'The active quote is already attached to an order and cannot be replaced.'],
+      tracking_required: [400, 'tracking_required', 'Carrier and tracking number are required before shipping.'],
+      invalid_expiry: [400, 'invalid_expiry', 'The expiry must be a valid future date.'],
+      invalid_quote_destination: [400, 'invalid_quote_destination', 'Manual quotes are only available for destinations requiring manual review.'],
+      invalid_manual_quote: [409, 'invalid_manual_quote', 'The manual quote changed or expired before checkout.'],
+      invalid_action: [400, 'invalid_action', 'Unknown operational action.'],
+      delivery_attempt_mismatch: [409, 'delivery_attempt_mismatch', 'The delivery attempt no longer matches this action.'],
+      invalid_invitation_context: [400, 'invalid_invitation_context', 'The invitation delivery details are invalid.'],
+    }[databaseCode]
+    if (known) throw new AdminRequestError(...known)
+    throw new AdminRequestError(response.status === 409 ? 409 : 500, 'operation_failed', 'The operation could not be completed.')
+  }
+  return payload
+}

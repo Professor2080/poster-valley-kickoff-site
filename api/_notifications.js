@@ -10,6 +10,33 @@ export function isResendConfigured() {
   return Boolean(RESEND_API_KEY)
 }
 
+// Operational mail is deliberately dry-run by default.  A separately approved
+// staging release must opt in; local and automated environments never deliver.
+export async function prepareOperationalEmail(message) {
+  // A3 intentionally has no delivery switch: Pascal must separately approve
+  // and implement a staging delivery integration. Keeping this boundary hard
+  // prevents an accidental real customer email from a preview or test run.
+  void message
+  return { delivered: false, suppressed: true, subject: message.subject }
+}
+
+// Dependency-injected boundary used by the operational outbox. Production
+// delivery is intentionally unavailable in this codebase; tests inject an
+// adapter and every default invocation is a truthful suppression.
+export function operationalDeliveryAdapter({ send } = {}) {
+  return async (message) => {
+    if (typeof send !== 'function') return { status: 'suppressed', providerId: null }
+    try {
+      const result = await send(message)
+      return result?.accepted === true && typeof result.id === 'string' && result.id
+        ? { status: 'sent', providerId: result.id }
+        : { status: 'failed', providerId: null }
+    } catch {
+      return { status: 'failed', providerId: null }
+    }
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
