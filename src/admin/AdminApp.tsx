@@ -1,7 +1,9 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { AdminApiError, getAdminRead, getAuthorization } from './api'
-import { adminResources, boundedOffset, resourceFilters, type AdminReadResponse, type AdminResource, type AdminRole } from './contracts'
+import { getAdminRead } from './api'
+import { adminResources, boundedOffset, formatValue, readViewState, resourceFilters, type AdminReadResponse, type AdminResource, type AdminRole } from './contracts'
+import { verifyAdminSession } from './session'
+import { modalKeyAction } from './dialog'
 import { hasBrowserSupabaseConfig, supabase } from './supabase'
 
 const labels: Record<AdminResource | 'overview', string> = { overview: 'Overview', reservations: 'Reservations', invitations: 'Invitations', orders: 'Orders', payments: 'Payments', events: 'Events', products: 'Products' }
@@ -21,18 +23,15 @@ export function AdminApp({ callback = false }: { callback?: boolean }) {
     let alive = true
     const verify = async (candidate: Session | null) => {
       if (!alive) return
-      if (!candidate?.access_token) { setSession(null); setScreen('login'); return }
-      setScreen('checking')
-      try {
-        const result = await getAuthorization(candidate.access_token)
-        if (!alive) return
-        setSession(candidate); setRole(result.role); setScreen('shell')
+      if (candidate?.access_token) setScreen('checking')
+      const result = await verifyAdminSession(candidate, async () => { await client.auth.signOut() })
+      if (!alive) return
+      if (result.screen === 'shell') {
+        setSession(candidate); setRole(result.role ?? null); setScreen('shell')
         if (callback) window.history.replaceState({}, '', '/admin')
-      } catch (error) {
-        if (!alive) return
-        setSession(null); setRole(null)
-        if (error instanceof AdminApiError && error.status === 403) setScreen('denied')
-        else { await client.auth.signOut(); setNotice('Your session has expired or is no longer valid. Please sign in again.'); setScreen('login') }
+      } else {
+        setSession(null); setRole(null); setScreen(result.screen)
+        if (result.expired) setNotice('Your session has expired or is no longer valid. Please sign in again.')
       }
     }
     void client.auth.getSession().then(({ data }) => verify(data.session))
@@ -73,16 +72,39 @@ function AdminShell({ token, role, onLogout }: { token: string; role: AdminRole;
 }
 
 function Overview({ token }: { token: string }) { return <section aria-labelledby="overview-title"><p className="admin-kicker">Read-only workspace</p><h1 id="overview-title">Overview</h1><p className="admin-intro">A bounded snapshot of operational records. Totals come directly from the A1 read contract; no revenue or accounting claim is shown.</p><div className="admin-metrics">{(['reservations', 'invitations', 'orders', 'payments'] as const).map((resource) => <Metric key={resource} resource={resource} token={token} />)}</div></section> }
-function Metric({ resource, token }: { resource: AdminResource; token: string }) { const [value, setValue] = useState<string>('…'); useEffect(() => { let alive = true; void getAdminRead(resource, token, 1, 0, {}).then((data) => alive && setValue(String(data.page.total))).catch(() => alive && setValue('Unavailable')); return () => { alive = false } }, [resource, token]); return <article className="admin-metric"><p>{labels[resource]}</p><strong>{value}</strong><span>records</span></article> }
+function Metric({ resource, token }: { resource: AdminResource; token: string }) { const [value, setValue] = useState<string>('…'); useEffect(() => { let alive = true; void getAdminRead(resource, token, 1, 0, {}).then((data) => alive && setValue(String(data!.page.total))).catch(() => alive && setValue('Unavailable')); return () => { alive = false } }, [resource, token]); return <article className="admin-metric"><p>{labels[resource]}</p><strong>{value}</strong><span>records</span></article> }
 
 function ReadList({ resource, token }: { resource: AdminResource; token: string }) {
-  const [offset, setOffset] = useState(0); const [filters, setFilters] = useState<Record<string, string>>({}); const [data, setData] = useState<AdminReadResponse | null>(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [selected, setSelected] = useState<Record<string, unknown> | null>(null)
+  const [offset, setOffset] = useState(0); const [filters, setFilters] = useState<Record<string, string>>({}); const [data, setData] = useState<AdminReadResponse | null>(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [selected, setSelected] = useState<Record<string, unknown> | null>(null); const detailTrigger = useRef<HTMLButtonElement | null>(null)
   useEffect(() => { setOffset(0); setFilters({}); setSelected(null) }, [resource])
   useEffect(() => { let alive = true; setLoading(true); setError(''); void getAdminRead(resource, token, pageSize, offset, filters).then((response) => { if (alive) { setData(response); setLoading(false) } }).catch((reason: unknown) => { if (alive) { setError(reason instanceof Error ? reason.message : 'Unable to load records.'); setLoading(false) } }); return () => { alive = false } }, [resource, token, offset, filters])
   const fields = useMemo(() => data?.items.length ? Object.keys(data.items[0]) : [], [data])
   const updateFilter = (name: string, value: string) => { setOffset(0); setFilters((current) => ({ ...current, [name]: value })) }
-  return <section aria-labelledby={`${resource}-title`}><p className="admin-kicker">Read-only records</p><h1 id={`${resource}-title`}>{labels[resource]}</h1><div className="admin-filters" aria-label={`${labels[resource]} filters`}>{resourceFilters[resource].map((filter) => <label key={filter}>{filter.replaceAll('_', ' ')}<input value={filters[filter] ?? ''} onChange={(event) => updateFilter(filter, event.target.value)} placeholder="Exact status" /></label>)}</div>{loading ? <p className="admin-state" role="status">Loading {labels[resource].toLowerCase()}…</p> : error ? <p className="admin-state admin-error" role="alert">{error}</p> : !data?.items.length ? <p className="admin-state">No matching {labels[resource].toLowerCase()} were found.</p> : <><div className="admin-table-wrap"><table><caption className="sr-only">{labels[resource]} records</caption><thead><tr>{fields.map((field) => <th key={field}>{field.replaceAll('_', ' ')}</th>)}<th><span className="sr-only">Details</span></th></tr></thead><tbody>{data.items.map((item, index) => <tr key={String(item.id ?? item.product_code ?? index)}>{fields.map((field) => <td key={field}>{formatValue(item[field])}</td>)}<td><button className="admin-detail-button" onClick={() => setSelected(item)}>View<span className="sr-only"> record details</span></button></td></tr>)}</tbody></table></div><Pagination page={data.page} onPrevious={() => setOffset(boundedOffset(offset, pageSize, data.page.total, 'previous'))} onNext={() => setOffset(boundedOffset(offset, pageSize, data.page.total, 'next'))} /></>}{selected && <Detail item={selected} title={labels[resource]} onClose={() => setSelected(null)} />}</section>
+  return <section aria-labelledby={`${resource}-title`}><p className="admin-kicker">Read-only records</p><h1 id={`${resource}-title`}>{labels[resource]}</h1><div className="admin-filters" aria-label={`${labels[resource]} filters`}>{resourceFilters[resource].map((filter) => <label key={filter}>{filter.replaceAll('_', ' ')}<input value={filters[filter] ?? ''} onChange={(event) => updateFilter(filter, event.target.value)} placeholder="Exact status" /></label>)}</div>{readViewState({ loading, error, itemCount: data?.items.length ?? 0 }) === 'loading' ? <p className="admin-state" role="status">Loading {labels[resource].toLowerCase()}…</p> : readViewState({ loading, error, itemCount: data?.items.length ?? 0 }) === 'error' ? <p className="admin-state admin-error" role="alert">{error}</p> : readViewState({ loading, error, itemCount: data?.items.length ?? 0 }) === 'empty' ? <p className="admin-state">No matching {labels[resource].toLowerCase()} were found.</p> : <><div className="admin-table-wrap"><table><caption className="sr-only">{labels[resource]} records</caption><thead><tr>{fields.map((field) => <th key={field}>{field.replaceAll('_', ' ')}</th>)}<th><span className="sr-only">Details</span></th></tr></thead><tbody>{data!.items.map((item, index) => <tr key={String(item.id ?? item.product_code ?? index)}>{fields.map((field) => <td key={field}>{formatValue(field, item[field])}</td>)}<td><button className="admin-detail-button" onClick={(event: MouseEvent<HTMLButtonElement>) => { detailTrigger.current = event.currentTarget; setSelected(item) }}>View<span className="sr-only"> record details</span></button></td></tr>)}</tbody></table></div><Pagination page={data!.page} onPrevious={() => setOffset(boundedOffset(offset, pageSize, data!.page.total, 'previous'))} onNext={() => setOffset(boundedOffset(offset, pageSize, data!.page.total, 'next'))} /></>}{selected && <Detail item={selected} title={labels[resource]} trigger={detailTrigger.current} onClose={() => setSelected(null)} />}</section>
 }
-function formatValue(value: unknown) { if (value === null || value === undefined || value === '') return '—'; if (typeof value === 'string' && /_at$/.test(value)) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? value : date.toLocaleString() } return String(value).replaceAll('_', ' ') }
 function Pagination({ page, onPrevious, onNext }: { page: { limit: number; offset: number; total: number }; onPrevious: () => void; onNext: () => void }) { const start = page.total ? page.offset + 1 : 0; const end = Math.min(page.offset + page.limit, page.total); return <nav className="admin-pagination" aria-label="Pagination"><span>{start}–{end} of {page.total}</span><div><button onClick={onPrevious} disabled={page.offset === 0}>Previous</button><button onClick={onNext} disabled={page.offset + page.limit >= page.total}>Next</button></div></nav> }
-function Detail({ item, title, onClose }: { item: Record<string, unknown>; title: string; onClose: () => void }) { return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(event) => event.stopPropagation()}><div><h2 id="detail-title">{title} details</h2><button onClick={onClose} autoFocus>Close</button></div><dl>{Object.entries(item).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(value)}</dd></div>)}</dl></section></div> }
+function Detail({ item, title, trigger, onClose }: { item: Record<string, unknown>; title: string; trigger: HTMLButtonElement | null; onClose: () => void }) {
+  const dialog = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const focusDialog = () => dialog.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    focusDialog()
+    const onKeyDown = (event: KeyboardEvent) => {
+      const focusable = dialog.current?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      if (!focusable?.length) return
+      const first = focusable[0]; const last = focusable[focusable.length - 1]
+      const action = modalKeyAction({ key: event.key, shiftKey: event.shiftKey, atFirst: document.activeElement === first, atLast: document.activeElement === last })
+      if (!action) return
+      event.preventDefault()
+      if (action === 'close') onClose()
+      else if (action === 'first') first.focus()
+      else last.focus()
+    }
+    const keepFocusInDialog = (event: FocusEvent) => {
+      if (dialog.current && event.target instanceof Node && !dialog.current.contains(event.target)) focusDialog()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('focusin', keepFocusInDialog)
+    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('focusin', keepFocusInDialog); trigger?.focus() }
+  }, [onClose, trigger])
+  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={onClose}><section ref={dialog} className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(event) => event.stopPropagation()}><div><h2 id="detail-title">{title} details</h2><button onClick={onClose}>Close</button></div><dl>{Object.entries(item).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl></section></div>
+}

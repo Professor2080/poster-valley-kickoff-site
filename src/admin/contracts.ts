@@ -24,3 +24,18 @@ export function adminReadUrl(resource: AdminResource, limit: number, offset: num
   for (const name of resourceFilters[resource]) if (filters[name]) params.set(name, filters[name])
   return `/api/admin/read?${params.toString()}`
 }
+
+export function readViewState({ loading, error, itemCount }: { loading: boolean; error: string; itemCount: number }) {
+  if (loading) return 'loading' as const
+  if (error) return 'error' as const
+  return itemCount === 0 ? 'empty' as const : 'ready' as const
+}
+
+export function formatValue(field: string, value: unknown) {
+  if (value === null || value === undefined || value === '') return '—'
+  if (typeof value === 'string' && /_at$/.test(field)) {
+    const date = new Date(value)
+    return Number.isNaN(date.valueOf()) ? value : date.toLocaleString()
+  }
+  return String(value).replaceAll('_', ' ')
+}
