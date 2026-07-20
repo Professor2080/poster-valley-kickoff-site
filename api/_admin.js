@@ -54,3 +54,11 @@ export async function adminSelect(table, select, { limit, offset, filters = {}, 
   const total = Number((response.headers.get('content-range') ?? '*/0').split('/')[1]) || 0
   return { items: await response.json(), page: { limit, offset, total } }
 }
+
+export async function adminRpc(functionName, body) {
+  if (!SUPABASE_URL || !SERVICE_KEY) throw new AdminRequestError(503, 'admin_unavailable', 'Admin service is not configured.')
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/${functionName}`, { method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) throw new AdminRequestError(response.status === 409 ? 409 : 500, payload?.message === 'idempotency_conflict' ? 'idempotency_conflict' : 'operation_failed', 'The operation could not be completed.')
+  return payload
+}
