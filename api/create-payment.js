@@ -4,6 +4,7 @@ import {
   isInvitationExpired,
   mollieAmountValue,
   quoteForInvitation,
+  applyApprovedManualQuote,
   readInvitationToken,
   readShippingAddress,
 } from './_commerce.js'
@@ -69,7 +70,9 @@ export default async function handler(req, res) {
       throw new PublicRequestError('The email address does not match this invitation.', 400)
     }
 
-    const quote = quoteForInvitation(invitation, address.countryCode)
+    const baseQuote = quoteForInvitation(invitation, address.countryCode)
+    const quotes = await selectRows('manual_shipping_quotes', { invitation_id: `eq.${invitation.id}`, country_code: `eq.${baseQuote.countryCode}`, currency: `eq.${baseQuote.currency}`, status: 'eq.approved', expires_at: `gt.${new Date().toISOString()}`, select: 'id,country_code,currency,shipping_amount,status,expires_at', limit: 1 })
+    const quote = applyApprovedManualQuote(invitation, baseQuote.countryCode, baseQuote, quotes[0])
 
     if (!quote.supported) {
       throw new PublicRequestError(quote.reason, 400)

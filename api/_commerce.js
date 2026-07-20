@@ -189,6 +189,15 @@ export function quoteForInvitation(invitation, countryCode) {
   }
 }
 
+// A manager quote can only supply shipping for a destination the registry has
+// already classified as manual review; it never changes product pricing.
+export function applyApprovedManualQuote(invitation, countryCode, quote, manualQuote) {
+  if (quote.supported || !manualQuote || manualQuote.status !== 'approved' || manualQuote.currency !== quote.currency || manualQuote.country_code !== countryCode || new Date(manualQuote.expires_at).getTime() <= Date.now()) return quote
+  const shipping = Number(manualQuote.shipping_amount)
+  if (!Number.isFinite(shipping) || shipping < 0) return quote
+  return { ...quote, supported: true, shipping, total: fromCents(toCents(quote.subtotal) + toCents(shipping)), shippingLabel: 'Approved manual shipping quote', shippingNote: 'Shipping quote approved by Poster Valley.', reviewNeeded: false, manualQuoteId: manualQuote.id }
+}
+
 export function readShippingAddress(body) {
   const firstName = readText(body.firstName, 'First name', 120)
   const lastName = readText(body.lastName, 'Last name', 120)
