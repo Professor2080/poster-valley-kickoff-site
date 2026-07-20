@@ -54,7 +54,9 @@ export default async function handler(req, res) {
     }
 
     const baseQuote = quoteForInvitation(invitation, body.countryCode)
-    const quotes = await selectRows('manual_shipping_quotes', { invitation_id: `eq.${invitation.id}`, country_code: `eq.${baseQuote.countryCode}`, currency: `eq.${baseQuote.currency}`, status: 'eq.approved', expires_at: `gt.${new Date().toISOString()}`, select: 'id,country_code,currency,shipping_amount,status,expires_at', limit: 1 })
+    const quotes = !baseQuote.supported && baseQuote.reviewNeeded
+      ? await selectRows('manual_shipping_quotes', { invitation_id: `eq.${invitation.id}`, country_code: `eq.${baseQuote.countryCode}`, currency: `eq.${baseQuote.currency}`, status: 'eq.approved', expires_at: `gt.${new Date().toISOString()}`, select: 'id,country_code,currency,shipping_amount,status,expires_at', order: 'created_at.desc', limit: 1 })
+      : []
     const quote = applyApprovedManualQuote(invitation, baseQuote.countryCode, baseQuote, quotes[0])
     sendJson(res, 200, { ok: true, quote })
   } catch (error) {

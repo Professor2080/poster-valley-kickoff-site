@@ -198,6 +198,26 @@ export function applyApprovedManualQuote(invitation, countryCode, quote, manualQ
   return { ...quote, supported: true, shipping, total: fromCents(toCents(quote.subtotal) + toCents(shipping)), shippingLabel: 'Approved manual shipping quote', shippingNote: 'Shipping quote approved by Poster Valley.', reviewNeeded: false, manualQuoteId: manualQuote.id }
 }
 
+export function quoteFromOrder(order) {
+  if (!order) return null
+  return {
+    supported: true,
+    currency: order.currency,
+    countryCode: order.shipping_country_code,
+    countryName: order.shipping_country,
+    quantity: Number(order.quantity),
+    unitPrice: Number(order.unit_price),
+    subtotal: Number(order.subtotal_amount),
+    shipping: Number(order.shipping_amount),
+    total: Number(order.total_amount),
+    shippingProfileId: order.shipping_profile_id,
+    shippingLabel: order.metadata?.shipping_label ?? 'Order shipping',
+    shippingNote: order.metadata?.shipping_note ?? null,
+    reviewNeeded: false,
+    manualQuoteId: order.manual_shipping_quote_id ?? null,
+  }
+}
+
 export function readShippingAddress(body) {
   const firstName = readText(body.firstName, 'First name', 120)
   const lastName = readText(body.lastName, 'Last name', 120)

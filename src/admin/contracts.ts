@@ -1,13 +1,16 @@
-export const adminResources = ['reservations', 'invitations', 'orders', 'payments', 'events', 'products'] as const
+export const adminResources = ['reservations', 'invitations', 'orders', 'payments', 'quotes', 'email_events', 'audit', 'events', 'products'] as const
 export type AdminResource = (typeof adminResources)[number]
 export type AdminRole = 'operator' | 'manager'
 
 export const resourceFilters: Record<AdminResource, string[]> = {
   reservations: ['status', 'reservation_status'],
-  invitations: ['status'],
-  orders: ['status'],
-  payments: ['status'],
-  events: ['entity_type', 'entity_id'],
+  invitations: ['status', 'interest_request_id'],
+  orders: ['status', 'fulfilment_status', 'invitation_id'],
+  payments: ['status', 'order_id'],
+  quotes: ['invitation_id', 'status'],
+  email_events: ['entity_type', 'entity_id', 'template', 'delivery_status'],
+  audit: ['entity_type', 'entity_id', 'action'],
+  events: ['entity_type', 'entity_id', 'event_type'],
   products: ['lifecycle_mode', 'commerce_authority'],
 }
 

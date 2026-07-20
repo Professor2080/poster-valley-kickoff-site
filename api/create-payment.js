@@ -71,7 +71,9 @@ export default async function handler(req, res) {
     }
 
     const baseQuote = quoteForInvitation(invitation, address.countryCode)
-    const quotes = await selectRows('manual_shipping_quotes', { invitation_id: `eq.${invitation.id}`, country_code: `eq.${baseQuote.countryCode}`, currency: `eq.${baseQuote.currency}`, status: 'eq.approved', expires_at: `gt.${new Date().toISOString()}`, select: 'id,country_code,currency,shipping_amount,status,expires_at', limit: 1 })
+    const quotes = !baseQuote.supported && baseQuote.reviewNeeded
+      ? await selectRows('manual_shipping_quotes', { invitation_id: `eq.${invitation.id}`, country_code: `eq.${baseQuote.countryCode}`, currency: `eq.${baseQuote.currency}`, status: 'eq.approved', expires_at: `gt.${new Date().toISOString()}`, select: 'id,country_code,currency,shipping_amount,status,expires_at', order: 'created_at.desc', limit: 1 })
+      : []
     const quote = applyApprovedManualQuote(invitation, baseQuote.countryCode, baseQuote, quotes[0])
 
     if (!quote.supported) {
@@ -100,6 +102,7 @@ export default async function handler(req, res) {
       shipping_amount: quote.shipping,
       total_amount: quote.total,
       shipping_profile_id: quote.shippingProfileId,
+      ...(quote.manualQuoteId ? { manual_shipping_quote_id: quote.manualQuoteId } : {}),
       shipping_country: quote.countryName,
       shipping_country_code: quote.countryCode,
       shipping_name: address.shippingName,
@@ -113,6 +116,8 @@ export default async function handler(req, res) {
         shipping_label: quote.shippingLabel,
         shipping_note: quote.shippingNote,
         shipping_review_needed: quote.reviewNeeded,
+        manual_quote_id: quote.manualQuoteId ?? null,
+        manual_quote_expires_at: quote.manualQuoteId ? quotes[0]?.expires_at : null,
       },
     })
 

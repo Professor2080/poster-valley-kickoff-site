@@ -26,8 +26,14 @@ export async function prepareOperationalEmail(message) {
 export function operationalDeliveryAdapter({ send } = {}) {
   return async (message) => {
     if (typeof send !== 'function') return { status: 'suppressed', providerId: null }
-    const result = await send(message)
-    return result?.accepted ? { status: 'sent', providerId: result.id ?? null } : { status: 'failed', providerId: null }
+    try {
+      const result = await send(message)
+      return result?.accepted === true && typeof result.id === 'string' && result.id
+        ? { status: 'sent', providerId: result.id }
+        : { status: 'failed', providerId: null }
+    } catch {
+      return { status: 'failed', providerId: null }
+    }
   }
 }
 
