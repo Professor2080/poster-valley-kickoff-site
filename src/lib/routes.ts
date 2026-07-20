@@ -7,6 +7,8 @@ export const routes = {
   privacy: '/privacy',
   terms: '/terms',
   order: '/order',
+  admin: '/admin',
+  adminCallback: '/admin/callback',
 }
 
 export function isFirstDropRoute(pathname: string) {
@@ -28,4 +30,8 @@ export function isTermsRoute(pathname: string) {
 export function getOrderTokenRoute(pathname: string) {
   const match = pathname.match(/^\/order\/([A-Za-z0-9_-]{24,160})$/)
   return match?.[1] ?? null
+}
+
+export function isAdminRoute(pathname: string) {
+  return pathname === routes.admin || pathname === routes.adminCallback
 }

@@ -9,7 +9,8 @@ import { PrivacyPage } from './components/PrivacyPage'
 import { TermsPage } from './components/TermsPage'
 import { WaitlistCTA } from './components/WaitlistCTA'
 import { legalDetails } from './data/legal'
-import { getDropRoute, getOrderTokenRoute, isPrivacyRoute, isTermsRoute, routes } from './lib/routes'
+import { getDropRoute, getOrderTokenRoute, isAdminRoute, isPrivacyRoute, isTermsRoute, routes } from './lib/routes'
+import { AdminApp } from './admin/AdminApp'
 
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname)
@@ -21,6 +22,7 @@ function App() {
     return () => window.removeEventListener('popstate', handleNavigation)
   }, [])
 
+  const isAdminPage = isAdminRoute(pathname)
   const detailDrop = getDropRoute(pathname)
   const orderToken = getOrderTokenRoute(pathname)
   const isDetailPage = Boolean(detailDrop)
@@ -28,6 +30,8 @@ function App() {
   const isTermsPage = isTermsRoute(pathname)
   const isOrderPage = Boolean(orderToken)
   const isLightPage = isDetailPage || isPrivacyPage || isTermsPage || isOrderPage
+
+  if (isAdminPage) return <AdminApp callback={pathname === routes.adminCallback} />
 
   return (
     <main className="min-h-screen overflow-hidden bg-ink text-paper">
