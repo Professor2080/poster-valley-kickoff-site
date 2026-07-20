@@ -20,6 +20,17 @@ export async function prepareOperationalEmail(message) {
   return { delivered: false, suppressed: true, subject: message.subject }
 }
 
+// Dependency-injected boundary used by the operational outbox. Production
+// delivery is intentionally unavailable in this codebase; tests inject an
+// adapter and every default invocation is a truthful suppression.
+export function operationalDeliveryAdapter({ send } = {}) {
+  return async (message) => {
+    if (typeof send !== 'function') return { status: 'suppressed', providerId: null }
+    const result = await send(message)
+    return result?.accepted ? { status: 'sent', providerId: result.id ?? null } : { status: 'failed', providerId: null }
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
