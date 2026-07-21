@@ -3,10 +3,10 @@ export type AdminResource = (typeof adminResources)[number]
 export type AdminRole = 'operator' | 'manager'
 
 export const resourceFilters: Record<AdminResource, string[]> = {
-  reservations: ['status', 'reservation_status'],
-  invitations: ['status', 'interest_request_id'],
-  orders: ['status', 'fulfilment_status', 'invitation_id'],
-  payments: ['status', 'order_id'],
+  reservations: ['status', 'reservation_status', 'record_origin', 'exclude_origin'],
+  invitations: ['status', 'interest_request_id', 'record_origin', 'exclude_origin'],
+  orders: ['status', 'payment_status', 'fulfilment_status', 'invitation_id', 'record_origin', 'exclude_origin'],
+  payments: ['status', 'order_id', 'record_origin', 'exclude_origin'],
   quotes: ['invitation_id', 'status'],
   email_events: ['entity_type', 'entity_id', 'template', 'delivery_status'],
   audit: ['entity_type', 'entity_id', 'action'],
@@ -16,16 +16,17 @@ export const resourceFilters: Record<AdminResource, string[]> = {
 
 export type AdminPage = { limit: number; offset: number; total: number }
 export type AdminReadResponse = { version: 'v1'; resource: AdminResource; items: Record<string, unknown>[]; page: AdminPage }
+export type AdminDetailResponse = {
+  version: 'v1'
+  resource: 'reservations' | 'orders'
+  record: Record<string, unknown>
+  fulfilment: Record<string, unknown> | null
+  history: Record<string, Record<string, unknown>[]>
+}
 
 export function boundedOffset(offset: number, limit: number, total: number, direction: 'next' | 'previous') {
   if (direction === 'previous') return Math.max(0, offset - limit)
   return offset + limit < total ? offset + limit : offset
-}
-
-export function adminReadUrl(resource: AdminResource, limit: number, offset: number, filters: Record<string, string>) {
-  const params = new URLSearchParams({ resource, limit: String(limit), offset: String(offset) })
-  for (const name of resourceFilters[resource]) if (filters[name]) params.set(name, filters[name])
-  return `/api/admin/read?${params.toString()}`
 }
 
 export function readViewState({ loading, error, itemCount }: { loading: boolean; error: string; itemCount: number }) {
@@ -40,5 +41,6 @@ export function formatValue(field: string, value: unknown) {
     const date = new Date(value)
     return Number.isNaN(date.valueOf()) ? value : date.toLocaleString()
   }
+  if (typeof value === 'object') return JSON.stringify(value)
   return String(value).replaceAll('_', ' ')
 }

@@ -1,4 +1,4 @@
-import { adminReadUrl, type AdminReadResponse, type AdminResource } from './contracts'
+import type { AdminDetailResponse, AdminReadResponse, AdminResource } from './contracts'
 
 export class AdminApiError extends Error {
   status: number
@@ -17,6 +17,10 @@ export type AdminActionResult = {
   fulfilmentStatus?: string
   fulfilmentVersion?: number
   quoteId?: string
+  recordOrigin?: 'customer' | 'test' | 'internal_pilot'
+  recordOriginNeedsReview?: boolean
+  recordOriginVersion?: number
+  affectedRecords?: Record<string, number>
   replay?: boolean
 }
 
@@ -36,6 +40,11 @@ async function post<T>(url: string, token: string, payload: Record<string, unkno
 
 export function getAuthorization(token: string) { return request<{ version: 'v1'; role: 'operator' | 'manager' }>('/api/admin/authorization', token) }
 export function getAdminRead(resource: AdminResource, token: string, limit: number, offset: number, filters: Record<string, string>) {
-  return request<AdminReadResponse>(adminReadUrl(resource, limit, offset, filters), token)
+  return post<AdminReadResponse>('/api/admin/read', token, { resource, limit, offset, filters })
 }
-export function runAdminAction(token: string, payload: Record<string, unknown>) { return post<AdminActionResult>('/api/admin/actions', token, payload) }
+export function getAdminDetail(resource: 'reservations' | 'orders', id: string, token: string) {
+  return post<AdminDetailResponse>('/api/admin/detail', token, { resource, id })
+}
+export function runAdminAction(token: string, payload: Record<string, unknown>) {
+  return post<AdminActionResult>('/api/admin/actions', token, payload)
+}

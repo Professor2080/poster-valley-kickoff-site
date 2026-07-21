@@ -38,6 +38,6 @@ test('status compatibility deliberately preserves legacy and reservation values'
 
 test('A1 exposes no payment mutation endpoint and documents provider authority', async () => {
   const read = await readFile(new URL('../api/admin/read.js', import.meta.url), 'utf8')
-  assert.doesNotMatch(read, /ensurePost|updateRows|createRow|insertRow/)
+  assert.doesNotMatch(read, /updateRows|createRow|insertRow/)
   assert.match(await readFile(new URL('../docs/admin-a1-staging-runbook.md', import.meta.url), 'utf8'), /Mollie.*authoritative/i)
 })

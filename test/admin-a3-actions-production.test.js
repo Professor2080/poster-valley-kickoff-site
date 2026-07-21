@@ -374,6 +374,7 @@ test('production handler validates quote and fulfilment contracts before mutatio
   await t.test('retries a suppressed shipping confirmation without repeating fulfilment', async () => {
     const delivered = []
     const calls = installSupabase({ role: 'operator', onRpc: (name) => {
+      if (name === 'admin_a31_assert_shipping_ready') return { ready: true }
       if (name === 'admin_a3_preview_action') return { success: true, preview: { orderId, fulfilmentStatus: 'shipped', carrier: 'DHL', trackingNumber: 'TRACK-123', previousDeliveryStatus: 'suppressed', suggestedAction: 'shipping.retry' } }
       if (name === 'admin_a3_apply_action') return { success: true, entityId: orderId, fulfilmentStatus: 'shipped', fulfilmentVersion: 3, emailAttemptId: attemptId, deliveryStatus: 'pending', replay: false }
       if (name === 'admin_a3_delivery_payload') return { template: 'shipping_confirmation', recipientEmail: 'customer@example.test', firstName: 'Ada', dropTitle: 'Eurofighter Typhoon / A2', carrier: 'DHL', trackingNumber: 'TRACK-123' }

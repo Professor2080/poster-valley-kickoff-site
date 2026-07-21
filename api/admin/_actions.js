@@ -11,6 +11,8 @@ export const actionRoles = {
   'fulfilment.transition': 'operator',
   'shipping.preview': 'operator',
   'shipping.retry': 'operator',
+  'origin.preview': 'manager',
+  'origin.change': 'manager',
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -18,6 +20,7 @@ const invitationActions = new Set(['invitation.preview', 'invitation.send', 'inv
 const quoteActions = new Set(['quote.preview', 'quote.approve'])
 const fulfilmentActions = new Set(['fulfilment.preview', 'fulfilment.transition'])
 const shippingActions = new Set(['shipping.preview', 'shipping.retry'])
+const originActions = new Set(['origin.preview', 'origin.change'])
 const fulfilmentStatuses = new Set(['unfulfilled', 'ready_to_pack', 'packed', 'shipped'])
 const fulfilmentTargets = new Set(['ready_to_pack', 'packed', 'shipped'])
 
@@ -83,6 +86,16 @@ export function normalizeActionRequest(action, body) {
 
   if (shippingActions.has(action)) return { orderId: uuid(body.orderId, 'Order id') }
 
+  if (originActions.has(action)) {
+    const recordOrigin = text(body.recordOrigin, 'Record origin', 40)
+    const reason = text(body.reason, 'Reason', 500)
+    const expectedOriginVersion = Number(body.expectedOriginVersion)
+    if (!['customer', 'test', 'internal_pilot'].includes(recordOrigin)) invalid('Record origin is invalid.')
+    if (reason.includes('@') || /https?:\/\//i.test(reason) || [...reason].some((character) => character.codePointAt(0) < 32)) invalid('Reason must not contain customer contact data, URLs or control characters.')
+    if (!Number.isSafeInteger(expectedOriginVersion) || expectedOriginVersion < 0) invalid('Record origin version is invalid.')
+    return { reservationId: uuid(body.reservationId, 'Reservation id'), recordOrigin, reason, expectedOriginVersion }
+  }
+
   invalid('Unknown operational action.', 'invalid_action')
 }
 
@@ -140,5 +153,5 @@ export function buildOperationalMessage(payload, token = null) {
 }
 
 export function mutationForPreview(action) {
-  return { 'invitation.preview': 'invitation.send', 'quote.preview': 'quote.approve', 'fulfilment.preview': 'fulfilment.transition', 'shipping.preview': 'shipping.retry' }[action] ?? null
+  return { 'invitation.preview': 'invitation.send', 'quote.preview': 'quote.approve', 'fulfilment.preview': 'fulfilment.transition', 'shipping.preview': 'shipping.retry', 'origin.preview': 'origin.change' }[action] ?? null
 }

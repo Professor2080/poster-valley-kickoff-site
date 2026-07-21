@@ -7,8 +7,9 @@ import {
   readInvitationToken,
 } from './_commerce.js'
 import {
-  ensureGet,
+  ensurePost,
   handleEndpointError,
+  readRequestBody,
   selectRows,
   sendJson,
   updateRows,
@@ -49,13 +50,12 @@ async function latestOrderAndPayment(invitationId) {
 }
 
 export default async function handler(req, res) {
-  if (!ensureGet(req, res)) {
+  if (!ensurePost(req, res)) {
     return
   }
 
   try {
-    const requestUrl = new URL(req.url, 'https://postervalley.local')
-    const token = readInvitationToken(requestUrl.searchParams.get('token'))
+    const token = readInvitationToken(readRequestBody(req).token)
     const invitation = await findInvitation(token)
 
     if (!invitation) {
@@ -92,6 +92,8 @@ export default async function handler(req, res) {
     const { order, payment } = await latestOrderAndPayment(currentInvitation.id)
     const quote = quoteFromOrder(order)
 
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
     sendJson(res, 200, {
       ok: true,
       invitation: publicOrderSummary(currentInvitation, quote, order, payment),

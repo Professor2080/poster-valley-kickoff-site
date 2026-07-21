@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { getOrderableDropBySlug, getShippingProfile } from './_drops.js'
 import { PublicRequestError, readEmail, readText } from './_supabase.js'
+import { regionRequiredCountryCodes, validCountryCodes } from './_countries.js'
 
 const finalInvitationStatuses = new Set(['paid', 'expired', 'cancelled'])
 const reusablePaymentStatuses = new Set(['payment_failed', 'payment_expired', 'cancelled'])
@@ -55,7 +56,7 @@ export function getCountryName(countryCode) {
 export function normalizeCountryCode(value) {
   const countryCode = readText(value, 'Country', 2).toUpperCase()
 
-  if (!/^[A-Z]{2}$/.test(countryCode)) {
+  if (!validCountryCodes.has(countryCode)) {
     throw new PublicRequestError('Please select a valid country.')
   }
 
@@ -218,6 +219,10 @@ export function quoteFromOrder(order) {
   }
 }
 
+function containsControlCharacter(value) {
+  return [...(value ?? '')].some((character) => character.codePointAt(0) < 32 || character.codePointAt(0) === 127)
+}
+
 export function readShippingAddress(body) {
   const firstName = readText(body.firstName, 'First name', 120)
   const lastName = readText(body.lastName, 'Last name', 120)
@@ -228,6 +233,21 @@ export function readShippingAddress(body) {
   const postalCode = readText(body.postalCode, 'Postal code', 40)
   const city = readText(body.city, 'City', 120)
   const region = readText(body.region, 'Region', 120, { required: false })
+  const company = readText(body.company, 'Company', 160, { required: false })
+
+  for (const [label, value] of [['Address line 1', addressLine1], ['Address line 2', addressLine2], ['Postal code', postalCode], ['City', city], ['Region', region], ['Company', company]]) {
+    if (containsControlCharacter(value)) throw new PublicRequestError(`${label} contains unsupported characters.`)
+  }
+  if (regionRequiredCountryCodes.has(countryCode) && !region) throw new PublicRequestError('State, province or region is required for this country.')
+  if (!/^[\p{L}\p{N}][\p{L}\p{N}\s-]{1,19}$/u.test(postalCode)) throw new PublicRequestError('Please enter a valid postal code.')
+  const postalPatterns = {
+    NL: /^\d{4}\s?[A-Z]{2}$/i,
+    US: /^\d{5}(?:-\d{4})?$/,
+    CA: /^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i,
+    AU: /^\d{4}$/,
+    GB: /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i,
+  }
+  if (postalPatterns[countryCode] && !postalPatterns[countryCode].test(postalCode)) throw new PublicRequestError('Please enter a valid postal code for the selected country.')
 
   return {
     firstName,
@@ -241,6 +261,7 @@ export function readShippingAddress(body) {
     postalCode,
     city,
     region,
+    company,
   }
 }
 

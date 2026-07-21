@@ -31,7 +31,7 @@ export function PrivacyPage() {
           />
           <PrivacyBlock
             title="Personal order invitations"
-            body="If a reserved poster moves toward production, we may send a personal order invitation. On that page we collect shipping name, country, street address, postal code, city, optional region and terms acceptance before starting payment."
+            body="If a reserved poster moves toward production, we may send a personal order invitation. On that page we collect shipping name, optional company, country, street address, postal code, city, region where applicable and terms acceptance before starting payment."
           />
           <PrivacyBlock
             title="Why we use it"

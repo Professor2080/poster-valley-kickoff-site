@@ -73,11 +73,12 @@ test('manual quote is snapshotted on the order before a mocked Mollie checkout i
   const res = response()
   await paymentHandler({ method: 'POST', body: {
     token: rawToken, acceptedTerms: true, firstName: 'Ada', lastName: 'Lovelace', email: invitation.email,
-    countryCode: 'US', addressLine1: '1 Test Street', postalCode: '12345', city: 'Test City',
+    countryCode: 'US', company: 'Analytical Engines', addressLine1: '1 Test Street', postalCode: '12345', city: 'Test City', region: 'CA',
   } }, res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.payload.checkoutUrl, 'https://checkout.test/tr_mocked')
   assert.equal(createdOrder.manual_shipping_quote_id, manualQuote.id)
+  assert.equal(createdOrder.shipping_company, 'Analytical Engines')
   assert.equal(createdOrder.shipping_amount, 21.5)
   assert.equal(createdOrder.total_amount, 39.25)
   assert.equal(createdOrder.metadata.manual_quote_id, manualQuote.id)
@@ -102,7 +103,7 @@ test('public invitation summary uses the persisted order quote instead of recomp
     throw new Error(`Unexpected request ${parsed.pathname} ${init.method}`)
   }
   const res = response()
-  await invitationHandler({ method: 'GET', url: `/api/order-invitation?token=${rawToken}` }, res)
+  await invitationHandler({ method: 'POST', body: { token: rawToken } }, res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.payload.invitation.quote.supported, true)
   assert.equal(res.payload.invitation.quote.shipping, 21.5)
