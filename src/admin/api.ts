@@ -11,6 +11,7 @@ type ErrorEnvelope = { error?: { code?: string; message?: string } }
 export type AdminActionResult = {
   success: true
   preview?: Record<string, unknown>
+  confirmation?: { proof: string; action: string; expiresAt: string; summary: Record<string, unknown> }
   entityId?: string
   emailAttemptId?: string
   deliveryStatus?: 'pending' | 'suppressed' | 'sent' | 'failed' | null
@@ -23,6 +24,8 @@ export type AdminActionResult = {
   affectedRecords?: Record<string, number>
   replay?: boolean
 }
+
+export type DeliveryConfiguration = { mode: 'suppressed' | 'unavailable' | 'live'; ready: boolean; externalEffect: boolean; message: string; missing: string[] }
 
 async function request<T>(url: string, token: string): Promise<T> {
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
@@ -48,3 +51,4 @@ export function getAdminDetail(resource: 'reservations' | 'orders', id: string, 
 export function runAdminAction(token: string, payload: Record<string, unknown>) {
   return post<AdminActionResult>('/api/admin/actions', token, payload)
 }
+export function getDeliveryConfiguration(token: string) { return request<DeliveryConfiguration>('/api/admin/delivery-status', token) }

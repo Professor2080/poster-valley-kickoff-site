@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { actionInputsDisabled, actionResultMessage, classifyActionError, completionPhase, contextualActions, createActionAttempt, fulfilmentVersion, historyDefinitions, type ActionPhase, type ContextAction } from './actions'
-import { getAdminDetail, getAdminRead, runAdminAction } from './api'
+import { getAdminDetail, getAdminRead, getDeliveryConfiguration, runAdminAction } from './api'
 import { adminResources, boundedOffset, formatValue, readViewState, resourceFilters, type AdminDetailResponse, type AdminReadResponse, type AdminResource, type AdminRole } from './contracts'
 import { verifyAdminSession } from './session'
 import { modalKeyAction } from './dialog'
@@ -15,7 +15,7 @@ const pageSize = 25
 const recordOrigins = ['customer', 'test', 'internal_pilot'] as const
 const listFields: Partial<Record<AdminResource, string[]>> = {
   reservations: ['customer_name', 'masked_email', 'drop_title', 'reservation_status', 'quantity', 'created_at', 'record_origin', 'record_origin_needs_review'],
-  invitations: ['drop_title', 'status', 'quantity', 'expires_at', 'sent_at', 'record_origin', 'record_origin_needs_review'],
+  invitations: ['drop_title', 'status', 'delivery_status', 'delivery_completed_at', 'quantity', 'expires_at', 'sent_at', 'record_origin', 'record_origin_needs_review'],
   orders: ['customer_name', 'status', 'payment_status', 'fulfilment_status', 'shipping_country_code', 'created_at', 'record_origin', 'record_origin_needs_review'],
   payments: ['provider', 'status', 'amount', 'currency', 'paid_at', 'created_at', 'record_origin', 'record_origin_needs_review'],
 }
@@ -84,7 +84,8 @@ function AdminShell({ token, role, onLogout }: { token: string; role: AdminRole;
   return <main className="admin-shell"><a className="admin-skip" href="#admin-content">Skip to content</a><header className="admin-header"><a href="/admin" className="admin-brand">Poster Valley <span>Operations</span></a><div><span className="admin-role">Verified {role}</span><button className="admin-logout" onClick={() => void onLogout()}>Sign out</button></div></header><div className="admin-layout"><nav className="admin-nav" aria-label="Admin sections">{(['overview', ...adminResources] as const).map((item) => <button key={item} aria-current={section === item ? 'page' : undefined} className={section === item ? 'active' : ''} onClick={() => selectSection(item)}>{labels[item]}</button>)}</nav><section ref={content} id="admin-content" className="admin-content" tabIndex={-1}>{section === 'overview' ? <Overview token={token} /> : <ReadList resource={section} token={token} role={role} />}</section></div></main>
 }
 
-function Overview({ token }: { token: string }) { return <section aria-labelledby="overview-title"><p className="admin-kicker">Controlled workspace</p><h1 id="overview-title">Overview</h1><p className="admin-intro">Open a reservation, invitation or paid order to review its lifecycle, preview an available action and confirm it explicitly. Payment status cannot be changed here.</p><div className="admin-metrics">{(['reservations', 'invitations', 'orders', 'payments'] as const).map((resource) => <Metric key={resource} resource={resource} token={token} />)}</div></section> }
+function Overview({ token }: { token: string }) { return <section aria-labelledby="overview-title"><p className="admin-kicker">Controlled workspace</p><h1 id="overview-title">Overview</h1><p className="admin-intro">Open a reservation, invitation or paid order to review its lifecycle, preview an available action and confirm it explicitly. Payment status cannot be changed here.</p><DeliveryStatus token={token} /><div className="admin-metrics">{(['reservations', 'invitations', 'orders', 'payments'] as const).map((resource) => <Metric key={resource} resource={resource} token={token} />)}</div></section> }
+function DeliveryStatus({ token }: { token: string }) { const [status, setStatus] = useState('Checking invitation delivery configuration…'); useEffect(() => { let alive = true; void getDeliveryConfiguration(token).then((value) => alive && setStatus(value.message)).catch(() => alive && setStatus('Invitation delivery status is unavailable.')); return () => { alive = false } }, [token]); return <p className="admin-message" role="status" aria-live="polite"><strong>Invitation email:</strong> {status}</p> }
 function Metric({ resource, token }: { resource: AdminResource; token: string }) { const [value, setValue] = useState<string>('…'); useEffect(() => { let alive = true; void getAdminRead(resource, token, 1, 0, { exclude_origin: 'test' }).then((data) => alive && setValue(String(data.page.total))).catch(() => alive && setValue('Unavailable')); return () => { alive = false } }, [resource, token]); return <article className="admin-metric"><p>{labels[resource]}</p><strong>{value}</strong><span>customer + pilot records</span></article> }
 
 function ReadList({ resource, token, role }: { resource: AdminResource; token: string; role: AdminRole }) {
@@ -145,6 +146,7 @@ function Detail({ item, resource, token, role, onChanged, onClose }: { item: Rec
   const [detailError, setDetailError] = useState('')
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailKey, setDetailKey] = useState(0)
+  const [mutationBusy, setMutationBusy] = useState(false)
   const canLoadPersonalDetail = role === 'manager' && (resource === 'reservations' || resource === 'orders')
   useEffect(() => {
     let alive = true
@@ -167,22 +169,22 @@ function Detail({ item, resource, token, role, onChanged, onClose }: { item: Rec
       const action = modalKeyAction({ key: event.key, shiftKey: event.shiftKey, atFirst: document.activeElement === first, atLast: document.activeElement === last })
       if (!action) return
       event.preventDefault()
-      if (action === 'close') onClose()
+      if (action === 'close' && !mutationBusy) onClose()
       else if (action === 'first') first.focus()
       else last.focus()
     }
     const keepFocusInDialog = (event: FocusEvent) => { if (dialog.current && event.target instanceof Node && !dialog.current.contains(event.target)) focusDialog() }
     document.addEventListener('keydown', onKeyDown); document.addEventListener('focusin', keepFocusInDialog)
     return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('focusin', keepFocusInDialog) }
-  }, [onClose])
+  }, [onClose, mutationBusy])
   const changed = () => { onChanged(); setDetailKey((value) => value + 1) }
-  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={onClose}><section ref={dialog} className="admin-dialog admin-record-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
-    <div className="admin-dialog-heading"><div><p className="admin-kicker">Contextual record</p><h2 id={titleId}>{labels[resource]} details</h2></div><button onClick={onClose}>Close</button></div>
+  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!mutationBusy) onClose() }}><section ref={dialog} className="admin-dialog admin-record-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={mutationBusy} onMouseDown={(event) => event.stopPropagation()}>
+    <div className="admin-dialog-heading"><div><p className="admin-kicker">Contextual record</p><h2 id={titleId}>{labels[resource]} details</h2></div><button onClick={onClose} disabled={mutationBusy}>Close</button></div>
     {detailLoading && <p className="admin-state" role="status">Loading manager-authorized customer detail…</p>}
     {detailError && <div><p className="admin-state admin-error" role="alert">{detailError}</p><button type="button" onClick={() => setDetailKey((value) => value + 1)}>Retry customer detail</button></div>}
     <RecordDetailFields resource={resource} item={currentItem} hasPersonalDetail={Boolean(detail)} fulfilment={detail?.fulfilment ?? null} />
     {role !== 'manager' && (resource === 'reservations' || resource === 'orders') && <p className="admin-muted">Complete customer and shipping details are restricted to managers.</p>}
-    <section className="admin-context-actions" aria-labelledby={`${titleId}-actions`}><h3 id={`${titleId}-actions`}>Available actions</h3>{actions.length ? actions.map((action) => <ActionControl key={`${action.kind}-${action.mutationAction ?? action.previewAction}`} action={action} item={currentItem} resource={resource} token={token} onChanged={changed} />) : <p className="admin-muted">No action is available for your role and this record lifecycle. The server verifies every request.</p>}</section>
+    <section className="admin-context-actions" aria-labelledby={`${titleId}-actions`}><h3 id={`${titleId}-actions`}>Available actions</h3>{actions.length ? actions.map((action) => <ActionControl key={`${action.kind}-${action.mutationAction ?? action.previewAction}`} action={action} item={currentItem} resource={resource} token={token} onChanged={changed} onBusy={setMutationBusy} />) : <p className="admin-muted">No action is available for your role and this record lifecycle. The server verifies every request.</p>}</section>
     {detail ? <DetailHistory history={detail.history} /> : <HistoryPanel token={token} resource={resource} item={item} refreshKey={detailKey} />}
   </section></div>
 }
@@ -219,20 +221,27 @@ function DetailHistory({ history }: { history: Record<string, Record<string, unk
   return <section className="admin-history" aria-labelledby="record-history-title"><h3 id="record-history-title">Related history</h3>{entries.length ? entries.map(([name, items]) => <section key={name} className="admin-history-group"><h4>{name.replaceAll('_', ' ')}</h4><ol>{items.map((entry, index) => <li key={String(entry.id ?? index)}><dl>{Object.entries(entry).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl></li>)}</ol></section>) : <p className="admin-muted">No related history has been recorded.</p>}</section>
 }
 
-function LifecycleActionControl({ action, item, resource, token, onChanged }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
+function ConfirmationStep({ action, attempt, phase, onConfirm, onCancel }: { action: ContextAction; attempt: ReturnType<typeof createActionAttempt>; phase: ActionPhase; onConfirm: (event: FormEvent) => void; onCancel: () => void }) {
+  const titleId = useId()
+  const cancel = useRef<HTMLButtonElement>(null)
+  useEffect(() => { cancel.current?.focus() }, [])
+  useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === 'Escape' && phase !== 'submitting') { event.preventDefault(); event.stopImmediatePropagation(); onCancel() } }; document.addEventListener('keydown', close, true); return () => document.removeEventListener('keydown', close, true) }, [onCancel, phase])
+  return <form className="admin-confirmation" onSubmit={onConfirm} aria-labelledby={titleId} aria-busy={phase === 'submitting'}><h5 id={titleId}>Confirm {action.confirmLabel.toLowerCase()}</h5><p>Review the server-bound preview. Only the button below performs the action.</p><dl>{Object.entries(attempt.summary).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl><p className="admin-muted">Confirmation expires {formatValue('expires_at', attempt.confirmationExpiresAt)}.</p><div className="admin-action-buttons"><button ref={cancel} type="button" className="admin-secondary" onClick={onCancel} disabled={phase === 'submitting'}>Cancel</button><button type="submit" disabled={phase === 'submitting' || ['success', 'conflict', 'forbidden'].includes(phase)}>{phase === 'submitting' ? 'Completing…' : action.confirmLabel}</button></div><p className="sr-only" role="status" aria-live="polite">{phase === 'submitting' ? `${action.confirmLabel} in progress.` : ''}</p></form>
+}
+
+function LifecycleActionControl({ action, item, resource, token, onChanged, onBusy }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void; onBusy: (busy: boolean) => void }) {
   const [phase, setPhase] = useState<ActionPhase>('idle')
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState<ReturnType<typeof createActionAttempt> | null>(null)
-  const [confirmation, setConfirmation] = useState('')
   const [countryCode, setCountryCode] = useState('')
   const [shippingAmount, setShippingAmount] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [carrier, setCarrier] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
-  const confirmationInput = useRef<HTMLInputElement>(null)
+  const submitting = useRef(false)
+  const initiatingButton = useRef<HTMLButtonElement>(null)
   const outcome = useRef<HTMLParagraphElement>(null)
   const formId = useId()
-  useEffect(() => { if (phase === 'confirming') confirmationInput.current?.focus() }, [phase])
   useEffect(() => { if (['success', 'conflict', 'forbidden', 'failure'].includes(phase)) outcome.current?.focus() }, [phase])
 
   const actionPayload = () => {
@@ -251,70 +260,71 @@ function LifecycleActionControl({ action, item, resource, token, onChanged }: { 
       const suggested = typeof result.preview?.suggestedAction === 'string' ? result.preview.suggestedAction : null
       const mutation = (action.mutationAction ?? suggested) as NonNullable<ContextAction['mutationAction']> | null
       if (!mutation || !['invitation.send', 'invitation.resend', 'quote.approve', 'fulfilment.transition', 'shipping.retry'].includes(mutation)) throw new Error('The preview did not provide a safe action.')
-      setAttempt(createActionAttempt(mutation, payload, result.preview ?? {})); setConfirmation(''); setPhase('confirming')
+      if (!result.confirmation || result.confirmation.action !== mutation) throw new Error('The server did not provide a valid confirmation step.')
+      setAttempt(createActionAttempt(mutation, payload, result.preview ?? {}, result.confirmation)); setPhase('confirming')
     } catch (error) {
       setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The preview could not be loaded.')
     }
   }
 
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); if (!attempt || confirmation !== 'CONFIRM' || phase === 'submitting') return
-    setPhase('submitting'); setMessage('')
+    event.preventDefault(); if (!attempt || submitting.current) return
+    submitting.current = true; onBusy(true); setPhase('submitting'); setMessage('')
     try {
-      const result = await runAdminAction(token, { action: attempt.action, ...attempt.payload, confirmation, idempotencyKey: attempt.idempotencyKey })
+      const result = await runAdminAction(token, { action: attempt.action, ...attempt.payload, confirmationProof: attempt.confirmationProof, idempotencyKey: attempt.idempotencyKey })
       setMessage(actionResultMessage(result))
       const completedPhase = completionPhase(result)
-      if (completedPhase === 'failure') { setAttempt(null); setConfirmation('') }
+      if (completedPhase === 'failure') setAttempt(null)
       setPhase(completedPhase)
       onChanged()
     } catch (error) {
       setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The confirmed action could not be completed.')
-    }
+    } finally { submitting.current = false; onBusy(false) }
   }
 
-  const reset = () => { setAttempt(null); setConfirmation(''); setMessage(''); setPhase('idle') }
+  const reset = () => { if (submitting.current) return; setAttempt(null); setMessage(''); setPhase('idle'); requestAnimationFrame(() => initiatingButton.current?.focus()) }
   const statusClass = phase === 'success' ? 'admin-success' : phase === 'conflict' ? 'admin-warning' : 'admin-error'
   const statusLabel = phase === 'conflict' ? `The record changed or conflicts with this action. ${message || 'Refresh the action preview.'}` : phase === 'forbidden' ? 'Your current role is not allowed to complete this action.' : message
   const canRetryAttempt = !actionInputsDisabled(phase, attempt)
 
-  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating. A separate explicit confirmation is required.</p>{action.kind === 'quote' && <div className="admin-action-fields"><label>Destination country code<input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} pattern="[A-Za-z]{2}" maxLength={2} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Shipping amount (EUR)<input type="number" min="0" max="10000" step="0.01" value={shippingAmount} onChange={(event) => setShippingAmount(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Quote expires<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{action.kind === 'fulfilment' && action.targetStatus === 'shipped' && <div className="admin-action-fields"><label>Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} maxLength={120} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Tracking number<input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} maxLength={160} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{!attempt && (phase === 'idle' || phase === 'previewing') && <button type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <form className="admin-confirmation" onSubmit={submit} aria-labelledby={`${formId}-confirm-title`}><h5 id={`${formId}-confirm-title`}>Confirm this action</h5><p>Review the server preview. This confirmation applies only to this record and payload.</p><dl>{Object.entries(attempt.preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl><label>Type CONFIRM<input ref={confirmationInput} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" required disabled={['success', 'conflict', 'forbidden'].includes(phase)} /></label><div className="admin-action-buttons"><button type="submit" disabled={confirmation !== 'CONFIRM' || phase === 'submitting' || ['success', 'conflict', 'forbidden'].includes(phase)}>{phase === 'submitting' ? 'Completing…' : phase === 'failure' ? 'Retry confirmed action' : 'Confirm action'}</button><button type="button" className="admin-secondary" onClick={reset} disabled={phase === 'submitting'}>Cancel</button></div></form>}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'}>{statusLabel}</p>{phase !== 'success' && !attempt && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}{phase === 'conflict' && <button type="button" className="admin-secondary" onClick={reset}>Refresh action preview</button>}</>}</article>
+  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating. A separate explicit confirmation is required.</p>{action.kind === 'quote' && <div className="admin-action-fields"><label>Destination country code<input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} pattern="[A-Za-z]{2}" maxLength={2} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Shipping amount (EUR)<input type="number" min="0" max="10000" step="0.01" value={shippingAmount} onChange={(event) => setShippingAmount(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Quote expires<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{action.kind === 'fulfilment' && action.targetStatus === 'shipped' && <div className="admin-action-fields"><label>Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} maxLength={120} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Tracking number<input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} maxLength={160} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{!attempt && (phase === 'idle' || phase === 'previewing') && <button ref={initiatingButton} type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <ConfirmationStep action={action} attempt={attempt} phase={phase} onConfirm={submit} onCancel={reset} />}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'} aria-live="polite">{statusLabel}</p>{phase !== 'success' && !attempt && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}{phase === 'conflict' && <button type="button" className="admin-secondary" onClick={reset}>Refresh action preview</button>}</>}</article>
 }
 
-function ActionControl(props: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
+function ActionControl(props: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void; onBusy: (busy: boolean) => void }) {
   return props.action.kind === 'origin' ? <OriginActionControl {...props} /> : <LifecycleActionControl {...props} />
 }
 
-function OriginActionControl({ action, item, token, onChanged }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
+function OriginActionControl({ action, item, token, onChanged, onBusy }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void; onBusy: (busy: boolean) => void }) {
   const [phase, setPhase] = useState<ActionPhase>('idle')
   const [recordOrigin, setRecordOrigin] = useState(String(item.record_origin ?? 'customer'))
   const [reason, setReason] = useState('')
   const [attempt, setAttempt] = useState<ReturnType<typeof createActionAttempt> | null>(null)
-  const [confirmation, setConfirmation] = useState('')
   const [message, setMessage] = useState('')
-  const confirmationInput = useRef<HTMLInputElement>(null)
+  const submitting = useRef(false)
+  const initiatingButton = useRef<HTMLButtonElement>(null)
   const outcome = useRef<HTMLParagraphElement>(null)
   const formId = useId()
-  useEffect(() => { if (phase === 'confirming') confirmationInput.current?.focus() }, [phase])
   useEffect(() => { if (['success', 'conflict', 'forbidden', 'failure'].includes(phase)) outcome.current?.focus() }, [phase])
   const payload = { reservationId: String(item.id), recordOrigin, reason, expectedOriginVersion: Number(item.record_origin_version ?? 0) }
   const preview = async (event: FormEvent) => {
     event.preventDefault(); setPhase('previewing'); setMessage('')
     try {
       const result = await runAdminAction(token, { action: action.previewAction, ...payload })
-      setAttempt(createActionAttempt('origin.change', payload, result.preview ?? {})); setConfirmation(''); setPhase('confirming')
+      if (!result.confirmation || result.confirmation.action !== 'origin.change') throw new Error('The server did not provide a valid confirmation step.')
+      setAttempt(createActionAttempt('origin.change', payload, result.preview ?? {}, result.confirmation)); setPhase('confirming')
     } catch (error) { setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The preview could not be loaded.') }
   }
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); if (!attempt || confirmation !== 'CONFIRM') return
-    setPhase('submitting'); setMessage('')
+    event.preventDefault(); if (!attempt || submitting.current) return
+    submitting.current = true; onBusy(true); setPhase('submitting'); setMessage('')
     try {
-      const result = await runAdminAction(token, { action: attempt.action, ...attempt.payload, confirmation, idempotencyKey: attempt.idempotencyKey })
+      const result = await runAdminAction(token, { action: attempt.action, ...attempt.payload, confirmationProof: attempt.confirmationProof, idempotencyKey: attempt.idempotencyKey })
       setMessage(actionResultMessage(result)); setPhase(completionPhase(result)); onChanged()
-    } catch (error) { setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The origin change could not be completed.') }
+    } catch (error) { setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The origin change could not be completed.') } finally { submitting.current = false; onBusy(false) }
   }
-  const reset = () => { setAttempt(null); setConfirmation(''); setMessage(''); setPhase('idle') }
+  const reset = () => { if (submitting.current) return; setAttempt(null); setMessage(''); setPhase('idle'); requestAnimationFrame(() => initiatingButton.current?.focus()) }
   const statusClass = phase === 'success' ? 'admin-success' : phase === 'conflict' ? 'admin-warning' : 'admin-error'
-  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating and reports every downstream record that derives this origin.</p><div className="admin-action-fields"><label>Record origin<select value={recordOrigin} onChange={(event) => setRecordOrigin(event.target.value)} disabled={phase !== 'idle'}>{recordOrigins.map((origin) => <option key={origin} value={origin}>{origin.replaceAll('_', ' ')}</option>)}</select></label><label>Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required disabled={phase !== 'idle'} /></label><p className="admin-muted">Describe the evidence without including customer contact or address data.</p></div>{!attempt && <button type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <form className="admin-confirmation" onSubmit={submit} aria-labelledby={`${formId}-confirm-title`}><h5 id={`${formId}-confirm-title`}>Confirm origin change</h5><dl>{Object.entries(attempt.preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl><label>Type CONFIRM<input ref={confirmationInput} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" required disabled={['success', 'conflict', 'forbidden'].includes(phase)} /></label><div className="admin-action-buttons"><button type="submit" disabled={confirmation !== 'CONFIRM' || phase === 'submitting' || ['success', 'conflict', 'forbidden'].includes(phase)}>{phase === 'submitting' ? 'Completing…' : 'Confirm action'}</button><button type="button" className="admin-secondary" onClick={reset} disabled={phase === 'submitting'}>Cancel</button></div></form>}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'}>{phase === 'conflict' ? `The record changed. ${message}` : phase === 'forbidden' ? 'Manager role is required.' : message}</p>{phase !== 'success' && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}</>}</article>
+  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating and reports every downstream record that derives this origin.</p><div className="admin-action-fields"><label>Record origin<select value={recordOrigin} onChange={(event) => setRecordOrigin(event.target.value)} disabled={phase !== 'idle'}>{recordOrigins.map((origin) => <option key={origin} value={origin}>{origin.replaceAll('_', ' ')}</option>)}</select></label><label>Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required disabled={phase !== 'idle'} /></label><p className="admin-muted">Describe the evidence without including customer contact or address data.</p></div>{!attempt && <button ref={initiatingButton} type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <ConfirmationStep action={action} attempt={attempt} phase={phase} onConfirm={submit} onCancel={reset} />}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'} aria-live="polite">{phase === 'conflict' ? `The record changed. ${message}` : phase === 'forbidden' ? 'Manager role is required.' : message}</p>{phase !== 'success' && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}</>}</article>
 }
 
 function HistoryPanel({ token, resource, item, refreshKey }: { token: string; resource: AdminResource; item: Record<string, unknown>; refreshKey: number }) {

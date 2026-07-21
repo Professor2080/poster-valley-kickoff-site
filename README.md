@@ -117,6 +117,12 @@ FORM_NOTIFICATION_FROM=
 FORM_NOTIFICATION_REPLY_TO=
 SITE_URL=
 ADMIN_ACTION_SECRET=
+POSTER_VALLEY_ENV=
+OPERATIONAL_EMAIL_DELIVERY_ENABLED=
+OPERATIONAL_EMAIL_FROM=
+OPERATIONAL_EMAIL_REPLY_TO=
+ADMIN_INVITATION_TOKEN_SECRET=
+ADMIN_CONFIRMATION_SECRET=
 MOLLIE_API_KEY=
 MOLLIE_TEST_MODE=
 ```
@@ -144,87 +150,17 @@ mode from the key and this variable can stay empty.
 Production uses a Mollie live key. Calling the payment endpoint there can create a real payment and
 must only happen for a confirmed customer order.
 
-## Send One Order Invitation
+## Admin invitation delivery
 
-`POST /api/admin/send-order-invitation` sends exactly one existing invitation through the existing
-Resend template. It is a server-side admin endpoint with no public UI and requires
-`ADMIN_ACTION_SECRET` in the `x-admin-action-secret` header. The JSON body accepts one raw order
-token and an optional boolean `force` flag:
+The authenticated `/admin` workspace provides contextual, manager-only invitation preview, send,
+retry and deliberate resend actions. Every mutation requires a second action-specific button click
+backed by a short-lived server proof bound to the actor, normalized payload and reviewed record
+state. The retired `/api/admin/send-order-invitation` endpoint remains a `410` tombstone.
 
-```json
-{
-  "token": "raw-personal-order-token",
-  "force": false
-}
-```
-
-Use this endpoint only from a controlled server-side/admin request. Never put the admin secret or
-raw order token in client code, URLs, shared command history or logs. The raw token is held only for
-the request; Supabase continues to store only its SHA-256 hash. The endpoint does not accept arrays
-or provide batch sending.
-
-By default, an invitation with `sent_at` is not sent again. A retry returns `alreadySent: true`.
-`force: true` is an explicit administrative override for resending that same invitation.
-
-## Manual Test Invitation
-
-No admin UI exists yet. For a controlled test, create one invitation manually in Supabase SQL. Use a
-fresh high-entropy token and do not reuse it.
-
-```sql
--- Example token for local/preview testing only:
--- pv_test_replace_with_32_plus_random_chars
-
-insert into public.order_invitations (
-  interest_request_id,
-  drop_id,
-  drop_slug,
-  drop_title,
-  email,
-  email_normalized,
-  first_name,
-  last_name,
-  quantity,
-  currency,
-  unit_price,
-  subtotal_amount,
-  status,
-  token_hash,
-  expires_at,
-  sent_at,
-  metadata
-)
-select
-  id,
-  drop_id,
-  drop_slug,
-  drop_title,
-  email,
-  lower(email),
-  first_name,
-  last_name,
-  quantity,
-  'EUR',
-  17.75,
-  17.75 * quantity,
-  'sent',
-  encode(digest('pv_test_replace_with_32_plus_random_chars', 'sha256'), 'hex'),
-  now() + interval '14 days',
-  now(),
-  jsonb_build_object('created_for', 'manual_test')
-from public.drop_interest_requests
-where drop_slug = 'eurofighter-typhoon'
-order by created_at desc
-limit 1;
-```
-
-Then open:
-
-```text
-https://<preview-or-production-domain>/order/pv_test_replace_with_32_plus_random_chars
-```
-
-Remove test records from `payments`, `orders`, and `order_invitations` after verification.
+Operational invitation delivery is suppressed outside Production. See
+[`docs/admin-a32-production-email-runbook.md`](docs/admin-a32-production-email-runbook.md) for the
+exact fail-closed Production configuration and release validation. Never put invitation tokens,
+customer addresses, Resend responses or server secrets in logs or browser-visible configuration.
 
 ## Mollie Webhook Testing
 
@@ -242,12 +178,9 @@ checking sent timestamp columns on the order before sending.
 
 - Shipping rates remain review-needed; outside-EU shipping is manual review only.
 - Seller details are documented; definitive VAT wording still needs business/legal review.
-- No admin UI exists for creating invitations.
 - No batch email sending exists.
 - Mollie live payments should only be enabled after testmode verification and explicit production
   approval.
-- PR #3 should remain draft until the release decision and production environment approval are
-  explicit.
 
 ## Deployment
 

@@ -16,12 +16,12 @@ const id = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
 
 test('contextual actions respect record lifecycle and manager-only quote controls', () => {
   assert.deepEqual(actions.contextualActions('reservations', { id, reservation_status: 'cancelled' }, 'manager').map((action) => action.mutationAction), ['origin.change'])
-  assert.equal(actions.contextualActions('reservations', { id, reservation_status: 'new' }, 'operator')[0].previewAction, 'invitation.preview')
+  assert.deepEqual(actions.contextualActions('reservations', { id, reservation_status: 'new' }, 'operator'), [])
   assert.equal(actions.contextualActions('reservations', { id, reservation_status: 'new' }, 'manager').at(-1).mutationAction, 'origin.change')
 
   const invitation = { id, interest_request_id: id, status: 'sent', updated_at: '2026-07-20T12:00:00Z' }
   const operatorActions = actions.contextualActions('invitations', invitation, 'operator')
-  assert.deepEqual(operatorActions.map((action) => action.mutationAction), ['invitation.resend'])
+  assert.deepEqual(operatorActions, [])
   const managerActions = actions.contextualActions('invitations', invitation, 'manager')
   assert.deepEqual(managerActions.map((action) => action.mutationAction), ['invitation.resend', 'quote.approve'])
   assert.equal(actions.contextualActions('orders', { id, status: 'paid', fulfilment_status: 'shipped', shipping_email_status: 'failed' }, 'operator')[0].mutationAction, 'shipping.retry')
@@ -42,7 +42,7 @@ test('contextual history is narrow and entity-scoped', () => {
 
 test('one confirmed action attempt keeps a stable idempotency key for transport retries', () => {
   let keyCalls = 0
-  const attempt = actions.createActionAttempt('fulfilment.transition', { orderId: id, expectedVersion: 2 }, { targetStatus: 'packed' }, () => { keyCalls++; return 'stable-retry-key' })
+  const attempt = actions.createActionAttempt('fulfilment.transition', { orderId: id, expectedVersion: 2 }, { targetStatus: 'packed' }, { proof: 'proof', expiresAt: '2026-07-20T12:10:00Z', summary: {} }, () => { keyCalls++; return 'stable-retry-key' })
   assert.equal(attempt.idempotencyKey, 'stable-retry-key')
   assert.equal(attempt.idempotencyKey, 'stable-retry-key')
   assert.equal(keyCalls, 1)
@@ -69,8 +69,8 @@ test('Admin UI uses contextual preview-confirm controls and accessible outcome f
   const app = await readFile('src/admin/AdminApp.tsx', 'utf8')
   assert.doesNotMatch(app, /Reservation UUID|invitation\.prepare/)
   assert.match(app, /action\.previewAction/)
-  assert.match(app, /Type CONFIRM/)
-  assert.match(app, /confirmationInput\.current\?\.focus\(\)/)
+  assert.doesNotMatch(app, /Type CONFIRM|confirmationInput/)
+  assert.match(app, /cancel\.current\?\.focus\(\)/)
   assert.match(app, /outcome\.current\?\.focus\(\)/)
   assert.match(app, /View<span className="sr-only">[\s\S]*record[\s\S]*details<\/span>/)
 })
