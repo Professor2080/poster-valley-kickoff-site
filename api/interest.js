@@ -10,6 +10,7 @@ import {
   readOptionalBoolean,
   readQuantity,
   readRequestBody,
+  readSourcePath,
   readText,
   sendJson,
 } from './_supabase.js'
@@ -64,12 +65,14 @@ export default async function handler(req, res) {
       quantity,
       shipping_address: null,
       note: readText(body.note, 'Note', 1200, { required: false }),
-      source_path: readText(body.sourcePath, 'Source path', 240, { required: false }),
+      source_path: readSourcePath(body.sourcePath),
       consent_contact: acceptedReservationTerms,
       accepted_reservation_terms: acceptedReservationTerms,
       marketing_opt_in: marketingOptIn,
       reservation_status: 'new',
       status: 'new',
+      record_origin: 'customer',
+      record_origin_needs_review: false,
       metadata: {
         product_type: drop.productType,
         edition_label: drop.editionLabel,

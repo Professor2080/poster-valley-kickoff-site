@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { actionInputsDisabled, actionResultMessage, classifyActionError, completionPhase, contextualActions, createActionAttempt, fulfilmentVersion, historyDefinitions, recordContext, type ActionPhase, type ContextAction } from './actions'
-import { getAdminRead, runAdminAction } from './api'
-import { adminResources, boundedOffset, formatValue, readViewState, resourceFilters, type AdminReadResponse, type AdminResource, type AdminRole } from './contracts'
+import { actionInputsDisabled, actionResultMessage, classifyActionError, completionPhase, contextualActions, createActionAttempt, fulfilmentVersion, historyDefinitions, type ActionPhase, type ContextAction } from './actions'
+import { getAdminDetail, getAdminRead, runAdminAction } from './api'
+import { adminResources, boundedOffset, formatValue, readViewState, resourceFilters, type AdminDetailResponse, type AdminReadResponse, type AdminResource, type AdminRole } from './contracts'
 import { verifyAdminSession } from './session'
 import { modalKeyAction } from './dialog'
 import { hasBrowserSupabaseConfig, supabase } from './supabase'
@@ -12,6 +12,13 @@ const labels: Record<AdminResource | 'overview', string> = {
   quotes: 'Quotes', email_events: 'Email history', audit: 'Audit history', events: 'Events', products: 'Products',
 }
 const pageSize = 25
+const recordOrigins = ['customer', 'test', 'internal_pilot'] as const
+const listFields: Partial<Record<AdminResource, string[]>> = {
+  reservations: ['customer_name', 'masked_email', 'drop_title', 'reservation_status', 'quantity', 'created_at', 'record_origin', 'record_origin_needs_review'],
+  invitations: ['drop_title', 'status', 'quantity', 'expires_at', 'sent_at', 'record_origin', 'record_origin_needs_review'],
+  orders: ['customer_name', 'status', 'payment_status', 'fulfilment_status', 'shipping_country_code', 'created_at', 'record_origin', 'record_origin_needs_review'],
+  payments: ['provider', 'status', 'amount', 'currency', 'paid_at', 'created_at', 'record_origin', 'record_origin_needs_review'],
+}
 
 type Screen = 'booting' | 'login' | 'email-sent' | 'checking' | 'denied' | 'shell'
 
@@ -78,7 +85,7 @@ function AdminShell({ token, role, onLogout }: { token: string; role: AdminRole;
 }
 
 function Overview({ token }: { token: string }) { return <section aria-labelledby="overview-title"><p className="admin-kicker">Controlled workspace</p><h1 id="overview-title">Overview</h1><p className="admin-intro">Open a reservation, invitation or paid order to review its lifecycle, preview an available action and confirm it explicitly. Payment status cannot be changed here.</p><div className="admin-metrics">{(['reservations', 'invitations', 'orders', 'payments'] as const).map((resource) => <Metric key={resource} resource={resource} token={token} />)}</div></section> }
-function Metric({ resource, token }: { resource: AdminResource; token: string }) { const [value, setValue] = useState<string>('…'); useEffect(() => { let alive = true; void getAdminRead(resource, token, 1, 0, {}).then((data) => alive && setValue(String(data.page.total))).catch(() => alive && setValue('Unavailable')); return () => { alive = false } }, [resource, token]); return <article className="admin-metric"><p>{labels[resource]}</p><strong>{value}</strong><span>records</span></article> }
+function Metric({ resource, token }: { resource: AdminResource; token: string }) { const [value, setValue] = useState<string>('…'); useEffect(() => { let alive = true; void getAdminRead(resource, token, 1, 0, { exclude_origin: 'test' }).then((data) => alive && setValue(String(data.page.total))).catch(() => alive && setValue('Unavailable')); return () => { alive = false } }, [resource, token]); return <article className="admin-metric"><p>{labels[resource]}</p><strong>{value}</strong><span>customer + pilot records</span></article> }
 
 function ReadList({ resource, token, role }: { resource: AdminResource; token: string; role: AdminRole }) {
   const [offset, setOffset] = useState(0)
@@ -88,22 +95,68 @@ function ReadList({ resource, token, role }: { resource: AdminResource; token: s
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Record<string, unknown> | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const detailTrigger = useRef<HTMLButtonElement | null>(null)
+  const [restoreFocusKey, setRestoreFocusKey] = useState('')
+  const detailButtons = useRef(new Map<string, HTMLButtonElement>())
   useEffect(() => { setOffset(0); setFilters({}); setSelected(null) }, [resource])
-  useEffect(() => { let alive = true; setLoading(true); setError(''); void getAdminRead(resource, token, pageSize, offset, filters).then((response) => { if (alive) { setData(response); setLoading(false) } }).catch((reason: unknown) => { if (alive) { setError(reason instanceof Error ? reason.message : 'Unable to load records.'); setLoading(false) } }); return () => { alive = false } }, [resource, token, offset, filters, refreshKey])
-  const fields = useMemo(() => data?.items.length ? Object.keys(data.items[0]) : [], [data])
-  const updateFilter = (name: string, value: string) => { setOffset(0); setFilters((current) => ({ ...current, [name]: value })) }
+  useEffect(() => {
+    let alive = true
+    setLoading(true); setError('')
+    void getAdminRead(resource, token, pageSize, offset, filters)
+      .then((response) => { if (alive) { setData(response); setLoading(false) } })
+      .catch((reason: unknown) => { if (alive) { setError(reason instanceof Error ? reason.message : 'Unable to load records.'); setLoading(false) } })
+    return () => { alive = false }
+  }, [resource, token, offset, filters, refreshKey])
+  const fields = useMemo(() => data?.items.length ? (listFields[resource] ?? Object.keys(data.items[0])) : [], [data, resource])
+  useEffect(() => {
+    if (!restoreFocusKey || loading) return
+    detailButtons.current.get(restoreFocusKey)?.focus()
+    setRestoreFocusKey('')
+  }, [data, loading, restoreFocusKey])
+  const updateFilter = (name: string, value: string) => { setOffset(0); setFilters((current) => ({ ...current, [name]: value, ...(name === 'record_origin' && value ? { exclude_origin: '' } : {}), ...(name === 'exclude_origin' && value ? { record_origin: '' } : {}) })) }
   const state = readViewState({ loading, error, itemCount: data?.items.length ?? 0 })
-  return <section aria-labelledby={`${resource}-title`}><p className="admin-kicker">Operational records</p><h1 id={`${resource}-title`}>{labels[resource]}</h1><div className="admin-filters" aria-label={`${labels[resource]} filters`}>{resourceFilters[resource].map((filter) => <label key={filter}>{filter.replaceAll('_', ' ')}<input value={filters[filter] ?? ''} onChange={(event) => updateFilter(filter, event.target.value)} placeholder="Exact value" /></label>)}</div>{state === 'loading' ? <p className="admin-state" role="status">Loading {labels[resource].toLowerCase()}…</p> : state === 'error' ? <div><p className="admin-state admin-error" role="alert">{error}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>Retry records</button></div> : state === 'empty' ? <p className="admin-state">No matching {labels[resource].toLowerCase()} were found.</p> : <><div className="admin-table-wrap"><table><caption className="sr-only">{labels[resource]} records</caption><thead><tr>{fields.map((field) => <th key={field}>{field.replaceAll('_', ' ')}</th>)}<th><span className="sr-only">Details</span></th></tr></thead><tbody>{data!.items.map((item, index) => <tr key={String(item.id ?? item.product_code ?? index)}>{fields.map((field) => <td key={field}>{formatValue(field, item[field])}</td>)}<td><button className="admin-detail-button" onClick={(event: MouseEvent<HTMLButtonElement>) => { detailTrigger.current = event.currentTarget; setSelected(item) }}>View<span className="sr-only"> {labels[resource].toLowerCase()} record {recordContext(item)} details</span></button></td></tr>)}</tbody></table></div><Pagination page={data!.page} onPrevious={() => setOffset(boundedOffset(offset, pageSize, data!.page.total, 'previous'))} onNext={() => setOffset(boundedOffset(offset, pageSize, data!.page.total, 'next'))} /></>}{selected && <Detail item={selected} resource={resource} token={token} role={role} trigger={detailTrigger.current} onChanged={() => setRefreshKey((value) => value + 1)} onClose={() => setSelected(null)} />}</section>
+  return <section aria-labelledby={`${resource}-title`}>
+    <p className="admin-kicker">Operational records</p><h1 id={`${resource}-title`}>{labels[resource]}</h1>
+    <div className="admin-filters" aria-label={`${labels[resource]} filters`}>{resourceFilters[resource].map((filter) => <FilterControl key={filter} name={filter} value={filters[filter] ?? ''} onChange={(value) => updateFilter(filter, value)} />)}</div>
+    {state === 'loading' ? <p className="admin-state" role="status">Loading {labels[resource].toLowerCase()}…</p> : state === 'error' ? <div><p className="admin-state admin-error" role="alert">{error}</p><button type="button" onClick={() => setRefreshKey((value) => value + 1)}>Retry records</button></div> : state === 'empty' ? <p className="admin-state">No matching {labels[resource].toLowerCase()} were found.</p> : <>
+      <div className="admin-table-wrap"><table><caption className="sr-only">{labels[resource]} records</caption><thead><tr>{fields.map((field) => <th key={field}>{field.replaceAll('_', ' ')}</th>)}<th><span className="sr-only">Details</span></th></tr></thead><tbody>{data!.items.map((item, index) => { const recordKey = String(item.id ?? item.product_code ?? index); return <tr key={recordKey}>{fields.map((field) => <td key={field}>{field === 'record_origin' ? <OriginBadge origin={String(item[field] ?? 'customer')} /> : field === 'record_origin_needs_review' ? (item[field] ? <span className="admin-origin-badge needs-review">Needs review</span> : '—') : formatValue(field, item[field])}</td>)}<td><button ref={(node) => { if (node) detailButtons.current.set(recordKey, node); else detailButtons.current.delete(recordKey) }} className="admin-detail-button" onClick={() => setSelected(item)}>View<span className="sr-only"> {labels[resource].toLowerCase()} record {String(item.customer_name ?? item.drop_title ?? item.id ?? index)} details</span></button></td></tr> })}</tbody></table></div>
+      <Pagination page={data!.page} onPrevious={() => setOffset(boundedOffset(offset, pageSize, data!.page.total, 'previous'))} onNext={() => setOffset(boundedOffset(offset, pageSize, data!.page.total, 'next'))} />
+    </>}
+    {selected && <Detail item={selected} resource={resource} token={token} role={role} onChanged={() => setRefreshKey((value) => value + 1)} onClose={() => { setRestoreFocusKey(String(selected.id ?? selected.product_code ?? '')); setSelected(null) }} />}
+  </section>
+}
+
+function FilterControl({ name, value, onChange }: { name: string; value: string; onChange: (value: string) => void }) {
+  if (name === 'record_origin' || name === 'exclude_origin') {
+    return <label>{name === 'record_origin' ? 'Origin' : 'Exclude origin'}<select value={value} onChange={(event) => onChange(event.target.value)}><option value="">{name === 'record_origin' ? 'All origins' : 'Exclude none'}</option>{recordOrigins.map((origin) => <option key={origin} value={origin}>{origin.replaceAll('_', ' ')}</option>)}{name === 'exclude_origin' && <option value="test,internal_pilot">Test and internal pilot</option>}</select></label>
+  }
+  return <label>{name.replaceAll('_', ' ')}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder="Exact value" /></label>
+}
+
+function OriginBadge({ origin }: { origin: string }) {
+  return <span className={`admin-origin-badge ${origin.replaceAll('_', '-')}`}>{origin.replaceAll('_', ' ')}</span>
 }
 
 function Pagination({ page, onPrevious, onNext }: { page: { limit: number; offset: number; total: number }; onPrevious: () => void; onNext: () => void }) { const start = page.total ? page.offset + 1 : 0; const end = Math.min(page.offset + page.limit, page.total); return <nav className="admin-pagination" aria-label="Pagination"><span>{start}–{end} of {page.total}</span><div><button onClick={onPrevious} disabled={page.offset === 0}>Previous</button><button onClick={onNext} disabled={page.offset + page.limit >= page.total}>Next</button></div></nav> }
 
-function Detail({ item, resource, token, role, trigger, onChanged, onClose }: { item: Record<string, unknown>; resource: AdminResource; token: string; role: AdminRole; trigger: HTMLButtonElement | null; onChanged: () => void; onClose: () => void }) {
+function Detail({ item, resource, token, role, onChanged, onClose }: { item: Record<string, unknown>; resource: AdminResource; token: string; role: AdminRole; onChanged: () => void; onClose: () => void }) {
   const dialog = useRef<HTMLElement>(null)
   const titleId = useId()
-  const [historyKey, setHistoryKey] = useState(0)
-  const actions = useMemo(() => contextualActions(resource, item, role), [resource, item, role])
+  const [detail, setDetail] = useState<AdminDetailResponse | null>(null)
+  const [detailError, setDetailError] = useState('')
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailKey, setDetailKey] = useState(0)
+  const canLoadPersonalDetail = role === 'manager' && (resource === 'reservations' || resource === 'orders')
+  useEffect(() => {
+    let alive = true
+    if (!canLoadPersonalDetail || typeof item.id !== 'string') { setDetail(null); return }
+    setDetailLoading(true); setDetailError('')
+    void getAdminDetail(resource as 'reservations' | 'orders', item.id, token)
+      .then((result) => { if (alive) { setDetail(result); setDetailLoading(false) } })
+      .catch((reason: unknown) => { if (alive) { setDetailError(reason instanceof Error ? reason.message : 'Personal detail could not be loaded.'); setDetailLoading(false) } })
+    return () => { alive = false }
+  }, [canLoadPersonalDetail, item.id, resource, token, detailKey])
+  const currentItem = detail?.record ?? item
+  const actions = useMemo(() => contextualActions(resource, currentItem, role), [resource, currentItem, role])
   useEffect(() => {
     const focusDialog = () => dialog.current?.querySelector<HTMLButtonElement>('button')?.focus()
     focusDialog()
@@ -120,13 +173,53 @@ function Detail({ item, resource, token, role, trigger, onChanged, onClose }: { 
     }
     const keepFocusInDialog = (event: FocusEvent) => { if (dialog.current && event.target instanceof Node && !dialog.current.contains(event.target)) focusDialog() }
     document.addEventListener('keydown', onKeyDown); document.addEventListener('focusin', keepFocusInDialog)
-    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('focusin', keepFocusInDialog); trigger?.focus() }
-  }, [onClose, trigger])
-  const changed = () => { onChanged(); setHistoryKey((value) => value + 1) }
-  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={onClose}><section ref={dialog} className="admin-dialog admin-record-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}><div className="admin-dialog-heading"><div><p className="admin-kicker">Contextual record</p><h2 id={titleId}>{labels[resource]} details</h2></div><button onClick={onClose}>Close</button></div><dl className="admin-record-fields">{Object.entries(item).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl><section className="admin-context-actions" aria-labelledby={`${titleId}-actions`}><h3 id={`${titleId}-actions`}>Available actions</h3>{actions.length ? actions.map((action) => <ActionControl key={`${action.kind}-${action.mutationAction ?? action.previewAction}`} action={action} item={item} resource={resource} token={token} onChanged={changed} />) : <p className="admin-muted">No action is available for your role and this record lifecycle. The server verifies every request.</p>}</section><HistoryPanel token={token} resource={resource} item={item} refreshKey={historyKey} /></section></div>
+    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('focusin', keepFocusInDialog) }
+  }, [onClose])
+  const changed = () => { onChanged(); setDetailKey((value) => value + 1) }
+  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={onClose}><section ref={dialog} className="admin-dialog admin-record-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
+    <div className="admin-dialog-heading"><div><p className="admin-kicker">Contextual record</p><h2 id={titleId}>{labels[resource]} details</h2></div><button onClick={onClose}>Close</button></div>
+    {detailLoading && <p className="admin-state" role="status">Loading manager-authorized customer detail…</p>}
+    {detailError && <div><p className="admin-state admin-error" role="alert">{detailError}</p><button type="button" onClick={() => setDetailKey((value) => value + 1)}>Retry customer detail</button></div>}
+    <RecordDetailFields resource={resource} item={currentItem} hasPersonalDetail={Boolean(detail)} fulfilment={detail?.fulfilment ?? null} />
+    {role !== 'manager' && (resource === 'reservations' || resource === 'orders') && <p className="admin-muted">Complete customer and shipping details are restricted to managers.</p>}
+    <section className="admin-context-actions" aria-labelledby={`${titleId}-actions`}><h3 id={`${titleId}-actions`}>Available actions</h3>{actions.length ? actions.map((action) => <ActionControl key={`${action.kind}-${action.mutationAction ?? action.previewAction}`} action={action} item={currentItem} resource={resource} token={token} onChanged={changed} />) : <p className="admin-muted">No action is available for your role and this record lifecycle. The server verifies every request.</p>}</section>
+    {detail ? <DetailHistory history={detail.history} /> : <HistoryPanel token={token} resource={resource} item={item} refreshKey={detailKey} />}
+  </section></div>
 }
 
-function ActionControl({ action, item, resource, token, onChanged }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
+function RecordDetailFields({ resource, item, hasPersonalDetail, fulfilment }: { resource: AdminResource; item: Record<string, unknown>; hasPersonalDetail: boolean; fulfilment: Record<string, unknown> | null }) {
+  if (resource === 'reservations') {
+    const fields = hasPersonalDetail ? ['full_name', 'email', 'drop_title', 'preferred_format', 'quantity', 'status', 'reservation_status', 'country', 'created_at', 'record_origin', 'record_origin_needs_review', 'record_origin_version'] : ['customer_name', 'masked_email', 'drop_title', 'preferred_format', 'quantity', 'status', 'reservation_status', 'country_code', 'created_at', 'record_origin', 'record_origin_needs_review', 'record_origin_version']
+    return <><DetailList item={item} fields={fields} />{hasPersonalDetail && fulfilment ? <ShippingAddress item={fulfilment} /> : null}</>
+  }
+  if (resource === 'orders') {
+    const summary = <DetailList item={item} fields={['drop_title', 'status', 'payment_status', 'fulfilment_status', 'fulfilment_version', 'shipping_country_code', 'created_at', 'record_origin', 'record_origin_needs_review']} />
+    if (!hasPersonalDetail) return summary
+    return <>{summary}<section className="admin-customer-detail" aria-labelledby="customer-detail-title"><h3 id="customer-detail-title">Customer</h3><DetailList item={item} fields={['first_name', 'last_name', 'email']} /></section><ShippingAddress item={item} /></>
+  }
+  return <DetailList item={item} fields={Object.keys(item)} />
+}
+
+function DetailList({ item, fields }: { item: Record<string, unknown>; fields: string[] }) {
+  return <dl className="admin-record-fields">{fields.filter((field) => field in item).map((field) => <div key={field}><dt>{field.replaceAll('_', ' ')}</dt><dd>{field === 'record_origin' ? <OriginBadge origin={String(item[field])} /> : field === 'record_origin_needs_review' ? (item[field] ? <span className="admin-origin-badge needs-review">Needs review</span> : 'No') : formatValue(field, item[field])}</dd></div>)}</dl>
+}
+
+function ShippingAddress({ item }: { item: Record<string, unknown> }) {
+  const [copyStatus, setCopyStatus] = useState('')
+  const values = ['shipping_name', 'shipping_company', 'address_line1', 'address_line2', 'postal_code', 'city', 'region', 'shipping_country', 'shipping_country_code']
+  const copyAddress = async () => {
+    const address = [item.shipping_name, item.shipping_company, item.address_line1, item.address_line2, [item.postal_code, item.city].filter(Boolean).join(' '), item.region, item.shipping_country_code].filter((value) => typeof value === 'string' && value.trim()).join('\n')
+    try { await navigator.clipboard.writeText(address); setCopyStatus('Shipping address copied.') } catch { setCopyStatus('The shipping address could not be copied. Select the address fields manually.') }
+  }
+  return <section className="admin-fulfilment-address" aria-labelledby="fulfilment-address-title"><div className="admin-history-heading"><h3 id="fulfilment-address-title">Fulfilment address</h3><button type="button" className="admin-secondary" onClick={() => void copyAddress()}>Copy address</button></div><DetailList item={item} fields={values} /><p className="admin-muted">The address is read-only after provider-confirmed payment.</p><p className="admin-copy-status" role="status" aria-live="polite">{copyStatus}</p></section>
+}
+
+function DetailHistory({ history }: { history: Record<string, Record<string, unknown>[]> }) {
+  const entries = Object.entries(history).filter(([, items]) => items.length)
+  return <section className="admin-history" aria-labelledby="record-history-title"><h3 id="record-history-title">Related history</h3>{entries.length ? entries.map(([name, items]) => <section key={name} className="admin-history-group"><h4>{name.replaceAll('_', ' ')}</h4><ol>{items.map((entry, index) => <li key={String(entry.id ?? index)}><dl>{Object.entries(entry).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl></li>)}</ol></section>) : <p className="admin-muted">No related history has been recorded.</p>}</section>
+}
+
+function LifecycleActionControl({ action, item, resource, token, onChanged }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
   const [phase, setPhase] = useState<ActionPhase>('idle')
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState<ReturnType<typeof createActionAttempt> | null>(null)
@@ -185,6 +278,43 @@ function ActionControl({ action, item, resource, token, onChanged }: { action: C
   const canRetryAttempt = !actionInputsDisabled(phase, attempt)
 
   return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating. A separate explicit confirmation is required.</p>{action.kind === 'quote' && <div className="admin-action-fields"><label>Destination country code<input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} pattern="[A-Za-z]{2}" maxLength={2} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Shipping amount (EUR)<input type="number" min="0" max="10000" step="0.01" value={shippingAmount} onChange={(event) => setShippingAmount(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Quote expires<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{action.kind === 'fulfilment' && action.targetStatus === 'shipped' && <div className="admin-action-fields"><label>Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} maxLength={120} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Tracking number<input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} maxLength={160} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{!attempt && (phase === 'idle' || phase === 'previewing') && <button type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <form className="admin-confirmation" onSubmit={submit} aria-labelledby={`${formId}-confirm-title`}><h5 id={`${formId}-confirm-title`}>Confirm this action</h5><p>Review the server preview. This confirmation applies only to this record and payload.</p><dl>{Object.entries(attempt.preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl><label>Type CONFIRM<input ref={confirmationInput} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" required disabled={['success', 'conflict', 'forbidden'].includes(phase)} /></label><div className="admin-action-buttons"><button type="submit" disabled={confirmation !== 'CONFIRM' || phase === 'submitting' || ['success', 'conflict', 'forbidden'].includes(phase)}>{phase === 'submitting' ? 'Completing…' : phase === 'failure' ? 'Retry confirmed action' : 'Confirm action'}</button><button type="button" className="admin-secondary" onClick={reset} disabled={phase === 'submitting'}>Cancel</button></div></form>}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'}>{statusLabel}</p>{phase !== 'success' && !attempt && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}{phase === 'conflict' && <button type="button" className="admin-secondary" onClick={reset}>Refresh action preview</button>}</>}</article>
+}
+
+function ActionControl(props: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
+  return props.action.kind === 'origin' ? <OriginActionControl {...props} /> : <LifecycleActionControl {...props} />
+}
+
+function OriginActionControl({ action, item, token, onChanged }: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void }) {
+  const [phase, setPhase] = useState<ActionPhase>('idle')
+  const [recordOrigin, setRecordOrigin] = useState(String(item.record_origin ?? 'customer'))
+  const [reason, setReason] = useState('')
+  const [attempt, setAttempt] = useState<ReturnType<typeof createActionAttempt> | null>(null)
+  const [confirmation, setConfirmation] = useState('')
+  const [message, setMessage] = useState('')
+  const confirmationInput = useRef<HTMLInputElement>(null)
+  const outcome = useRef<HTMLParagraphElement>(null)
+  const formId = useId()
+  useEffect(() => { if (phase === 'confirming') confirmationInput.current?.focus() }, [phase])
+  useEffect(() => { if (['success', 'conflict', 'forbidden', 'failure'].includes(phase)) outcome.current?.focus() }, [phase])
+  const payload = { reservationId: String(item.id), recordOrigin, reason, expectedOriginVersion: Number(item.record_origin_version ?? 0) }
+  const preview = async (event: FormEvent) => {
+    event.preventDefault(); setPhase('previewing'); setMessage('')
+    try {
+      const result = await runAdminAction(token, { action: action.previewAction, ...payload })
+      setAttempt(createActionAttempt('origin.change', payload, result.preview ?? {})); setConfirmation(''); setPhase('confirming')
+    } catch (error) { setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The preview could not be loaded.') }
+  }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); if (!attempt || confirmation !== 'CONFIRM') return
+    setPhase('submitting'); setMessage('')
+    try {
+      const result = await runAdminAction(token, { action: attempt.action, ...attempt.payload, confirmation, idempotencyKey: attempt.idempotencyKey })
+      setMessage(actionResultMessage(result)); setPhase(completionPhase(result)); onChanged()
+    } catch (error) { setPhase(classifyActionError(error)); setMessage(error instanceof Error ? error.message : 'The origin change could not be completed.') }
+  }
+  const reset = () => { setAttempt(null); setConfirmation(''); setMessage(''); setPhase('idle') }
+  const statusClass = phase === 'success' ? 'admin-success' : phase === 'conflict' ? 'admin-warning' : 'admin-error'
+  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating and reports every downstream record that derives this origin.</p><div className="admin-action-fields"><label>Record origin<select value={recordOrigin} onChange={(event) => setRecordOrigin(event.target.value)} disabled={phase !== 'idle'}>{recordOrigins.map((origin) => <option key={origin} value={origin}>{origin.replaceAll('_', ' ')}</option>)}</select></label><label>Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required disabled={phase !== 'idle'} /></label><p className="admin-muted">Describe the evidence without including customer contact or address data.</p></div>{!attempt && <button type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <form className="admin-confirmation" onSubmit={submit} aria-labelledby={`${formId}-confirm-title`}><h5 id={`${formId}-confirm-title`}>Confirm origin change</h5><dl>{Object.entries(attempt.preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{formatValue(key, value)}</dd></div>)}</dl><label>Type CONFIRM<input ref={confirmationInput} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" required disabled={['success', 'conflict', 'forbidden'].includes(phase)} /></label><div className="admin-action-buttons"><button type="submit" disabled={confirmation !== 'CONFIRM' || phase === 'submitting' || ['success', 'conflict', 'forbidden'].includes(phase)}>{phase === 'submitting' ? 'Completing…' : 'Confirm action'}</button><button type="button" className="admin-secondary" onClick={reset} disabled={phase === 'submitting'}>Cancel</button></div></form>}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'}>{phase === 'conflict' ? `The record changed. ${message}` : phase === 'forbidden' ? 'Manager role is required.' : message}</p>{phase !== 'success' && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}</>}</article>
 }
 
 function HistoryPanel({ token, resource, item, refreshKey }: { token: string; resource: AdminResource; item: Record<string, unknown>; refreshKey: number }) {

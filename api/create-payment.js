@@ -106,6 +106,7 @@ export default async function handler(req, res) {
       shipping_country: quote.countryName,
       shipping_country_code: quote.countryCode,
       shipping_name: address.shippingName,
+      shipping_company: address.company,
       address_line1: address.addressLine1,
       address_line2: address.addressLine2,
       postal_code: address.postalCode,
@@ -158,6 +159,7 @@ export default async function handler(req, res) {
           city: address.city,
           region: address.region,
           country: address.countryCode,
+          ...(address.company ? { organizationName: address.company } : {}),
         },
         billingAddress: {
           givenName: address.firstName,
@@ -169,6 +171,7 @@ export default async function handler(req, res) {
           city: address.city,
           region: address.region,
           country: address.countryCode,
+          ...(address.company ? { organizationName: address.company } : {}),
         },
       })
 

@@ -190,7 +190,7 @@ export default async function handler(req, res) {
 
     sendJson(res, 200, { ok: true })
   } catch (error) {
-    console.error(error)
+    console.error('Mollie webhook failed.', { name: error instanceof Error ? error.name : 'UnknownError' })
     sendJson(res, 500, { error: 'Webhook could not be processed.' })
   }
 }

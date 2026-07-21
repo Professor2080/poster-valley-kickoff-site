@@ -1,4 +1,4 @@
-import { AdminRequestError, adminError, adminRpc, requireAdmin } from '../_admin.js'
+import { AdminRequestError, adminError, adminRpc, requireAdmin, setAdminNoStore } from '../_admin.js'
 import { getOrderableDropBySlug } from '../_drops.js'
 import { operationalDeliveryAdapter } from '../_notifications.js'
 import { PublicRequestError, ensurePost, readRequestBody, sendJson } from '../_supabase.js'
@@ -36,6 +36,18 @@ function assertManualDestination(preview, request) {
 }
 
 async function previewAction(admin, action, request) {
+  if (action === 'origin.preview') {
+    return adminRpc('admin_a31_preview_origin_change', {
+      p_actor: admin.userId,
+      p_reservation_id: request.reservationId,
+      p_new_origin: request.recordOrigin,
+      p_expected_version: request.expectedOriginVersion,
+      p_reason: request.reason,
+    })
+  }
+  if ((action === 'fulfilment.preview' && request.targetStatus === 'shipped') || action === 'shipping.preview') {
+    await adminRpc('admin_a31_assert_shipping_ready', { p_actor: admin.userId, p_order_id: request.orderId })
+  }
   const result = await adminRpc('admin_a3_preview_action', { p_actor: admin.userId, p_action: action, p_request: request })
   if (action.startsWith('quote.')) assertManualDestination(result.preview, request)
   if (result.preview?.actionAllowed === false) throw new AdminRequestError(409, 'stale_transition', 'The record changed. Refresh the preview before confirming.')
@@ -45,6 +57,7 @@ async function previewAction(admin, action, request) {
 export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter() } = {}) {
   return async function handler(req, res) {
     if (!ensurePost(req, res)) return
+    setAdminNoStore(res)
     try {
       let body
       try { body = readRequestBody(req) } catch (error) {
@@ -74,6 +87,21 @@ export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter
         return
       }
       let context = {}
+
+      if (action === 'origin.change') {
+        const result = await adminRpc('admin_a31_change_origin', {
+          p_actor: admin.userId,
+          p_idempotency_key: key,
+          p_request_hash: requestHash,
+          p_reservation_id: request.reservationId,
+          p_new_origin: request.recordOrigin,
+          p_expected_version: request.expectedOriginVersion,
+          p_reason: request.reason,
+          p_confirmation: body.confirmation,
+        })
+        sendJson(res, 200, result)
+        return
+      }
 
       if (action.startsWith('invitation.')) {
         // Use the neutral preview for server-owned product context so a completed

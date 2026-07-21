@@ -15,8 +15,9 @@ const actions = await import(`file://${modulePath}`)
 const id = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
 
 test('contextual actions respect record lifecycle and manager-only quote controls', () => {
-  assert.deepEqual(actions.contextualActions('reservations', { id, reservation_status: 'cancelled' }, 'manager'), [])
+  assert.deepEqual(actions.contextualActions('reservations', { id, reservation_status: 'cancelled' }, 'manager').map((action) => action.mutationAction), ['origin.change'])
   assert.equal(actions.contextualActions('reservations', { id, reservation_status: 'new' }, 'operator')[0].previewAction, 'invitation.preview')
+  assert.equal(actions.contextualActions('reservations', { id, reservation_status: 'new' }, 'manager').at(-1).mutationAction, 'origin.change')
 
   const invitation = { id, interest_request_id: id, status: 'sent', updated_at: '2026-07-20T12:00:00Z' }
   const operatorActions = actions.contextualActions('invitations', invitation, 'operator')
@@ -71,5 +72,5 @@ test('Admin UI uses contextual preview-confirm controls and accessible outcome f
   assert.match(app, /Type CONFIRM/)
   assert.match(app, /confirmationInput\.current\?\.focus\(\)/)
   assert.match(app, /outcome\.current\?\.focus\(\)/)
-  assert.match(app, /recordContext\(item\)\} details/)
+  assert.match(app, /View<span className="sr-only">[\s\S]*record[\s\S]*details<\/span>/)
 })

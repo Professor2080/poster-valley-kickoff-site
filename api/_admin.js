@@ -10,7 +10,14 @@ export class AdminRequestError extends Error {
 
 export function adminError(res, error) {
   const known = error instanceof AdminRequestError
+  setAdminNoStore(res)
   sendJson(res, known ? error.status : 500, { error: { code: known ? error.code : 'internal_error', message: known ? error.message : 'Admin request failed.' } })
+}
+
+export function setAdminNoStore(res) {
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Vary', 'Authorization')
 }
 
 function bearer(req) {
@@ -45,10 +52,15 @@ export function adminPage(query = {}) {
   return { limit, offset }
 }
 
-export async function adminSelect(table, select, { limit, offset, filters = {}, order = 'created_at.desc' }) {
+export async function adminSelect(table, select, { limit, offset, filters = {}, filterOperators = {}, order = 'created_at.desc' }) {
   if (!SUPABASE_URL || !SERVICE_KEY) throw new AdminRequestError(503, 'admin_unavailable', 'Admin service is not configured.')
   const params = new URLSearchParams({ select, limit: String(limit), offset: String(offset), order })
-  for (const [name, value] of Object.entries(filters)) if (value) params.set(name, `eq.${value}`)
+  for (const [name, value] of Object.entries(filters)) {
+    if (!value) continue
+    const operator = filterOperators[name] ?? 'eq'
+    if (!['eq', 'neq', 'in', 'not.in'].includes(operator)) throw new AdminRequestError(400, 'invalid_filter', 'Unknown filter operator.')
+    params.set(name, ['in', 'not.in'].includes(operator) ? `${operator}.(${value})` : `${operator}.${value}`)
+  }
   const response = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${table}?${params}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: 'count=exact' } })
   if (!response.ok) throw new Error('Admin read failed.')
   const total = Number((response.headers.get('content-range') ?? '*/0').split('/')[1]) || 0
@@ -78,6 +90,10 @@ export async function adminRpc(functionName, body) {
       invalid_action: [400, 'invalid_action', 'Unknown operational action.'],
       delivery_attempt_mismatch: [409, 'delivery_attempt_mismatch', 'The delivery attempt no longer matches this action.'],
       invalid_invitation_context: [400, 'invalid_invitation_context', 'The invitation delivery details are invalid.'],
+      shipping_address_incomplete: [409, 'shipping_address_incomplete', 'A complete validated shipping address is required before shipping.'],
+      paid_address_immutable: [409, 'paid_address_immutable', 'A provider-confirmed paid order address is read-only.'],
+      origin_reason_required: [400, 'origin_reason_required', 'A concise reason is required to change record origin.'],
+      confirmation_required: [409, 'confirmation_required', 'Explicit confirmation is required.'],
     }[databaseCode]
     if (known) throw new AdminRequestError(...known)
     throw new AdminRequestError(response.status === 409 ? 409 : 500, 'operation_failed', 'The operation could not be completed.')

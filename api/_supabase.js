@@ -193,9 +193,7 @@ async function supabaseRequest(table, { method, query, body, prefer = 'return=mi
 
   const text = await response.text()
 
-  if (!response.ok) {
-    throw new Error(`Supabase ${method} failed with ${response.status}: ${text}`)
-  }
+  if (!response.ok) throw new Error(`Supabase ${method} failed with status ${response.status}.`)
 
   if (!text) {
     return null
@@ -226,8 +224,7 @@ export async function insertRow(table, row, options = {}) {
   })
 
   if (!response.ok) {
-    const detail = await response.text()
-    throw new Error(`Supabase insert failed with ${response.status}: ${detail}`)
+    throw new Error(`Supabase insert failed with status ${response.status}.`)
   }
 }
 
@@ -268,6 +265,13 @@ export function handleEndpointError(res, error) {
     return
   }
 
-  console.error(error)
+  console.error('Public endpoint failed.', { name: error instanceof Error ? error.name : 'UnknownError' })
   sendJson(res, 500, { error: 'We could not save your request. Please try again.' })
+}
+
+export function readSourcePath(value) {
+  const path = readText(value, 'Source path', 240, { required: false })
+  if (!path) return ''
+  if (!/^\/[A-Za-z0-9/_-]*$/.test(path) || path.includes('//')) throw new PublicRequestError('Source path is invalid.')
+  return path
 }

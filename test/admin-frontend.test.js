@@ -18,18 +18,18 @@ const session = await productionModule('session')
 const dialog = await productionModule('dialog')
 const response = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
-test('production adminReadUrl permits only frozen resource filters', () => {
-  assert.equal(contracts.adminReadUrl('orders', 25, 0, { status: 'paid', email: 'not-allowed', entity_type: 'event' }), '/api/admin/read?resource=orders&limit=25&offset=0&status=paid')
-  assert.equal(contracts.adminReadUrl('events', 25, 10, { entity_type: 'order', entity_id: 'abc', status: 'paid' }), '/api/admin/read?resource=events&limit=25&offset=10&entity_type=order&entity_id=abc')
+test('production read filters are frozen and origin-aware', () => {
+  assert.deepEqual(contracts.resourceFilters.orders, ['status', 'payment_status', 'fulfilment_status', 'invitation_id', 'record_origin', 'exclude_origin'])
+  assert.equal(contracts.resourceFilters.orders.includes('email'), false)
 })
 test('production boundedOffset handles previous and next page boundaries', () => {
   assert.equal(contracts.boundedOffset(0, 25, 100, 'previous'), 0); assert.equal(contracts.boundedOffset(25, 25, 100, 'previous'), 0); assert.equal(contracts.boundedOffset(0, 25, 25, 'next'), 0); assert.equal(contracts.boundedOffset(0, 25, 26, 'next'), 25)
 })
-test('production API sends bearer authorization and generated read URL', async () => {
+test('production API sends bearer authorization and keeps read identifiers out of URLs', async () => {
   const calls = []; const originalFetch = globalThis.fetch
-  globalThis.fetch = async (input, init) => { calls.push({ url: String(input), authorization: new Headers(init?.headers).get('Authorization') }); return response(200, { version: 'v1', role: 'operator', items: [], page: { limit: 25, offset: 0, total: 0 } }) }
+  globalThis.fetch = async (input, init) => { calls.push({ url: String(input), method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('Authorization'), body: init?.body ? JSON.parse(String(init.body)) : null }); return response(200, { version: 'v1', role: 'operator', items: [], page: { limit: 25, offset: 0, total: 0 } }) }
   try { await api.getAuthorization('access-token'); await api.getAdminRead('payments', 'access-token', 25, 0, { status: 'paid', email: 'forbidden' }) } finally { globalThis.fetch = originalFetch }
-  assert.deepEqual(calls, [{ url: '/api/admin/authorization', authorization: 'Bearer access-token' }, { url: contracts.adminReadUrl('payments', 25, 0, { status: 'paid', email: 'forbidden' }), authorization: 'Bearer access-token' }])
+  assert.deepEqual(calls, [{ url: '/api/admin/authorization', method: 'GET', authorization: 'Bearer access-token', body: null }, { url: '/api/admin/read', method: 'POST', authorization: 'Bearer access-token', body: { resource: 'payments', limit: 25, offset: 0, filters: { status: 'paid', email: 'forbidden' } } }])
 })
 test('production session verifier does not read before authorization, denies 403, and clears invalid sessions', async () => {
   let authorizeCalls = 0; let cleared = 0; const clear = async () => { cleared++ }

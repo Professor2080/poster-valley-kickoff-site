@@ -2,10 +2,10 @@ import type { AdminActionResult } from './api'
 import type { AdminResource, AdminRole } from './contracts'
 
 export type ContextAction = {
-  kind: 'invitation' | 'quote' | 'fulfilment' | 'shipping'
+  kind: 'invitation' | 'quote' | 'fulfilment' | 'shipping' | 'origin'
   label: string
-  previewAction: 'invitation.preview' | 'quote.preview' | 'fulfilment.preview' | 'shipping.preview'
-  mutationAction?: 'invitation.send' | 'invitation.resend' | 'quote.approve' | 'fulfilment.transition' | 'shipping.retry'
+  previewAction: 'invitation.preview' | 'quote.preview' | 'fulfilment.preview' | 'shipping.preview' | 'origin.preview'
+  mutationAction?: 'invitation.send' | 'invitation.resend' | 'quote.approve' | 'fulfilment.transition' | 'shipping.retry' | 'origin.change'
   targetStatus?: 'ready_to_pack' | 'packed' | 'shipped'
 }
 
@@ -26,7 +26,9 @@ const number = (item: Record<string, unknown>, field: string) => typeof item[fie
 export function contextualActions(resource: AdminResource, item: Record<string, unknown>, role: AdminRole): ContextAction[] {
   if (resource === 'reservations') {
     const status = text(item, 'reservation_status') || text(item, 'status')
-    return ['converted', 'cancelled'].includes(status) ? [] : [{ kind: 'invitation', label: 'Review invitation', previewAction: 'invitation.preview' }]
+    const actions: ContextAction[] = ['converted', 'cancelled'].includes(status) ? [] : [{ kind: 'invitation', label: 'Review invitation', previewAction: 'invitation.preview' }]
+    if (role === 'manager') actions.push({ kind: 'origin', label: 'Review record origin', previewAction: 'origin.preview', mutationAction: 'origin.change' })
+    return actions
   }
   if (resource === 'invitations') {
     const status = text(item, 'status')
@@ -91,6 +93,7 @@ export function actionResultMessage(result: AdminActionResult) {
   if (result.deliveryStatus === 'sent') return 'The action completed and the provider confirmed email delivery.'
   if (result.fulfilmentStatus) return `Fulfilment moved to ${result.fulfilmentStatus.replaceAll('_', ' ')}.`
   if (result.quoteId) return 'The manual shipping quote was approved.'
+  if (result.recordOrigin) return `Record origin changed to ${result.recordOrigin.replaceAll('_', ' ')}.`
   return result.replay ? 'The earlier completed result was replayed safely.' : 'The action completed.'
 }
 

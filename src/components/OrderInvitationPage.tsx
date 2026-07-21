@@ -66,6 +66,7 @@ type AddressForm = {
   lastName: string
   email: string
   countryCode: string
+  company: string
   addressLine1: string
   addressLine2: string
   postalCode: string
@@ -79,6 +80,7 @@ const initialAddressForm: AddressForm = {
   lastName: '',
   email: '',
   countryCode: 'NL',
+  company: '',
   addressLine1: '',
   addressLine2: '',
   postalCode: '',
@@ -101,7 +103,8 @@ function isAddressFormValid(formData: AddressForm) {
   return (
     requiredValues.every((value) => value.trim().length > 0) &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) &&
-    /^[A-Z]{2}$/.test(formData.countryCode)
+    /^[A-Z]{2}$/.test(formData.countryCode) &&
+    (!['US', 'CA', 'AU'].includes(formData.countryCode) || formData.region.trim().length > 0)
   )
 }
 
@@ -187,6 +190,7 @@ export function OrderInvitationPage({ token }: { token: string }) {
   const isPaid =
     invitation?.payment?.status === 'paid' || invitation?.order?.status === 'paid'
   const addressFormValid = isAddressFormValid(formData)
+  const regionRequired = ['US', 'CA', 'AU'].includes(formData.countryCode)
   const quoteIsCurrent = quote?.countryCode === formData.countryCode
   const canPay = Boolean(
     invitation &&
@@ -206,7 +210,8 @@ export function OrderInvitationPage({ token }: { token: string }) {
     async function loadInvitation() {
       setLoading(true)
       const result = await fetchJson<{ ok: true; invitation: InvitationData }>(
-        `/api/order-invitation?token=${encodeURIComponent(token)}`,
+        '/api/order-invitation',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) },
       )
 
       if (!active) {
@@ -485,6 +490,12 @@ export function OrderInvitationPage({ token }: { token: string }) {
                 </select>
               </label>
               <Field
+                label="Company optional"
+                value={formData.company}
+                onChange={(value) => handleChange('company', value)}
+                autoComplete="organization"
+              />
+              <Field
                 label="Address line 1"
                 value={formData.addressLine1}
                 onChange={(value) => handleChange('addressLine1', value)}
@@ -512,10 +523,11 @@ export function OrderInvitationPage({ token }: { token: string }) {
                 required
               />
               <Field
-                label="Region optional"
+                label={regionRequired ? 'State / province / region' : 'Region optional'}
                 value={formData.region}
                 onChange={(value) => handleChange('region', value)}
                 autoComplete="address-level1"
+                required={regionRequired}
               />
             </div>
 
