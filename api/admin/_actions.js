@@ -1,10 +1,10 @@
-import { createHash, createHmac, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { AdminRequestError } from '../_admin.js'
 
 export const actionRoles = {
-  'invitation.preview': 'operator',
-  'invitation.send': 'operator',
-  'invitation.resend': 'operator',
+  'invitation.preview': 'manager',
+  'invitation.send': 'manager',
+  'invitation.resend': 'manager',
   'quote.preview': 'manager',
   'quote.approve': 'manager',
   'fulfilment.preview': 'operator',
@@ -110,10 +110,50 @@ export function actionRequestHash(action, request) {
 }
 
 export function deriveInvitationToken({ actorUserId, action, idempotencyKey, reservationId }) {
-  const secret = process.env.ADMIN_INVITATION_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const secret = process.env.ADMIN_INVITATION_TOKEN_SECRET
   if (!secret) throw new AdminRequestError(503, 'admin_unavailable', 'Invitation token generation is not configured.')
   const digest = createHmac('sha256', secret).update(canonical({ actorUserId, action, idempotencyKey, reservationId })).digest('base64url')
   return `pv_${digest}`
+}
+
+function confirmationSecret() {
+  const secret = process.env.ADMIN_CONFIRMATION_SECRET
+  if (!secret || secret.length < 32) throw new AdminRequestError(503, 'admin_unavailable', 'Secure action confirmation is not configured.')
+  return secret
+}
+
+export function previewFingerprint(preview) {
+  return createHash('sha256').update(canonical(preview)).digest('hex')
+}
+
+export function issueConfirmationProof({ actorUserId, action, requestHash, previewHash, now = Date.now() }) {
+  const payload = Buffer.from(JSON.stringify({ v: 1, actorUserId, action, requestHash, previewHash, iat: now, exp: now + 10 * 60 * 1000 })).toString('base64url')
+  const signature = createHmac('sha256', confirmationSecret()).update(`pv-confirm-v1.${payload}`).digest('base64url')
+  return { proof: `pv-confirm-v1.${payload}.${signature}`, expiresAt: new Date(now + 10 * 60 * 1000).toISOString() }
+}
+
+export function verifyConfirmationProof(proof, { actorUserId, action, requestHash, now = Date.now(), allowExpired = false }) {
+  if (typeof proof !== 'string' || proof.length > 1600) throw new AdminRequestError(409, 'confirmation_required', 'Preview and explicitly confirm this action before submitting.')
+  const [prefix, encoded, supplied] = proof.split('.')
+  if (prefix !== 'pv-confirm-v1' || !encoded || !supplied) throw new AdminRequestError(409, 'confirmation_invalid', 'The confirmation is not valid. Preview the action again.')
+  const expected = createHmac('sha256', confirmationSecret()).update(`${prefix}.${encoded}`).digest('base64url')
+  const suppliedBuffer = Buffer.from(supplied)
+  const expectedBuffer = Buffer.from(expected)
+  if (suppliedBuffer.length !== expectedBuffer.length || !timingSafeEqual(suppliedBuffer, expectedBuffer)) throw new AdminRequestError(409, 'confirmation_invalid', 'The confirmation is not valid. Preview the action again.')
+  let payload
+  try { payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) } catch { throw new AdminRequestError(409, 'confirmation_invalid', 'The confirmation is not valid. Preview the action again.') }
+  if (payload.v !== 1 || payload.actorUserId !== actorUserId || payload.action !== action || payload.requestHash !== requestHash) throw new AdminRequestError(409, 'confirmation_mismatch', 'The confirmation does not match this action. Preview it again.')
+  if (!Number.isFinite(payload.exp) || (!allowExpired && payload.exp < now) || payload.iat > now + 30_000) throw new AdminRequestError(409, 'confirmation_expired', 'The confirmation expired. Preview the action again.')
+  return payload
+}
+
+export function confirmationSummary(action, preview) {
+  const base = { action, record: preview.dropTitle || preview.dropSlug || preview.orderId || preview.reservationId || preview.invitationId || 'Selected record' }
+  if (action.startsWith('invitation.')) return { ...base, destination: preview.maskedRecipient || 'Reservation email', externalEffect: 'Sends one invitation email in Production when delivery is configured.', reversibility: 'The email cannot be recalled after provider acceptance.' }
+  if (action === 'quote.approve') return { ...base, destination: preview.countryCode, externalEffect: 'No email or payment is created.', reversibility: 'A later approved quote may replace this quote until checkout uses it.' }
+  if (action === 'fulfilment.transition') return { ...base, destination: preview.targetStatus, externalEffect: preview.targetStatus === 'shipped' ? 'Marks the paid order shipped and prepares a shipping email.' : 'Updates fulfilment history only.', reversibility: 'This lifecycle transition is not reversible in Admin.' }
+  if (action === 'shipping.retry') return { ...base, destination: 'Order email', externalEffect: 'Retries the prepared shipping email.', reversibility: 'The email cannot be recalled after provider acceptance.' }
+  return { ...base, destination: preview.newOrigin || preview.recordOrigin, externalEffect: 'Updates linked record classification and audit history.', reversibility: 'A later audited change can correct the classification.' }
 }
 
 export function invitationTokenHash(token) {
@@ -133,11 +173,17 @@ export function deliveryClaimId() { return randomUUID() }
 export function buildOperationalMessage(payload, token = null) {
   if (payload.template === 'order_invitation') {
     if (!token) invalid('Invitation token is required.')
-    const orderUrl = `${(process.env.SITE_URL || 'https://www.postervalley.nl').replace(/\/$/, '')}/order/${encodeURIComponent(token)}`
+    const siteUrl = process.env.SITE_URL
+    if (!siteUrl) throw new AdminRequestError(503, 'admin_unavailable', 'The invitation link host is not configured.')
+    const orderUrl = `${siteUrl.replace(/\/$/, '')}/order/${encodeURIComponent(token)}`
+    const name = payload.firstName || 'there'
+    const expiry = new Date(payload.expiresAt).toLocaleDateString('en-GB')
+    const support = process.env.OPERATIONAL_EMAIL_REPLY_TO || 'studio@postervalley.nl'
     return {
       to: payload.recipientEmail,
       subject: 'Your Poster Valley order invitation',
-      text: [`Hi ${payload.firstName || 'there'},`, '', `Your reservation for ${payload.dropTitle} is ready.`, `Open your personal order page: ${orderUrl}`, '', `This link expires on ${new Date(payload.expiresAt).toLocaleDateString('en-GB')}.`, '', 'Poster Valley'].join('\n'),
+      text: [`Hi ${name},`, '', `Your reserved poster, ${payload.dropTitle}, can now be ordered.`, 'Your personal page shows the poster price, shipping and total before you decide whether to pay.', '', `Open your personal order page: ${orderUrl}`, '', `This personal link expires on ${expiry}.`, `Questions? Contact ${support}.`, '', 'Poster Valley', 'Curated poster drops, released with intention.'].join('\n'),
+      html: `<div style="margin:0;background:#f2eee7;padding:32px 20px;font-family:Arial,sans-serif;color:#15120f"><main style="max-width:640px;margin:auto;background:#fff;border:1px solid #ded7cc;padding:30px"><p style="font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Poster Valley</p><h1 style="font-size:30px;line-height:1.15">Your poster is ready to order</h1><p>Hi ${escapeHtml(name)},</p><p>Your reserved poster, <strong>${escapeHtml(payload.dropTitle)}</strong>, can now be ordered. Your personal page shows the poster price, shipping and total before you decide whether to pay.</p><p style="margin:28px 0"><a href="${escapeHtml(orderUrl)}" style="display:inline-block;background:#080b0e;color:#fff;padding:14px 22px;text-decoration:none">Open your personal order page</a></p><p>If the button does not work, copy this link:<br><a href="${escapeHtml(orderUrl)}">${escapeHtml(orderUrl)}</a></p><p>This personal link expires on ${escapeHtml(expiry)}.</p><p>Questions? Email <a href="mailto:${escapeHtml(support)}">${escapeHtml(support)}</a>.</p><p>Poster Valley<br>Curated poster drops, released with intention.</p></main></div>`,
       template: payload.template,
     }
   }
@@ -150,6 +196,10 @@ export function buildOperationalMessage(payload, token = null) {
     }
   }
   invalid('Unknown operational email template.')
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
 }
 
 export function mutationForPreview(action) {

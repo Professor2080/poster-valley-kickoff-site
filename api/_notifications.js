@@ -10,8 +10,8 @@ export function isResendConfigured() {
   return Boolean(RESEND_API_KEY)
 }
 
-// Operational mail is deliberately dry-run by default.  A separately approved
-// staging release must opt in; local and automated environments never deliver.
+// Operational mail is dry-run outside the explicitly enabled Production
+// environment. Preview, Staging, development and tests can never deliver.
 export async function prepareOperationalEmail(message) {
   // A3 intentionally has no delivery switch: Pascal must separately approve
   // and implement a staging delivery integration. Keeping this boundary hard
@@ -20,15 +20,47 @@ export async function prepareOperationalEmail(message) {
   return { delivered: false, suppressed: true, subject: message.subject }
 }
 
-// Dependency-injected boundary used by the operational outbox. Production
-// delivery is intentionally unavailable in this codebase; tests inject an
-// adapter and every default invocation is a truthful suppression.
-export function operationalDeliveryAdapter({ send } = {}) {
+const providerIdPattern = /^[A-Za-z0-9_-]{1,200}$/
+
+export function operationalEmailConfiguration(env = process.env) {
+  const production = env.VERCEL_ENV === 'production' && env.POSTER_VALLEY_ENV === 'production' && env.NODE_ENV !== 'test'
+  const enabled = env.OPERATIONAL_EMAIL_DELIVERY_ENABLED === 'true'
+  const required = ['RESEND_API_KEY', 'OPERATIONAL_EMAIL_FROM', 'OPERATIONAL_EMAIL_REPLY_TO', 'SITE_URL', 'ADMIN_INVITATION_TOKEN_SECRET', 'ADMIN_CONFIRMATION_SECRET']
+  const missing = required.filter((name) => !env[name])
+  const validSite = env.SITE_URL === 'https://www.postervalley.nl' || env.SITE_URL === 'https://postervalley.nl'
+  if (!production) return { mode: 'suppressed', ready: false, externalEffect: false, message: 'Invitation email is suppressed outside Production.', missing: [] }
+  if (!enabled) return { mode: 'suppressed', ready: false, externalEffect: false, message: 'Production invitation delivery is disabled.', missing: [] }
+  if (missing.length || !validSite) return { mode: 'unavailable', ready: false, externalEffect: false, message: 'Production invitation delivery configuration is incomplete.', missing: [...missing, ...(!validSite && !missing.includes('SITE_URL') ? ['SITE_URL'] : [])] }
+  return { mode: 'live', ready: true, externalEffect: true, message: 'Production invitation delivery is enabled.', missing: [] }
+}
+
+async function sendOperationalWithResend(message, env, fetchImpl) {
+  const response = await fetchImpl('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': message.idempotencyKey },
+    body: JSON.stringify({ from: env.OPERATIONAL_EMAIL_FROM, to: [message.to], reply_to: env.OPERATIONAL_EMAIL_REPLY_TO, subject: message.subject, html: message.html, text: message.text }),
+  })
+  if (response.ok) {
+    const body = await response.json().catch(() => null)
+    return providerIdPattern.test(body?.id ?? '') ? { status: 'sent', providerId: body.id } : { status: 'failed', providerId: null }
+  }
+  // Resend reports a concurrent idempotent request as 409. The outcome is
+  // ambiguous until reconciled, so the outbox remains pending and is not lied about.
+  if (response.status === 409) return { status: 'pending', providerId: null }
+  return { status: 'failed', providerId: null }
+}
+
+export function operationalDeliveryAdapter({ send, env = process.env, fetchImpl = globalThis.fetch } = {}) {
   return async (message) => {
-    if (typeof send !== 'function') return { status: 'suppressed', providerId: null }
+    if (typeof send !== 'function') {
+      const configuration = operationalEmailConfiguration(env)
+      if (configuration.mode === 'suppressed') return { status: 'suppressed', providerId: null }
+      if (configuration.mode === 'unavailable' || message.template !== 'order_invitation') return { status: 'failed', providerId: null }
+      try { return await sendOperationalWithResend(message, env, fetchImpl) } catch { return { status: 'pending', providerId: null } }
+    }
     try {
       const result = await send(message)
-      return result?.accepted === true && typeof result.id === 'string' && result.id
+      return result?.accepted === true && providerIdPattern.test(result.id ?? '')
         ? { status: 'sent', providerId: result.id }
         : { status: 'failed', providerId: null }
     } catch {

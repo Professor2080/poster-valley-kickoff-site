@@ -32,11 +32,12 @@ test('public invitation data is fetched with the capability token in a POST body
   assert.match(handler, /Cache-Control', 'private, no-store/)
 })
 
-test('manager-only contextual origin operation retains preview, reason and explicit confirmation', () => {
+test('manager-only contextual origin operation retains preview, reason and explicit button confirmation', () => {
   assert.match(actions, /role === 'manager'[\s\S]*kind: 'origin'/)
   assert.match(ui, /Preview is non-mutating and reports every downstream record/i)
   assert.match(ui, /Describe the evidence without including customer contact or address data/i)
-  assert.match(ui, /Type CONFIRM/)
+  assert.doesNotMatch(ui, /Type CONFIRM/)
+  assert.match(actions, /Change classification/)
 })
 
 test('full shipping detail is separately labelled, copyable and announced accessibly', () => {

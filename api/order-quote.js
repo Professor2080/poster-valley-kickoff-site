@@ -1,6 +1,5 @@
 import {
   canUseInvitation,
-  hashInvitationToken,
   isInvitationExpired,
   quoteForInvitation,
   applyApprovedManualQuote,
@@ -15,16 +14,7 @@ import {
   sendJson,
   updateRows,
 } from './_supabase.js'
-
-async function findInvitation(token) {
-  const invitations = await selectRows('order_invitations', {
-    token_hash: `eq.${hashInvitationToken(token)}`,
-    select: '*',
-    limit: 1,
-  })
-
-  return invitations[0] ?? null
-}
+import { findInvitationByToken } from './_invitation-token.js'
 
 export default async function handler(req, res) {
   if (!ensurePost(req, res)) {
@@ -34,7 +24,7 @@ export default async function handler(req, res) {
   try {
     const body = readRequestBody(req)
     const token = readInvitationToken(body.token)
-    const invitation = await findInvitation(token)
+    const invitation = await findInvitationByToken(token)
 
     if (!invitation) {
       throw new PublicRequestError('This order invitation link is not valid.', 404)

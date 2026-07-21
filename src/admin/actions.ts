@@ -7,6 +7,7 @@ export type ContextAction = {
   previewAction: 'invitation.preview' | 'quote.preview' | 'fulfilment.preview' | 'shipping.preview' | 'origin.preview'
   mutationAction?: 'invitation.send' | 'invitation.resend' | 'quote.approve' | 'fulfilment.transition' | 'shipping.retry' | 'origin.change'
   targetStatus?: 'ready_to_pack' | 'packed' | 'shipped'
+  confirmLabel: string
 }
 
 export type ActionAttempt = {
@@ -14,6 +15,9 @@ export type ActionAttempt = {
   payload: Record<string, unknown>
   preview: Record<string, unknown>
   idempotencyKey: string
+  confirmationProof: string
+  confirmationExpiresAt: string
+  summary: Record<string, unknown>
 }
 
 export type ActionPhase = 'idle' | 'previewing' | 'confirming' | 'submitting' | 'success' | 'conflict' | 'forbidden' | 'failure'
@@ -26,25 +30,26 @@ const number = (item: Record<string, unknown>, field: string) => typeof item[fie
 export function contextualActions(resource: AdminResource, item: Record<string, unknown>, role: AdminRole): ContextAction[] {
   if (resource === 'reservations') {
     const status = text(item, 'reservation_status') || text(item, 'status')
-    const actions: ContextAction[] = ['converted', 'cancelled'].includes(status) ? [] : [{ kind: 'invitation', label: 'Review invitation', previewAction: 'invitation.preview' }]
-    if (role === 'manager') actions.push({ kind: 'origin', label: 'Review record origin', previewAction: 'origin.preview', mutationAction: 'origin.change' })
+    const actions: ContextAction[] = role === 'manager' && !['converted', 'cancelled'].includes(status) ? [{ kind: 'invitation', label: 'Review invitation', previewAction: 'invitation.preview', confirmLabel: 'Send invitation' }] : []
+    if (role === 'manager') actions.push({ kind: 'origin', label: 'Review record origin', previewAction: 'origin.preview', mutationAction: 'origin.change', confirmLabel: 'Change classification' })
     return actions
   }
   if (resource === 'invitations') {
     const status = text(item, 'status')
+    const delivery = text(item, 'delivery_status')
     const expiry = Date.parse(text(item, 'expires_at'))
     const expired = Number.isFinite(expiry) && expiry <= Date.now()
     const actions: ContextAction[] = []
-    if (['draft', 'expired'].includes(status)) actions.push({ kind: 'invitation', label: 'Review invitation send', previewAction: 'invitation.preview', mutationAction: 'invitation.send' })
-    if (['sent', 'opened'].includes(status)) actions.push({ kind: 'invitation', label: 'Review invitation resend', previewAction: 'invitation.preview', mutationAction: 'invitation.resend' })
-    if (role === 'manager' && !expired && ['draft', 'sent', 'opened', 'order_started'].includes(status)) actions.push({ kind: 'quote', label: 'Prepare manual shipping quote', previewAction: 'quote.preview', mutationAction: 'quote.approve' })
+    if (role === 'manager' && ['draft', 'expired'].includes(status)) actions.push({ kind: 'invitation', label: delivery === 'failed' ? 'Review invitation retry' : 'Review invitation send', previewAction: 'invitation.preview', mutationAction: 'invitation.send', confirmLabel: delivery === 'failed' ? 'Retry invitation email' : 'Send invitation' })
+    if (role === 'manager' && ['sent', 'opened'].includes(status)) actions.push({ kind: 'invitation', label: 'Review invitation resend', previewAction: 'invitation.preview', mutationAction: 'invitation.resend', confirmLabel: 'Resend invitation' })
+    if (role === 'manager' && !expired && ['draft', 'sent', 'opened', 'order_started'].includes(status)) actions.push({ kind: 'quote', label: 'Prepare manual shipping quote', previewAction: 'quote.preview', mutationAction: 'quote.approve', confirmLabel: 'Approve quote' })
     return actions
   }
   if (resource === 'orders' && text(item, 'status') === 'paid') {
     const target = { unfulfilled: 'ready_to_pack', ready_to_pack: 'packed', packed: 'shipped' }[text(item, 'fulfilment_status')] as ContextAction['targetStatus']
-    if (target) return [{ kind: 'fulfilment', label: `Review ${target.replaceAll('_', ' ')}`, previewAction: 'fulfilment.preview', mutationAction: 'fulfilment.transition', targetStatus: target }]
+    if (target) return [{ kind: 'fulfilment', label: `Review ${target.replaceAll('_', ' ')}`, previewAction: 'fulfilment.preview', mutationAction: 'fulfilment.transition', targetStatus: target, confirmLabel: target === 'shipped' ? 'Mark as shipped' : target === 'packed' ? 'Mark packed' : 'Mark ready to pack' }]
     if (text(item, 'fulfilment_status') === 'shipped' && text(item, 'shipping_email_status') !== 'sent') {
-      return [{ kind: 'shipping', label: 'Review shipping email retry', previewAction: 'shipping.preview', mutationAction: 'shipping.retry' }]
+      return [{ kind: 'shipping', label: 'Review shipping email retry', previewAction: 'shipping.preview', mutationAction: 'shipping.retry', confirmLabel: 'Retry shipping email' }]
     }
     return []
   }
@@ -75,8 +80,8 @@ export function historyDefinitions(resource: AdminResource, item: Record<string,
   return []
 }
 
-export function createActionAttempt(action: NonNullable<ContextAction['mutationAction']>, payload: Record<string, unknown>, preview: Record<string, unknown>, makeKey = () => crypto.randomUUID()): ActionAttempt {
-  return { action, payload, preview, idempotencyKey: makeKey() }
+export function createActionAttempt(action: NonNullable<ContextAction['mutationAction']>, payload: Record<string, unknown>, preview: Record<string, unknown>, confirmation: { proof: string; expiresAt: string; summary: Record<string, unknown> }, makeKey = () => crypto.randomUUID()): ActionAttempt {
+  return { action, payload, preview, confirmationProof: confirmation.proof, confirmationExpiresAt: confirmation.expiresAt, summary: confirmation.summary, idempotencyKey: makeKey() }
 }
 
 export function classifyActionError(error: unknown): 'conflict' | 'forbidden' | 'failure' {

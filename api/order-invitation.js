@@ -1,6 +1,5 @@
 import {
   canUseInvitation,
-  hashInvitationToken,
   isInvitationExpired,
   publicOrderSummary,
   quoteFromOrder,
@@ -14,17 +13,7 @@ import {
   sendJson,
   updateRows,
 } from './_supabase.js'
-
-async function findInvitation(token) {
-  const tokenHash = hashInvitationToken(token)
-  const invitations = await selectRows('order_invitations', {
-    token_hash: `eq.${tokenHash}`,
-    select: '*',
-    limit: 1,
-  })
-
-  return invitations[0] ?? null
-}
+import { findInvitationByToken } from './_invitation-token.js'
 
 async function latestOrderAndPayment(invitationId) {
   const orders = await selectRows('orders', {
@@ -56,7 +45,7 @@ export default async function handler(req, res) {
 
   try {
     const token = readInvitationToken(readRequestBody(req).token)
-    const invitation = await findInvitation(token)
+    const invitation = await findInvitationByToken(token)
 
     if (!invitation) {
       sendJson(res, 404, { error: 'This order invitation link is not valid.' })

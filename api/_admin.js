@@ -94,6 +94,9 @@ export async function adminRpc(functionName, body) {
       paid_address_immutable: [409, 'paid_address_immutable', 'A provider-confirmed paid order address is read-only.'],
       origin_reason_required: [400, 'origin_reason_required', 'A concise reason is required to change record origin.'],
       confirmation_required: [409, 'confirmation_required', 'Explicit confirmation is required.'],
+      ambiguous_invitations: [409, 'ambiguous_invitations', 'Multiple invitations are linked to this reservation. Resolve the records before sending.'],
+      recipient_mismatch: [409, 'recipient_mismatch', 'The invitation recipient no longer matches the reservation. Resolve it before sending.'],
+      invalid_provider_id: [502, 'delivery_failed', 'The email provider response could not be verified.'],
     }[databaseCode]
     if (known) throw new AdminRequestError(...known)
     throw new AdminRequestError(response.status === 409 ? 409 : 500, 'operation_failed', 'The operation could not be completed.')
