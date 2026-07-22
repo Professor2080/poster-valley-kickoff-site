@@ -15,6 +15,15 @@ isolated Staging procedure below.
 - Confirm the reviewed A1, A1 hardening, A3 and A3.2 migration history is present before A4. Do not
   amend or replay registered migration files.
 
+## Deployment function budget
+
+The deployable API inventory is fixed at 12 Serverless Functions for the Vercel Hobby plan. A4 uses
+one `POST /api/admin/reporting` function with the allowlisted operations `report`, `export_preview`
+and `export_download`. Read-only admin authorization and delivery configuration share
+`GET /api/admin/status` with allowlisted operations. The compatibility rewrites for the former
+status URLs do not create additional functions. Run `test/vercel-function-budget.test.js` whenever
+adding or moving a file below `api/`; helper modules must not export a default handler.
+
 ## Migration and database checks
 
 1. Review `supabase/migrations/20260722111632_admin_reporting_exports.sql` and confirm it creates only
@@ -51,22 +60,24 @@ delivery and do not call payment creation or webhook endpoints.
 
 1. Missing/expired authentication returns `401`; non-admin and operator access to report/export
    returns `403`; the approved manager can read and export.
-2. Default reports exclude `test` and `internal_pilot`; explicit inclusion exposes the fixtures.
-3. Periods use half-open UTC boundaries and custom ranges over 366 days fail. Test the day before and
+2. Unknown reporting operations return `400` without calling an operational RPC. Confirm report and
+   export-preview responses are JSON and confirmed export-download responses are CSV.
+3. Default reports exclude `test` and `internal_pilot`; explicit inclusion exposes the fixtures.
+4. Periods use half-open UTC boundaries and custom ranges over 366 days fail. Test the day before and
    after a DST transition without changing stored UTC timestamps.
-4. Counts, fixed-cohort conversions, product/country filters and attention queues equal manually
+5. Counts, fixed-cohort conversions, product/country filters and attention queues equal manually
    calculated fixture expectations.
-5. Paid gross revenue and AOV include only the canonical valid paid payment, count a replayed payment
+6. Paid gross revenue and AOV include only the canonical valid paid payment, count a replayed payment
    once, reject the amount/currency mismatch and keep currencies separate.
-6. Export preview is non-mutating. Download requires the matching short-lived manager proof, refuses
+7. Export preview is non-mutating. Download requires the matching short-lived manager proof, refuses
    periods over 90 days and refuses more than 2,000 rows.
-7. CSV columns match the fixed allowlist. Verify absence of names, emails, addresses, postal data,
+8. CSV columns match the fixed allowlist. Verify absence of names, emails, addresses, postal data,
    tokens/hashes/links, provider payment IDs, tracking values, metadata, audit payloads and secrets.
-8. Seed a text value beginning with each of `=`, `+`, `-` and `@`; confirm the CSV neutralizes all
+9. Seed a text value beginning with each of `=`, `+`, `-` and `@`; confirm the CSV neutralizes all
    four without changing the database value.
-9. A successful export appends exactly one minimized audit event with actor, export type, normalized
+10. A successful export appends exactly one minimized audit event with actor, export type, normalized
    filters and record count, but no exported row or PII.
-10. In an authenticated Preview deployment, inspect `/admin` as manager at desktop and mobile widths;
+11. In an authenticated Preview deployment, inspect `/admin` as manager at desktop and mobile widths;
     verify keyboard navigation, loading/error/empty/success states, filters, confirmation focus and a
     downloaded CSV. Confirm the browser console has no errors. Operators must not see Reporting.
 

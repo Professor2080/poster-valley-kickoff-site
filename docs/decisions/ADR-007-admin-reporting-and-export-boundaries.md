@@ -27,6 +27,11 @@ filenames. Reporting RPCs recheck the manager role, use a restricted `search_pat
 `PUBLIC`, `anon` and `authenticated`, and are granted only to `service_role`. Export audits contain
 actor, export type, minimized filters and record count, never exported rows.
 
+The Vercel boundary is one manager-only `/api/admin/reporting` function with fixed `report`,
+`export_preview` and `export_download` operations. Consolidation changes only routing: every request
+still verifies the active manager before any operational RPC and preserves JSON/CSV response types,
+no-store headers, confirmation fingerprints, row limits and audit behavior.
+
 ## Limitations
 
 Historical custom rows identify products by `drop_slug`; migration to immutable `product_code` is a

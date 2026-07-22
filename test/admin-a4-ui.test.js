@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const [app, reporting, styles] = await Promise.all([
+const [app, reporting, api, styles] = await Promise.all([
   readFile(new URL('../src/admin/AdminApp.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/admin/AdminReporting.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/admin/api.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
 ])
 
@@ -31,6 +32,13 @@ test('export UI has explicit confirmation, honest outcomes and excluded-field di
   assert.match(reporting, /Names, emails, addresses, tokens, payment-provider IDs, tracking values, metadata and audit payloads are excluded/)
   assert.match(reporting, /role="status" aria-live="polite"/)
   assert.match(reporting, /role="alert"/)
+})
+
+test('frontend uses one reporting endpoint with fixed operations', () => {
+  assert.match(api, /post<AdminReportResponse>\('\/api\/admin\/reporting'[\s\S]*operation: 'report'/)
+  assert.match(api, /post<AdminExportPreview>\('\/api\/admin\/reporting'[\s\S]*operation: 'export_preview'/)
+  assert.match(api, /fetch\('\/api\/admin\/reporting'[\s\S]*operation: 'export_download'/)
+  assert.doesNotMatch(api, /\/api\/admin\/(?:report|export)'/)
 })
 
 test('reporting styles preserve keyboard focus and responsive mobile layout', () => {

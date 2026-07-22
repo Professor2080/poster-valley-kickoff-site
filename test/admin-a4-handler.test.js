@@ -29,22 +29,32 @@ function response() { return { statusCode: 0, body: '', headers: {}, status(code
 async function invoke(handler, body, token = 'good') { const res = response(); await handler({ method: 'POST', body, headers: token ? { authorization: `Bearer ${token}` } : {} }, res); return res }
 const json = (res) => JSON.parse(res.body)
 
-const { default: report } = await import('../api/admin/report.js?a4-handler')
-const { default: exportHandler } = await import('../api/admin/export.js?a4-handler')
+const { default: reporting } = await import('../api/admin/reporting.js?a4-handler')
 
 before(installFetch)
 after(() => { globalThis.fetch = saved.fetch; for (const [name, value] of [['SUPABASE_URL', saved.url], ['SUPABASE_SERVICE_ROLE_KEY', saved.key], ['ADMIN_CONFIRMATION_SECRET', saved.confirmation]]) { if (value === undefined) delete process.env[name]; else process.env[name] = value } })
 
-test('report and export endpoints reject anon, non-admin and operator access', async () => {
-  assert.equal((await invoke(report, { preset: '30d', filters: {} }, null)).statusCode, 401)
-  role = 'none'; installFetch(); assert.equal((await invoke(report, { preset: '30d', filters: {} })).statusCode, 403)
-  role = 'operator'; installFetch(); assert.equal((await invoke(exportHandler, { mode: 'preview', exportType: 'orders', preset: '30d', filters: {} })).statusCode, 403)
+test('authorization happens before every operational reporting RPC', async () => {
+  assert.equal((await invoke(reporting, { operation: 'report', preset: '30d', filters: {} }, null)).statusCode, 401)
+  assert.equal(calls.length, 0)
+  role = 'none'; installFetch(); assert.equal((await invoke(reporting, { operation: 'report', preset: '30d', filters: {} })).statusCode, 403)
+  assert.equal(calls.length, 0)
+  role = 'operator'; installFetch(); assert.equal((await invoke(reporting, { operation: 'export_preview', exportType: 'orders', preset: '30d', filters: {} })).statusCode, 403)
+  assert.equal(calls.length, 0)
   role = 'manager'; installFetch()
 })
 
-test('report endpoint passes only normalized fixed filters to the manager RPC', async () => {
-  const res = await invoke(report, { preset: '30d', filters: { dropSlug: 'test-design', destinationCountryCode: 'nl', arbitrarySql: 'drop table' } })
+test('unknown reporting operations are rejected without an operational RPC', async () => {
+  const res = await invoke(reporting, { operation: 'arbitrary_sql', preset: '30d', filters: {} })
+  assert.equal(res.statusCode, 400)
+  assert.equal(json(res).error.code, 'invalid_reporting_operation')
+  assert.equal(calls.length, 0)
+})
+
+test('report operation returns JSON and passes only normalized fixed filters to the manager RPC', async () => {
+  const res = await invoke(reporting, { operation: 'report', preset: '30d', filters: { dropSlug: 'test-design', destinationCountryCode: 'nl', arbitrarySql: 'drop table' } })
   assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['content-type'], 'application/json')
   assert.equal(json(res).summary.paidOrders, 1)
   const call = calls.find((entry) => entry.rpc === 'admin_a4_report')
   assert.equal(call.body.p_actor, actorId)
@@ -53,12 +63,13 @@ test('report endpoint passes only normalized fixed filters to the manager RPC', 
   assert.equal('arbitrarySql' in call.body, false)
 })
 
-test('CSV download requires preview proof and returns only allowlisted safe fields', async () => {
-  const payload = { exportType: 'reservations', preset: '30d', filters: {}, mode: 'preview' }
-  const preview = await invoke(exportHandler, payload)
+test('export preview returns JSON and download returns only allowlisted safe CSV fields', async () => {
+  const payload = { exportType: 'reservations', preset: '30d', filters: {} }
+  const preview = await invoke(reporting, { ...payload, operation: 'export_preview' })
   assert.equal(preview.statusCode, 200)
+  assert.equal(preview.headers['content-type'], 'application/json')
   const reviewed = json(preview)
-  const download = await invoke(exportHandler, { ...payload, mode: 'download', confirmationProof: reviewed.confirmation.proof, exportFrom: reviewed.period.from, exportTo: reviewed.period.to })
+  const download = await invoke(reporting, { ...payload, operation: 'export_download', confirmationProof: reviewed.confirmation.proof, exportFrom: reviewed.period.from, exportTo: reviewed.period.to })
   assert.equal(download.statusCode, 200)
   assert.equal(download.headers['content-type'], 'text/csv; charset=utf-8')
   assert.match(download.body, /"'\+formula"/)
@@ -76,7 +87,7 @@ test('export row cap is enforced before confirmation or data generation', async 
     if (rpc === 'admin_a4_export_preview') return ok({ recordCount: 2000, exceedsLimit: true, maximumRecords: 2000, contentFingerprint: 'a'.repeat(32) })
     throw new Error(`Unexpected RPC ${rpc} ${init.body}`)
   }
-  const res = await invoke(exportHandler, { mode: 'preview', exportType: 'orders', preset: '30d', filters: {} })
+  const res = await invoke(reporting, { operation: 'export_preview', exportType: 'orders', preset: '30d', filters: {} })
   assert.equal(res.statusCode, 409)
   assert.equal(json(res).error.code, 'export_limit_exceeded')
   installFetch()

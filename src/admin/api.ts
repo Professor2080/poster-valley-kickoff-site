@@ -42,7 +42,7 @@ async function post<T>(url: string, token: string, payload: Record<string, unkno
   return body as T
 }
 
-export function getAuthorization(token: string) { return request<{ version: 'v1'; role: 'operator' | 'manager' }>('/api/admin/authorization', token) }
+export function getAuthorization(token: string) { return request<{ version: 'v1'; role: 'operator' | 'manager' }>('/api/admin/status?operation=authorization', token) }
 export function getAdminRead(resource: AdminResource, token: string, limit: number, offset: number, filters: Record<string, string>) {
   return post<AdminReadResponse>('/api/admin/read', token, { resource, limit, offset, filters })
 }
@@ -52,15 +52,15 @@ export function getAdminDetail(resource: 'reservations' | 'orders', id: string, 
 export function runAdminAction(token: string, payload: Record<string, unknown>) {
   return post<AdminActionResult>('/api/admin/actions', token, payload)
 }
-export function getDeliveryConfiguration(token: string) { return request<DeliveryConfiguration>('/api/admin/delivery-status', token) }
+export function getDeliveryConfiguration(token: string) { return request<DeliveryConfiguration>('/api/admin/status?operation=delivery', token) }
 export function getAdminReport(token: string, payload: AdminReportRequest) {
-  return post<AdminReportResponse>('/api/admin/report', token, payload as unknown as Record<string, unknown>)
+  return post<AdminReportResponse>('/api/admin/reporting', token, { ...payload, operation: 'report' } as unknown as Record<string, unknown>)
 }
 export function previewAdminExport(token: string, exportType: ExportType, payload: AdminReportRequest) {
-  return post<AdminExportPreview>('/api/admin/export', token, { ...payload, exportType, mode: 'preview' } as unknown as Record<string, unknown>)
+  return post<AdminExportPreview>('/api/admin/reporting', token, { ...payload, exportType, operation: 'export_preview' } as unknown as Record<string, unknown>)
 }
 export async function downloadAdminExport(token: string, exportType: ExportType, payload: AdminReportRequest, confirmationProof: string, period: { from: string; to: string }) {
-  const response = await fetch('/api/admin/export', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, exportType, mode: 'download', confirmationProof, exportFrom: period.from, exportTo: period.to }) })
+  const response = await fetch('/api/admin/reporting', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, exportType, operation: 'export_download', confirmationProof, exportFrom: period.from, exportTo: period.to }) })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as ErrorEnvelope | null
     throw new AdminApiError(response.status, body?.error?.code ?? 'export_failed', body?.error?.message ?? 'The export could not be generated.')

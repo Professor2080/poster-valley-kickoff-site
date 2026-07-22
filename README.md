@@ -174,6 +174,12 @@ require an explicit preview and confirmation, are limited to 90 days and 2,000 r
 minimized audit event. See [`docs/admin-a4-reporting-runbook.md`](docs/admin-a4-reporting-runbook.md)
 for the isolated Staging validation and release gates.
 
+Reporting and exports share the manager-only `POST /api/admin/reporting` function. Its fixed
+`operation` values are `report`, `export_preview` and `export_download`; arbitrary dispatch targets
+are rejected. Read-only authorization and delivery configuration similarly share
+`GET /api/admin/status` with fixed operations. This keeps the deployment at the Hobby-plan budget of
+12 Serverless Functions without weakening endpoint authorization or database RPC boundaries.
+
 ## Mollie Webhook Testing
 
 Mollie webhooks are received at:

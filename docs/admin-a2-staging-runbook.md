@@ -23,7 +23,7 @@ Capture browser screenshots, the Preview deployment URL/commit, sanitized networ
 
 1. With no session, confirm `/admin` shows sign-in and makes **no** protected `/api/admin/read` request.
 2. After approval, request a real magic link with Pascal's staging identity. Confirm the neutral check-email message does not disclose admin status and repeat submission is prevented while requesting.
-3. Complete the callback at `/admin/callback`; confirm the session is restored, `/api/admin/authorization` receives `Authorization: Bearer <access token>`, and the server-verified `manager` role is displayed.
+3. Complete the callback at `/admin/callback`; confirm the session is restored, `/api/admin/status?operation=authorization` receives `Authorization: Bearer <access token>`, and the server-verified `manager` role is displayed. The former `/api/admin/authorization` URL is retained only as a compatibility rewrite.
 4. Confirm each read-only section (Overview, Reservations, Invitations, Orders, Payments, Events, Products) calls only `GET /api/admin/read` with `resource`, bounded `limit`/`offset`, and its documented equality filters. Confirm visible tables/details contain only contract fields and no write controls.
 5. Create a removable `A2-STAGING-DELETE-` non-admin fixture. Sign in, confirm 403 produces “No admin access”, data is not loaded, and logout works.
 6. Create a removable approved operator fixture if authorized. Confirm operator and manager both read records, and that changing/expiring/revoking a session returns safely to sign-in on the next request.

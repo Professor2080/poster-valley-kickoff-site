@@ -54,8 +54,9 @@ Test and internal-pilot lineages are excluded by default; managers may deliberat
 1. Add service-role-only `SECURITY DEFINER` RPCs for the aggregate report, export preview and export
    data. Every RPC rechecks an active `manager` row and uses a restricted `search_path`.
 2. Revoke execution from `PUBLIC`, `anon` and `authenticated`; grant only `service_role`.
-3. Keep browser requests behind manager-authorized Vercel endpoints. Filters and export types use
-   fixed allowlists; no client-controlled table, column, SQL fragment, sort or filename is accepted.
+3. Keep browser requests behind the manager-authorized `POST /api/admin/reporting` Vercel endpoint.
+   Its operation, filters and export types use fixed allowlists; no client-controlled table, column,
+   SQL fragment, sort or filename is accepted.
 4. Select a canonical valid paid payment once per order inside the database. Return currency buckets
    instead of a single cross-currency total.
 5. Audit each completed export in `admin_audit_events` with actor, type, minimized filters, row count
@@ -78,7 +79,8 @@ apostrophe prefix for text cells beginning (after whitespace) with `=`, `+`, `-`
 ## Implemented files
 
 - `supabase/migrations/20260722111632_admin_reporting_exports.sql`
-- `api/admin/_reporting.js`, `api/admin/report.js`, `api/admin/export.js`
+- `api/admin/_reporting.js`, `api/admin/reporting.js`
+- `api/admin/status.js` plus compatibility rewrites for the two retired read-only status routes
 - `src/admin/reporting.ts`, `src/admin/AdminApp.tsx`, `src/admin/api.ts`, `src/index.css`
 - focused A4 API, SQL-contract, CSV, metric and UI tests
 - ADR-007 and `docs/admin-a4-reporting-runbook.md`
@@ -89,3 +91,5 @@ Run `npm ci`, lint, the full Node test suite, build, `git diff --check`, conflic
 scans and desktop/mobile/keyboard browser checks. If a local PostgreSQL runtime is unavailable, SQL
 execution, query plans, RLS and advisors remain a separately authorized Staging gate. Production,
 email delivery, Mollie calls, Vercel variables, deployment and merge remain explicitly out of scope.
+The deployable handler inventory must remain at or below the Vercel Hobby limit of 12; A4's combined
+reporting route and the combined read-only admin-status route bring the inventory from 14 to 12.

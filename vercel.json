@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/admin/authorization",
+      "destination": "/api/admin/status?operation=authorization"
+    },
+    {
+      "source": "/api/admin/delivery-status",
+      "destination": "/api/admin/status?operation=delivery"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
