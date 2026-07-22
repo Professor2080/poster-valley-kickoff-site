@@ -162,6 +162,18 @@ Operational invitation delivery is suppressed outside Production. See
 exact fail-closed Production configuration and release validation. Never put invitation tokens,
 customer addresses, Resend responses or server secrets in logs or browser-visible configuration.
 
+## Admin reporting and controlled exports
+
+Managers have a separate `/admin` reporting workspace for operational counts, paid gross revenue,
+currency-separated AOV and conversion cohorts. Payment metrics count only one canonical,
+provider-confirmed Mollie payment per order. The output is operational and deliberately makes no
+accounting, tax, refund or net-revenue claim.
+
+CSV exports use fixed field allowlists, exclude direct customer/contact/address data and credentials,
+require an explicit preview and confirmation, are limited to 90 days and 2,000 rows, and append a
+minimized audit event. See [`docs/admin-a4-reporting-runbook.md`](docs/admin-a4-reporting-runbook.md)
+for the isolated Staging validation and release gates.
+
 ## Mollie Webhook Testing
 
 Mollie webhooks are received at:

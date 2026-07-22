@@ -1,4 +1,5 @@
 import type { AdminDetailResponse, AdminReadResponse, AdminResource } from './contracts'
+import type { AdminExportPreview, AdminReportRequest, AdminReportResponse, ExportType } from './reporting'
 
 export class AdminApiError extends Error {
   status: number
@@ -52,3 +53,19 @@ export function runAdminAction(token: string, payload: Record<string, unknown>) 
   return post<AdminActionResult>('/api/admin/actions', token, payload)
 }
 export function getDeliveryConfiguration(token: string) { return request<DeliveryConfiguration>('/api/admin/delivery-status', token) }
+export function getAdminReport(token: string, payload: AdminReportRequest) {
+  return post<AdminReportResponse>('/api/admin/report', token, payload as unknown as Record<string, unknown>)
+}
+export function previewAdminExport(token: string, exportType: ExportType, payload: AdminReportRequest) {
+  return post<AdminExportPreview>('/api/admin/export', token, { ...payload, exportType, mode: 'preview' } as unknown as Record<string, unknown>)
+}
+export async function downloadAdminExport(token: string, exportType: ExportType, payload: AdminReportRequest, confirmationProof: string, period: { from: string; to: string }) {
+  const response = await fetch('/api/admin/export', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, exportType, mode: 'download', confirmationProof, exportFrom: period.from, exportTo: period.to }) })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as ErrorEnvelope | null
+    throw new AdminApiError(response.status, body?.error?.code ?? 'export_failed', body?.error?.message ?? 'The export could not be generated.')
+  }
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const filename = disposition.match(/filename="([a-z0-9-]+[.]csv)"/i)?.[1] ?? `poster-valley-${exportType}.csv`
+  return { filename, blob: await response.blob(), exportId: response.headers.get('x-poster-valley-export-id') ?? '' }
+}

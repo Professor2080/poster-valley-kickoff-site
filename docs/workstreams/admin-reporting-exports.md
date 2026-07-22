@@ -1,5 +1,10 @@
 # Codex Cloud task: Admin Reporting and Controlled Exports (A4)
 
+**Implementation status (2026-07-22):** implemented and locally verified on
+`codex/admin-reporting-exports`. The additive migration has not been applied remotely. Isolated
+Staging execution, query-plan/advisor evidence, authenticated browser QA, deployment and merge remain
+human approval gates; see `docs/admin-a4-reporting-runbook.md`.
+
 Repository: `Professor2080/poster-valley-kickoff-site`; base: merged A1–A3; branch `codex/admin-reporting-exports`; draft PR **A4: Add admin reporting and controlled exports**. Goal: create trustworthy custom-operations reporting and minimal, auditable exports.
 
 Context: custom and Woo order/stock ownership stays separate; payment truth remains Mollie/webhook; Auth/RLS uses Pascal as manager initially; staging-only development applies. Start only when payment, email and fulfilment event semantics are reliable and A3 has merged. Own `src/admin/**` reporting views, scoped `api/admin/**` report/export endpoints, report tests and A4 docs. Do not modify payment/webhook logic, public UI, Woo systems, production configuration, shared status contracts or unrelated schema.

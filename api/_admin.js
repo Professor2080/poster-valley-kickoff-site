@@ -97,6 +97,12 @@ export async function adminRpc(functionName, body) {
       ambiguous_invitations: [409, 'ambiguous_invitations', 'Multiple invitations are linked to this reservation. Resolve the records before sending.'],
       recipient_mismatch: [409, 'recipient_mismatch', 'The invitation recipient no longer matches the reservation. Resolve it before sending.'],
       invalid_provider_id: [502, 'delivery_failed', 'The email provider response could not be verified.'],
+      invalid_report_period: [400, 'invalid_report_period', 'The reporting period is invalid or too large.'],
+      invalid_report_filter: [400, 'invalid_report_filter', 'A reporting filter is invalid.'],
+      invalid_export_type: [400, 'invalid_export_type', 'The export type is not supported.'],
+      invalid_export_period: [400, 'invalid_export_period', 'Exports require an explicit period of no more than 90 days.'],
+      export_limit_exceeded: [409, 'export_limit_exceeded', 'The export contains more than 2,000 rows. Narrow the period or filters.'],
+      confirmation_stale: [409, 'confirmation_stale', 'The export changed after preview. Review it again before downloading.'],
     }[databaseCode]
     if (known) throw new AdminRequestError(...known)
     throw new AdminRequestError(response.status === 409 ? 409 : 500, 'operation_failed', 'The operation could not be completed.')
