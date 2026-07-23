@@ -32,6 +32,8 @@ test('export UI has explicit confirmation, honest outcomes and excluded-field di
   assert.match(reporting, /Names, emails, addresses, tokens, payment-provider IDs, tracking values, metadata and audit payloads are excluded/)
   assert.match(reporting, /role="status" aria-live="polite"/)
   assert.match(reporting, /role="alert"/)
+  assert.match(reporting, /useEffect\(\(\) => \{ if \(preview\) confirmation[.]current[?][.]focus\(\) \}, \[preview\]\)/)
+  assert.match(reporting, /ref=\{confirmation\} tabIndex=\{-1\}/)
 })
 
 test('frontend uses one reporting endpoint with fixed operations', () => {
@@ -44,5 +46,6 @@ test('frontend uses one reporting endpoint with fixed operations', () => {
 test('reporting styles preserve keyboard focus and responsive mobile layout', () => {
   assert.match(styles, /admin-report-filters[^}]+grid-template-columns: repeat\(auto-fit/i)
   assert.match(styles, /admin-report-filters input:focus-visible[\s\S]*outline: 3px solid/i)
+  assert.match(styles, /admin-export-confirmation:focus-visible[\s\S]*outline: 3px solid/i)
   assert.match(styles, /@media \(max-width: 700px\)[^{]*\{[^}]*admin-report-filters/i)
 })

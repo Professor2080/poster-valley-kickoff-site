@@ -33,6 +33,11 @@ test('conversion denominators and timestamp boundaries are fixed in the database
   assert.match(reportFunction, /paid_scope[\s\S]*cp[.]paid_at >= p_from[\s\S]*cp[.]paid_at < p_to/i)
 })
 
+test('fulfilment operations queue retains shipped orders whose shipping email failed', () => {
+  assert.match(reportFunction, /fulfilmentAttention[\s\S]*fulfilment_status = 'shipped' and shipping_email_status = 'failed'/i)
+  assert.match(reportFunction, /select \* from paid_scope[\s\S]*fulfilment_status <> 'shipped'[\s\S]*or \(fulfilment_status = 'shipped' and shipping_email_status = 'failed'\)[\s\S]*order by paid_at, id limit 100/i)
+})
+
 test('exports are fixed, bounded, PII-minimized and safely audited', () => {
   assert.match(sql, /p_export_type not in \('reservations','invitations','orders','payments','fulfilment','summary'\)/i)
   assert.match(sql, /p_to - p_from > interval '90 days'/i)

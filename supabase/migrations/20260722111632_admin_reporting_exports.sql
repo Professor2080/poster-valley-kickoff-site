@@ -200,8 +200,16 @@ begin
         'orderId', id, 'dropSlug', drop_slug, 'dropTitle', drop_title,
         'fulfilmentStatus', fulfilment_status, 'shippingEmailStatus', shipping_email_status,
         'destinationCountryCode', shipping_country_code, 'paidAt', paid_at,
-        'attentionRequired', ((fulfilment_status in ('ready_to_pack','packed')) or not address_complete)
-      ) order by paid_at, id) from (select * from paid_scope where fulfilment_status <> 'shipped' order by paid_at, id limit 100) queue), '[]'::jsonb),
+        'attentionRequired', (
+          (fulfilment_status <> 'shipped' and (fulfilment_status in ('ready_to_pack','packed') or not address_complete))
+          or (fulfilment_status = 'shipped' and shipping_email_status = 'failed')
+        )
+      ) order by paid_at, id) from (
+        select * from paid_scope
+        where fulfilment_status <> 'shipped'
+          or (fulfilment_status = 'shipped' and shipping_email_status = 'failed')
+        order by paid_at, id limit 100
+      ) queue), '[]'::jsonb),
       'invitationDelivery', coalesce((select jsonb_agg(jsonb_build_object(
         'invitationId', id, 'dropSlug', drop_slug, 'dropTitle', drop_title,
         'deliveryStatus', delivery_status, 'deliveryCreatedAt', delivery_created_at
