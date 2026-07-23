@@ -36,7 +36,7 @@ before(() => {
 after(() => { globalThis.fetch = savedFetch; if (savedUrl === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = savedUrl; if (savedKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = savedKey })
 
 const { default: read } = await import('../api/admin/read.js')
-const { default: authorization } = await import('../api/admin/authorization.js')
+const { default: status } = await import('../api/admin/status.js')
 
 test('admin reads reject missing, expired, and non-admin sessions', async () => {
   for (const [token, status, code] of [[null, 401, 'unauthenticated'], ['expired', 401, 'invalid_session'], ['nonadmin', 403, 'not_admin']]) {
@@ -52,9 +52,19 @@ test('read API is paginated, allowlisted, and PII-minimized', async () => {
 })
 
 test('operator can use read contracts but cannot satisfy manager-only authorization checks', async () => {
-  const res = response(); await authorization({ method: 'GET', headers: { authorization: 'Bearer operator' } }, res); assert.equal(res.statusCode, 200); assert.equal(res.payload.role, 'operator')
+  const res = response(); await status({ method: 'GET', query: { operation: 'authorization' }, headers: { authorization: 'Bearer operator' } }, res); assert.equal(res.statusCode, 200); assert.equal(res.payload.role, 'operator')
   const { requireAdmin, AdminRequestError } = await import('../api/_admin.js')
   await assert.rejects(() => requireAdmin(request({}, 'operator'), 'manager'), (error) => error instanceof AdminRequestError && error.code === 'insufficient_role')
+})
+
+test('admin status route rejects unknown operations', async () => {
+  const res = response(); await status({ method: 'GET', query: { operation: 'unknown' }, headers: { authorization: 'Bearer manager' } }, res)
+  assert.equal(res.statusCode, 400); assert.equal(res.payload.error.code, 'invalid_admin_status_operation')
+})
+
+test('manager delivery status remains read-only and suppressed outside Production', async () => {
+  const res = response(); await status({ method: 'GET', query: { operation: 'delivery' }, headers: { authorization: 'Bearer manager' } }, res)
+  assert.equal(res.statusCode, 200); assert.equal(res.payload.mode, 'suppressed'); assert.equal(res.payload.externalEffect, false)
 })
 
 test('origin exclusion removes downstream test records through the service projection', async () => {

@@ -6,9 +6,11 @@ import { adminResources, boundedOffset, formatValue, readViewState, resourceFilt
 import { verifyAdminSession } from './session'
 import { modalKeyAction } from './dialog'
 import { hasBrowserSupabaseConfig, supabase } from './supabase'
+import { Reporting } from './AdminReporting'
 
-const labels: Record<AdminResource | 'overview', string> = {
-  overview: 'Overview', reservations: 'Reservations', invitations: 'Invitations', orders: 'Orders', payments: 'Payments',
+type AdminSection = AdminResource | 'overview' | 'reporting'
+const labels: Record<AdminSection, string> = {
+  overview: 'Overview', reporting: 'Reporting', reservations: 'Reservations', invitations: 'Invitations', orders: 'Orders', payments: 'Payments',
   quotes: 'Quotes', email_events: 'Email history', audit: 'Audit history', events: 'Events', products: 'Products',
 }
 const pageSize = 25
@@ -78,10 +80,11 @@ function AccessDenied({ onLogout }: { onLogout: () => void }) { return <main cla
 function AdminStatus({ title, message }: { title: string; message: string }) { return <main className="admin-login"><section className="admin-auth-card" aria-live="polite"><p className="admin-kicker">Poster Valley / Operations</p><h1>{title}</h1><p>{message}</p></section></main> }
 
 function AdminShell({ token, role, onLogout }: { token: string; role: AdminRole; onLogout: () => void }) {
-  const [section, setSection] = useState<AdminResource | 'overview'>('overview')
+  const [section, setSection] = useState<AdminSection>('overview')
   const content = useRef<HTMLElement>(null)
-  const selectSection = (item: AdminResource | 'overview') => { setSection(item); requestAnimationFrame(() => content.current?.focus()) }
-  return <main className="admin-shell"><a className="admin-skip" href="#admin-content">Skip to content</a><header className="admin-header"><a href="/admin" className="admin-brand">Poster Valley <span>Operations</span></a><div><span className="admin-role">Verified {role}</span><button className="admin-logout" onClick={() => void onLogout()}>Sign out</button></div></header><div className="admin-layout"><nav className="admin-nav" aria-label="Admin sections">{(['overview', ...adminResources] as const).map((item) => <button key={item} aria-current={section === item ? 'page' : undefined} className={section === item ? 'active' : ''} onClick={() => selectSection(item)}>{labels[item]}</button>)}</nav><section ref={content} id="admin-content" className="admin-content" tabIndex={-1}>{section === 'overview' ? <Overview token={token} /> : <ReadList resource={section} token={token} role={role} />}</section></div></main>
+  const selectSection = (item: AdminSection) => { setSection(item); requestAnimationFrame(() => content.current?.focus()) }
+  const sections: AdminSection[] = role === 'manager' ? ['overview', 'reporting', ...adminResources] : ['overview', ...adminResources]
+  return <main className="admin-shell"><a className="admin-skip" href="#admin-content">Skip to content</a><header className="admin-header"><a href="/admin" className="admin-brand">Poster Valley <span>Operations</span></a><div><span className="admin-role">Verified {role}</span><button className="admin-logout" onClick={() => void onLogout()}>Sign out</button></div></header><div className="admin-layout"><nav className="admin-nav" aria-label="Admin sections">{sections.map((item) => <button key={item} aria-current={section === item ? 'page' : undefined} className={section === item ? 'active' : ''} onClick={() => selectSection(item)}>{labels[item]}</button>)}</nav><section ref={content} id="admin-content" className="admin-content" tabIndex={-1}>{section === 'overview' ? <Overview token={token} /> : section === 'reporting' ? <Reporting token={token} /> : <ReadList resource={section} token={token} role={role} />}</section></div></main>
 }
 
 function Overview({ token }: { token: string }) { return <section aria-labelledby="overview-title"><p className="admin-kicker">Controlled workspace</p><h1 id="overview-title">Overview</h1><p className="admin-intro">Open a reservation, invitation or paid order to review its lifecycle, preview an available action and confirm it explicitly. Payment status cannot be changed here.</p><DeliveryStatus token={token} /><div className="admin-metrics">{(['reservations', 'invitations', 'orders', 'payments'] as const).map((resource) => <Metric key={resource} resource={resource} token={token} />)}</div></section> }

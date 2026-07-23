@@ -25,11 +25,11 @@ test('production read filters are frozen and origin-aware', () => {
 test('production boundedOffset handles previous and next page boundaries', () => {
   assert.equal(contracts.boundedOffset(0, 25, 100, 'previous'), 0); assert.equal(contracts.boundedOffset(25, 25, 100, 'previous'), 0); assert.equal(contracts.boundedOffset(0, 25, 25, 'next'), 0); assert.equal(contracts.boundedOffset(0, 25, 26, 'next'), 25)
 })
-test('production API sends bearer authorization and keeps read identifiers out of URLs', async () => {
+test('production API sends bearer authorization and uses fixed consolidated status operations', async () => {
   const calls = []; const originalFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => { calls.push({ url: String(input), method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('Authorization'), body: init?.body ? JSON.parse(String(init.body)) : null }); return response(200, { version: 'v1', role: 'operator', items: [], page: { limit: 25, offset: 0, total: 0 } }) }
-  try { await api.getAuthorization('access-token'); await api.getAdminRead('payments', 'access-token', 25, 0, { status: 'paid', email: 'forbidden' }) } finally { globalThis.fetch = originalFetch }
-  assert.deepEqual(calls, [{ url: '/api/admin/authorization', method: 'GET', authorization: 'Bearer access-token', body: null }, { url: '/api/admin/read', method: 'POST', authorization: 'Bearer access-token', body: { resource: 'payments', limit: 25, offset: 0, filters: { status: 'paid', email: 'forbidden' } } }])
+  try { await api.getAuthorization('access-token'); await api.getDeliveryConfiguration('access-token'); await api.getAdminRead('payments', 'access-token', 25, 0, { status: 'paid', email: 'forbidden' }) } finally { globalThis.fetch = originalFetch }
+  assert.deepEqual(calls, [{ url: '/api/admin/status?operation=authorization', method: 'GET', authorization: 'Bearer access-token', body: null }, { url: '/api/admin/status?operation=delivery', method: 'GET', authorization: 'Bearer access-token', body: null }, { url: '/api/admin/read', method: 'POST', authorization: 'Bearer access-token', body: { resource: 'payments', limit: 25, offset: 0, filters: { status: 'paid', email: 'forbidden' } } }])
 })
 test('production session verifier does not read before authorization, denies 403, and clears invalid sessions', async () => {
   let authorizeCalls = 0; let cleared = 0; const clear = async () => { cleared++ }
