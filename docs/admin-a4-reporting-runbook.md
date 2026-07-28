@@ -12,8 +12,12 @@ isolated Staging procedure below.
   `epqpeoubkbftcvxjbqeo`, or any unknown project.
 - Never use customer data, a Production service-role key, a live Mollie key or operational Resend
   delivery for A4 validation.
-- Confirm the reviewed A1, A1 hardening, A3 and A3.2 migration history is present before A4. Do not
-  amend or replay registered migration files.
+- Confirm the reviewed A1, A1 hardening, A3 and A3.2 history uses the canonical local Git timestamps
+  before A4. Staging retains its `20260719175848` baseline and
+  `20260722111632_admin_reporting_exports`; Production retains its separate `20260707234351`
+  baseline and has no A4. See
+  [Migration-history canonicalization](architecture/migration-history-canonicalization.md). Do not
+  amend or replay registered migration SQL.
 
 ## Deployment function budget
 

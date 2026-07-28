@@ -2,7 +2,15 @@
 
 ## Scope and identity
 
-The initial A1 foundation migration was successfully executed on the staging project `cdmocdodehjmcgtxicaj` and is registered there as `20260719212704_admin_auth_data_foundation`. It is immutable migration history and must not be amended or reapplied. This repository adds the required additive hardening follow-up, `supabase/migrations/20260720093000_admin_auth_data_hardening.sql`; it has **not** been executed remotely. ADR-001's sole initial manager is Pascal. `studio@postervalley.nl` is Pascal's approved Supabase Auth login identity, not a second manager. No operator or other manager is approved initially.
+The canonical A1 migrations are
+`supabase/migrations/20260720090000_admin_auth_data_foundation.sql` and
+`supabase/migrations/20260720093000_admin_auth_data_hardening.sql`. Staging historically registered
+the exact same SQL under execution-time aliases `20260719212704` and `20260719213336`; those aliases
+are not durable migration identities. The migration SQL remains immutable and must not be amended or
+replayed. See [Migration-history canonicalization](architecture/migration-history-canonicalization.md)
+for the environment-specific baselines and the history-only reconciliation decision. ADR-001's sole
+initial manager is Pascal. `studio@postervalley.nl` is Pascal's approved Supabase Auth login identity,
+not a second manager. No operator or other manager is approved initially.
 
 Admin authentication uses an `Authorization: Bearer <Supabase access token>` verified at Supabase Auth's `/auth/v1/user` endpoint. The server then uses its server-only key to look up an active `admin_roles` allowlist row. Email and `user_metadata` are never authorization inputs; `ADMIN_ACTION_SECRET` remains unrelated legacy sender protection. Invalid/expired tokens return `401`; authenticated users without an active row return `403`; permissions deny by default. Auth session expiry and revocation take effect on the next request: revoke/expire the Supabase session and set `revoked_at` on the role row. Do not put a service-role key in a browser or repository.
 
@@ -29,7 +37,12 @@ Forward compatibility: all additions are new objects; no existing table, column,
 ## Post-review staging procedure (only project `cdmocdodehjmcgtxicaj`)
 
 1. Prerequisite: an authenticated human has reviewed this PR, has staging-only credentials, and has confirmed `supabase projects list` shows **exactly** ref `cdmocdodehjmcgtxicaj`. Stop if it shows `epqpeoubkbftcvxjbqeo` (Production) or any other ref. Never use Production credentials.
-2. Confirm the already-applied foundation is registered as `20260719212704_admin_auth_data_foundation`; do not modify or reapply it. Apply exactly `20260720093000_admin_auth_data_hardening.sql` next. Capture CLI/project-ref output and migration timestamp. Do not run `db push` against an unchecked target.
+2. Confirm the Staging baseline is `20260719175848_initialize_poster_valley_kickoff_staging` and the
+   applied A1 identities are the canonical `20260720090000_admin_auth_data_foundation` and
+   `20260720093000_admin_auth_data_hardening`. The historical aliases `20260719212704` and
+   `20260719213336` must not be treated as canonical or replayed. If history is not yet reconciled,
+   stop and use only the separately approved history-repair procedure; do not run migration SQL or an
+   unchecked `db push`.
 3. Verify tables, `admin_role` enum, seed product, product-code check, triggers, the `admin_roles_granted_by_idx` index, empty function `search_path`, and RLS policies using catalog queries. Confirm protected tables have no browser INSERT/UPDATE/DELETE policy; confirm `admin_roles_read_own` uses `(select auth.uid())`, and product authenticated-read policy only.
 4. Create removable fixtures prefixed `A1-STAGING-DELETE-`, including a non-admin Auth user and a test role user. Do not use real customer data. Test missing token (401), expired/revoked token (401), non-admin (403), operator read access, and manager access. Test bounded pagination and verify emails/tokens/addresses are absent from API responses.
 5. After an approver confirms Auth setup, create Pascal's Auth identity at `studio@postervalley.nl` through the approved Supabase Auth console flow **without sending a magic link during this exercise**, obtain its immutable Auth UUID, and insert one `admin_roles` row with `role='manager'`. Verify the UUID—not email/user metadata—controls authorization. Record no secret in evidence.
