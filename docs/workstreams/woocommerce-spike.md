@@ -7,3 +7,20 @@ Context: custom Vercel/Supabase flow owns reservation, invitation orders and Mol
 Prerequisites: ADR freeze and Pascal permission for research; no host decision is pre-approved. Evaluate managed host/staging/backup/restore/WAF/update support; propose native theme/child theme, ~10-product model, SKU/weights/dimensions/classes/stock, NL/EU/manual-outside-EU policy, Woo Mollie **test-mode checklist**, emails/legal-content ownership, least-privilege operations and rollback. Preserve research questions for carriers, flat/live rates, customs, VAT/OSS, invoices and duties; make no legal/accounting claim.
 
 Allowed: repository and public-document research, documentation-only draft PR. Forbidden/security/production: buy hosting, create domain/DNS/staging, install WordPress/Woo/plugins, handle credentials, test payment, real email, production access/deploy/merge, or Woo operational writes. Staging must use test data and no live Mollie/customer mail. Run markdown consistency, `git diff --check`, conflict scan (and npm checks if touching repository-wide docs requires). Final report: alternatives, evidence, costs/risks/unknowns, owner decisions, no-production confirmation. Done: reversible staged plan and Pascal/coordinator handoff.
+
+## Spike-uitkomst
+
+De researchdocumentset van 29 juli 2026 staat in:
+
+- [`../architecture/woocommerce-shop.md`](../architecture/woocommerce-shop.md)
+- [`../decisions/ADR-004-woocommerce-topology.md`](../decisions/ADR-004-woocommerce-topology.md)
+- [`../woocommerce/hosting-and-staging.md`](../woocommerce/hosting-and-staging.md)
+- [`../woocommerce/repository-and-operations.md`](../woocommerce/repository-and-operations.md)
+- [`../woocommerce/plugin-register.md`](../woocommerce/plugin-register.md)
+- [`../woocommerce/product-and-sku-model.md`](../woocommerce/product-and-sku-model.md)
+- [`../woocommerce/shipping-tax-and-mollie.md`](../woocommerce/shipping-tax-and-mollie.md)
+- [`../woocommerce/launch-roadmap.md`](../woocommerce/launch-roadmap.md)
+
+De richting is managed native WooCommerce op `shop.postervalley.nl`, met een Storefront child
+theme en statische productlinks vanaf de bestaande site. Hosting, repository, staging, plugins,
+credentials, betalingen, e-mail, productinvoer en livegang blijven onbevoegd en niet uitgevoerd.
