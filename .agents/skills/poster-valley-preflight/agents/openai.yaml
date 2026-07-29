@@ -1,0 +1,6 @@
+interface:
+  display_name: "Poster Valley Preflight"
+  short_description: "Verify repository and worktree identity safely"
+  default_prompt: "Use $poster-valley-preflight to verify the exact Poster Valley worktree contract before changes."
+policy:
+  allow_implicit_invocation: false

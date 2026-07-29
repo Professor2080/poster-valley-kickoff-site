@@ -1,0 +1,6 @@
+interface:
+  display_name: "Poster Valley Release Gate"
+  short_description: "Review release readiness without publishing"
+  default_prompt: "Use $poster-valley-release-gate to assess this Poster Valley change without performing external writes."
+policy:
+  allow_implicit_invocation: false
