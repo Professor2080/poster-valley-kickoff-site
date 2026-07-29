@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { operationalDeliveryAdapter, operationalEmailConfiguration } from '../api/_notifications.js'
-import { actionRequestHash, issueConfirmationProof, previewFingerprint, verifyConfirmationProof } from '../api/admin/_actions.js'
+import { actionRequestHash, buildOperationalMessage, issueConfirmationProof, previewFingerprint, verifyConfirmationProof } from '../api/admin/_actions.js'
 
 const complete = { VERCEL_ENV: 'production', POSTER_VALLEY_ENV: 'production', NODE_ENV: 'production', OPERATIONAL_EMAIL_DELIVERY_ENABLED: 'true', RESEND_API_KEY: 're_test', OPERATIONAL_EMAIL_FROM: 'Poster Valley <studio@mail.postervalley.nl>', OPERATIONAL_EMAIL_REPLY_TO: 'studio@postervalley.nl', SITE_URL: 'https://www.postervalley.nl', ADMIN_INVITATION_TOKEN_SECRET: 'token-secret', ADMIN_CONFIRMATION_SECRET: 'confirmation-secret' }
 
@@ -27,13 +27,63 @@ test('Resend adapter forwards durable idempotency and stores only a bounded prov
   assert.equal(JSON.parse(request.body).reply_to, complete.OPERATIONAL_EMAIL_REPLY_TO)
 })
 
+test('shipping confirmation uses the same Production gate and escapes customer-visible fields', async () => {
+  let request
+  const deliver = operationalDeliveryAdapter({ env: complete, fetchImpl: async (_url, init) => {
+    request = init
+    return new Response(JSON.stringify({ id: 'resend_shipping_123' }), { status: 200 })
+  } })
+  const message = buildOperationalMessage({
+    template: 'shipping_confirmation',
+    recipientEmail: 'ada@example.test',
+    firstName: 'Ada <script>',
+    dropTitle: 'Eurofighter & Typhoon',
+    carrier: 'DHL Express (NL)',
+    trackingNumber: 'JVGL-123/456',
+  })
+  const result = await deliver({ ...message, idempotencyKey: 'poster-valley-operational-shipping-attempt' })
+  assert.deepEqual(result, { status: 'sent', providerId: 'resend_shipping_123' })
+  const body = JSON.parse(request.body)
+  assert.equal(body.to[0], 'ada@example.test')
+  assert.match(body.html, /Ada &lt;script&gt;/)
+  assert.match(body.html, /Eurofighter &amp; Typhoon/)
+  assert.doesNotMatch(body.html, /<script>/)
+  assert.match(body.text, /Tracking number: JVGL-123\/456/)
+})
+
 test('definitive failures fail and ambiguous timeout/concurrent responses remain pending', async () => {
   const serverFailure = operationalDeliveryAdapter({ env: complete, fetchImpl: async () => new Response('{}', { status: 422 }) })
   const concurrent = operationalDeliveryAdapter({ env: complete, fetchImpl: async () => new Response('{}', { status: 409 }) })
   const timeout = operationalDeliveryAdapter({ env: complete, fetchImpl: async () => { throw new Error('network timeout containing no customer data') } })
+  const injectedTimeout = operationalDeliveryAdapter({ send: async () => { throw new Error('injected timeout containing no customer data') } })
   assert.equal((await serverFailure({ template: 'order_invitation' })).status, 'failed')
-  assert.equal((await concurrent({ template: 'order_invitation' })).status, 'pending')
-  assert.equal((await timeout({ template: 'order_invitation' })).status, 'pending')
+  assert.deepEqual(await concurrent({ template: 'order_invitation' }), { status: 'pending', providerId: null, reconciliationRequired: true })
+  assert.deepEqual(await timeout({ template: 'order_invitation' }), { status: 'pending', providerId: null, reconciliationRequired: true })
+  assert.deepEqual(await injectedTimeout({ template: 'shipping_confirmation' }), { status: 'pending', providerId: null, reconciliationRequired: true })
+})
+
+test('successful provider responses without a verifiable id remain pending for reconciliation', async () => {
+  for (const response of [
+    new Response('{}', { status: 200 }),
+    new Response(JSON.stringify({ id: 'contains spaces' }), { status: 202 }),
+    new Response(null, { status: 204 }),
+  ]) {
+    const deliver = operationalDeliveryAdapter({ env: complete, fetchImpl: async () => response })
+    assert.deepEqual(await deliver({ template: 'shipping_confirmation' }), {
+      status: 'pending',
+      providerId: null,
+      reconciliationRequired: true,
+    })
+  }
+
+  const accepted = operationalDeliveryAdapter({
+    env: complete,
+    fetchImpl: async () => new Response(JSON.stringify({ id: 'resend_shipping_verified_1' }), { status: 202 }),
+  })
+  assert.deepEqual(await accepted({ template: 'shipping_confirmation' }), {
+    status: 'sent',
+    providerId: 'resend_shipping_verified_1',
+  })
 })
 
 test('confirmation proof is actor/action/payload/state bound and expires', () => {

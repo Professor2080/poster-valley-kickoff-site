@@ -172,14 +172,17 @@ mode from the key and this variable can stay empty.
 Production uses a Mollie live key. Calling the payment endpoint there can create a real payment and
 must only happen for a confirmed customer order.
 
-## Admin invitation delivery
+## Admin operational email delivery
 
 The authenticated `/admin` workspace provides contextual, manager-only invitation preview, send,
-retry and deliberate resend actions. Every mutation requires a second action-specific button click
-backed by a short-lived server proof bound to the actor, normalized payload and reviewed record
-state. The retired `/api/admin/send-order-invitation` endpoint remains a `410` tombstone.
+retry and deliberate resend actions. A manager can also move a provider-confirmed paid order from
+`packed` to `shipped` with validated carrier/tracking details and retry a failed or suppressed
+shipping confirmation without repeating the fulfilment transition. Every mutation requires a
+second action-specific button click backed by a short-lived server proof bound to the actor,
+normalized payload and reviewed record state. The retired `/api/admin/send-order-invitation`
+endpoint remains a `410` tombstone.
 
-Operational invitation delivery is suppressed outside Production. See
+Operational invitation and shipping-confirmation delivery is suppressed outside Production. See
 [`docs/admin-a32-production-email-runbook.md`](docs/admin-a32-production-email-runbook.md) for the
 exact fail-closed Production configuration and release validation. Never put invitation tokens,
 customer addresses, Resend responses or server secrets in logs or browser-visible configuration.

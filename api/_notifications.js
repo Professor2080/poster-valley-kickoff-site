@@ -28,10 +28,10 @@ export function operationalEmailConfiguration(env = process.env) {
   const required = ['RESEND_API_KEY', 'OPERATIONAL_EMAIL_FROM', 'OPERATIONAL_EMAIL_REPLY_TO', 'SITE_URL', 'ADMIN_INVITATION_TOKEN_SECRET', 'ADMIN_CONFIRMATION_SECRET']
   const missing = required.filter((name) => !env[name])
   const validSite = env.SITE_URL === 'https://www.postervalley.nl' || env.SITE_URL === 'https://postervalley.nl'
-  if (!production) return { mode: 'suppressed', ready: false, externalEffect: false, message: 'Invitation email is suppressed outside Production.', missing: [] }
-  if (!enabled) return { mode: 'suppressed', ready: false, externalEffect: false, message: 'Production invitation delivery is disabled.', missing: [] }
-  if (missing.length || !validSite) return { mode: 'unavailable', ready: false, externalEffect: false, message: 'Production invitation delivery configuration is incomplete.', missing: [...missing, ...(!validSite && !missing.includes('SITE_URL') ? ['SITE_URL'] : [])] }
-  return { mode: 'live', ready: true, externalEffect: true, message: 'Production invitation delivery is enabled.', missing: [] }
+  if (!production) return { mode: 'suppressed', ready: false, externalEffect: false, message: 'Operational customer email is suppressed outside Production.', missing: [] }
+  if (!enabled) return { mode: 'suppressed', ready: false, externalEffect: false, message: 'Production operational email delivery is disabled.', missing: [] }
+  if (missing.length || !validSite) return { mode: 'unavailable', ready: false, externalEffect: false, message: 'Production operational email configuration is incomplete.', missing: [...missing, ...(!validSite && !missing.includes('SITE_URL') ? ['SITE_URL'] : [])] }
+  return { mode: 'live', ready: true, externalEffect: true, message: 'Production operational email delivery is enabled.', missing: [] }
 }
 
 async function sendOperationalWithResend(message, env, fetchImpl) {
@@ -42,11 +42,13 @@ async function sendOperationalWithResend(message, env, fetchImpl) {
   })
   if (response.ok) {
     const body = await response.json().catch(() => null)
-    return providerIdPattern.test(body?.id ?? '') ? { status: 'sent', providerId: body.id } : { status: 'failed', providerId: null }
+    return providerIdPattern.test(body?.id ?? '')
+      ? { status: 'sent', providerId: body.id }
+      : { status: 'pending', providerId: null, reconciliationRequired: true }
   }
   // Resend reports a concurrent idempotent request as 409. The outcome is
   // ambiguous until reconciled, so the outbox remains pending and is not lied about.
-  if (response.status === 409) return { status: 'pending', providerId: null }
+  if (response.status === 409) return { status: 'pending', providerId: null, reconciliationRequired: true }
   return { status: 'failed', providerId: null }
 }
 
@@ -55,16 +57,19 @@ export function operationalDeliveryAdapter({ send, env = process.env, fetchImpl 
     if (typeof send !== 'function') {
       const configuration = operationalEmailConfiguration(env)
       if (configuration.mode === 'suppressed') return { status: 'suppressed', providerId: null }
-      if (configuration.mode === 'unavailable' || message.template !== 'order_invitation') return { status: 'failed', providerId: null }
-      try { return await sendOperationalWithResend(message, env, fetchImpl) } catch { return { status: 'pending', providerId: null } }
+      if (configuration.mode === 'unavailable' || !['order_invitation', 'shipping_confirmation'].includes(message.template)) return { status: 'failed', providerId: null }
+      try { return await sendOperationalWithResend(message, env, fetchImpl) } catch { return { status: 'pending', providerId: null, reconciliationRequired: true } }
     }
     try {
       const result = await send(message)
-      return result?.accepted === true && providerIdPattern.test(result.id ?? '')
-        ? { status: 'sent', providerId: result.id }
-        : { status: 'failed', providerId: null }
-    } catch {
+      if (result?.accepted === true) {
+        return providerIdPattern.test(result.id ?? '')
+          ? { status: 'sent', providerId: result.id }
+          : { status: 'pending', providerId: null, reconciliationRequired: true }
+      }
       return { status: 'failed', providerId: null }
+    } catch {
+      return { status: 'pending', providerId: null, reconciliationRequired: true }
     }
   }
 }

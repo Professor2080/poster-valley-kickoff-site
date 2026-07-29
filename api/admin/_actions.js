@@ -9,8 +9,10 @@ export const actionRoles = {
   'quote.approve': 'manager',
   'fulfilment.preview': 'operator',
   'fulfilment.transition': 'operator',
-  'shipping.preview': 'operator',
-  'shipping.retry': 'operator',
+  'shipping.preview': 'manager',
+  'shipping.retry': 'manager',
+  'shipping.reconciliation.preview': 'manager',
+  'shipping.reconciliation.resolve': 'manager',
   'origin.preview': 'manager',
   'origin.change': 'manager',
 }
@@ -20,6 +22,8 @@ const invitationActions = new Set(['invitation.preview', 'invitation.send', 'inv
 const quoteActions = new Set(['quote.preview', 'quote.approve'])
 const fulfilmentActions = new Set(['fulfilment.preview', 'fulfilment.transition'])
 const shippingActions = new Set(['shipping.preview', 'shipping.retry'])
+const shippingReconciliationActions = new Set(['shipping.reconciliation.preview', 'shipping.reconciliation.resolve'])
+const shippingReconciliationOutcomes = new Set(['provider_acceptance_confirmed', 'provider_non_acceptance_confirmed'])
 const originActions = new Set(['origin.preview', 'origin.change'])
 const fulfilmentStatuses = new Set(['unfulfilled', 'ready_to_pack', 'packed', 'shipped'])
 const fulfilmentTargets = new Set(['ready_to_pack', 'packed', 'shipped'])
@@ -37,6 +41,20 @@ function text(value, label, maxLength) {
   if (typeof value !== 'string' || !value.trim()) invalid(`${label} is required.`)
   const result = value.trim()
   if (result.length > maxLength) invalid(`${label} is too long.`)
+  return result
+}
+
+function shippingText(value, label, maxLength, pattern, minimumLength = 1) {
+  const result = text(value, label, maxLength)
+  if (result.length < minimumLength || !pattern.test(result)) invalid(`${label} contains unsupported characters.`)
+  return result
+}
+
+function reconciliationEvidence(value) {
+  const result = text(value, 'Evidence note', 500)
+  if (result.length < 10 || !/^[A-Za-z][A-Za-z .,;:()'/-]*$/.test(result) || /https?:|www\.|@/i.test(result)) {
+    invalid('Evidence note must be concise and must not contain contact data, addresses, provider IDs, secrets, tokens or links.', 'invalid_reconciliation_evidence')
+  }
   return result
 }
 
@@ -78,13 +96,35 @@ export function normalizeActionRequest(action, body) {
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) invalid('Fulfilment version is invalid.')
     const request = { orderId: uuid(body.orderId, 'Order id'), targetStatus, expectedStatus, expectedVersion }
     if (targetStatus === 'shipped') {
-      request.carrier = text(body.carrier, 'Carrier', 120)
-      request.trackingNumber = text(body.trackingNumber, 'Tracking number', 160)
+      request.carrier = shippingText(body.carrier, 'Carrier', 120, /^[A-Za-z0-9][A-Za-z0-9 .&()+/_-]*$/)
+      request.trackingNumber = shippingText(body.trackingNumber, 'Tracking number', 160, /^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/, 3)
     }
     return request
   }
 
-  if (shippingActions.has(action)) return { orderId: uuid(body.orderId, 'Order id') }
+  if (shippingActions.has(action)) {
+    const expectedStatus = text(body.expectedStatus, 'Current status', 30)
+    const expectedVersion = Number(body.expectedVersion)
+    if (expectedStatus !== 'shipped') invalid('Shipping email retry requires a shipped order.')
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) invalid('Fulfilment version is invalid.')
+    return { orderId: uuid(body.orderId, 'Order id'), expectedStatus, expectedVersion }
+  }
+
+  if (shippingReconciliationActions.has(action)) {
+    const expectedStatus = text(body.expectedStatus, 'Current status', 30)
+    const expectedVersion = Number(body.expectedVersion)
+    const reconciliationOutcome = text(body.reconciliationOutcome, 'Provider outcome', 80)
+    if (expectedStatus !== 'shipped') invalid('Shipping reconciliation requires a shipped order.')
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) invalid('Fulfilment version is invalid.')
+    if (!shippingReconciliationOutcomes.has(reconciliationOutcome)) invalid('Provider outcome is invalid.')
+    return {
+      orderId: uuid(body.orderId, 'Order id'),
+      expectedStatus,
+      expectedVersion,
+      reconciliationOutcome,
+      evidenceNote: reconciliationEvidence(body.evidenceNote),
+    }
+  }
 
   if (originActions.has(action)) {
     const recordOrigin = text(body.recordOrigin, 'Record origin', 40)
@@ -97,6 +137,11 @@ export function normalizeActionRequest(action, body) {
   }
 
   invalid('Unknown operational action.', 'invalid_action')
+}
+
+export function requiredActionRole(action, request) {
+  if (shippingActions.has(action) || shippingReconciliationActions.has(action) || (fulfilmentActions.has(action) && request?.targetStatus === 'shipped')) return 'manager'
+  return actionRoles[action]
 }
 
 function canonical(value) {
@@ -153,6 +198,15 @@ export function confirmationSummary(action, preview) {
   if (action === 'quote.approve') return { ...base, destination: preview.countryCode, externalEffect: 'No email or payment is created.', reversibility: 'A later approved quote may replace this quote until checkout uses it.' }
   if (action === 'fulfilment.transition') return { ...base, destination: preview.targetStatus, externalEffect: preview.targetStatus === 'shipped' ? 'Marks the paid order shipped and prepares a shipping email.' : 'Updates fulfilment history only.', reversibility: 'This lifecycle transition is not reversible in Admin.' }
   if (action === 'shipping.retry') return { ...base, destination: 'Order email', externalEffect: 'Retries the prepared shipping email.', reversibility: 'The email cannot be recalled after provider acceptance.' }
+  if (action === 'shipping.reconciliation.resolve') {
+    return {
+      ...base,
+      destination: preview.reconciliationOutcome === 'provider_acceptance_confirmed' ? 'Provider acceptance confirmed' : 'Provider non-acceptance confirmed',
+      evidence: preview.evidenceNote,
+      externalEffect: 'Records a manager-verified provider outcome. No email is sent.',
+      reversibility: 'The audit record is permanent. A confirmed non-acceptance permits a separately previewed retry.',
+    }
+  }
   return { ...base, destination: preview.newOrigin || preview.recordOrigin, externalEffect: 'Updates linked record classification and audit history.', reversibility: 'A later audited change can correct the classification.' }
 }
 
@@ -188,10 +242,12 @@ export function buildOperationalMessage(payload, token = null) {
     }
   }
   if (payload.template === 'shipping_confirmation') {
+    const name = payload.firstName || 'there'
     return {
       to: payload.recipientEmail,
       subject: 'Your Poster Valley order has shipped',
-      text: [`Hi ${payload.firstName || 'there'},`, '', `${payload.dropTitle} is on its way.`, `Carrier: ${payload.carrier}`, `Tracking number: ${payload.trackingNumber}`, '', 'Poster Valley'].join('\n'),
+      text: [`Hi ${name},`, '', `${payload.dropTitle} is on its way.`, `Carrier: ${payload.carrier}`, `Tracking number: ${payload.trackingNumber}`, '', 'Keep this tracking number for the carrier website or app.', '', 'Poster Valley', 'Curated poster drops, released with intention.'].join('\n'),
+      html: `<div style="margin:0;background:#f2eee7;padding:32px 20px;font-family:Arial,sans-serif;color:#15120f"><main style="max-width:640px;margin:auto;background:#fff;border:1px solid #ded7cc;padding:30px"><p style="font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Poster Valley</p><h1 style="font-size:30px;line-height:1.15">Your poster is on its way</h1><p>Hi ${escapeHtml(name)},</p><p><strong>${escapeHtml(payload.dropTitle)}</strong> has shipped.</p><table style="width:100%;border-collapse:collapse;background:#fbfaf8;margin:24px 0"><tbody><tr><td style="padding:10px 14px;border-bottom:1px solid #e6e1d8;color:#6d665d">Carrier</td><td style="padding:10px 14px;border-bottom:1px solid #e6e1d8">${escapeHtml(payload.carrier)}</td></tr><tr><td style="padding:10px 14px;color:#6d665d">Tracking number</td><td style="padding:10px 14px">${escapeHtml(payload.trackingNumber)}</td></tr></tbody></table><p>Keep this tracking number for the carrier website or app.</p><p>Poster Valley<br>Curated poster drops, released with intention.</p></main></div>`,
       template: payload.template,
     }
   }
@@ -203,5 +259,12 @@ function escapeHtml(value) {
 }
 
 export function mutationForPreview(action) {
-  return { 'invitation.preview': 'invitation.send', 'quote.preview': 'quote.approve', 'fulfilment.preview': 'fulfilment.transition', 'shipping.preview': 'shipping.retry', 'origin.preview': 'origin.change' }[action] ?? null
+  return {
+    'invitation.preview': 'invitation.send',
+    'quote.preview': 'quote.approve',
+    'fulfilment.preview': 'fulfilment.transition',
+    'shipping.preview': 'shipping.retry',
+    'shipping.reconciliation.preview': 'shipping.reconciliation.resolve',
+    'origin.preview': 'origin.change',
+  }[action] ?? null
 }

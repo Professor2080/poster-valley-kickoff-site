@@ -17,6 +17,7 @@ import {
   mutationForPreview,
   normalizeActionRequest,
   previewFingerprint,
+  requiredActionRole,
   verifyConfirmationProof,
 } from './_actions.js'
 
@@ -50,18 +51,32 @@ async function previewAction(admin, action, request) {
       p_reason: request.reason,
     })
   }
-  if ((action === 'fulfilment.preview' && request.targetStatus === 'shipped') || action === 'shipping.preview') {
+  if ((action === 'fulfilment.preview' && request.targetStatus === 'shipped') || action === 'shipping.preview' || action === 'shipping.reconciliation.preview') {
     await adminRpc('admin_a31_assert_shipping_ready', { p_actor: admin.userId, p_order_id: request.orderId })
   }
   const result = await adminRpc('admin_a32_preview_action', { p_actor: admin.userId, p_action: action, p_request: request })
   if (action.startsWith('quote.')) assertManualDestination(result.preview, request)
+  if (result?.reconciliationRequired === true) return result
   if (result.preview?.actionAllowed === false) throw new AdminRequestError(409, 'stale_transition', 'The record changed. Refresh the preview before confirming.')
   return result
 }
 
 const previewForMutation = {
   'invitation.send': 'invitation.preview', 'invitation.resend': 'invitation.preview', 'quote.approve': 'quote.preview',
-  'fulfilment.transition': 'fulfilment.preview', 'shipping.retry': 'shipping.preview', 'origin.change': 'origin.preview',
+  'fulfilment.transition': 'fulfilment.preview', 'shipping.retry': 'shipping.preview',
+  'shipping.reconciliation.resolve': 'shipping.reconciliation.preview', 'origin.change': 'origin.preview',
+}
+
+function sendReconciliationRequired(res, result) {
+  const { replay: _replay, ...safeResult } = result ?? {}
+  sendJson(res, 202, {
+    ...safeResult,
+    success: true,
+    deliveryStatus: 'pending',
+    reconciliationRequired: true,
+    providerOutcome: 'uncertain',
+    automaticRetryBlocked: true,
+  })
 }
 
 export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter() } = {}) {
@@ -76,10 +91,14 @@ export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter
       }
       const action = actionName(body)
       const request = normalizeActionRequest(action, body)
-      const admin = await requireAdmin(req, actionRoles[action])
+      const admin = await requireAdmin(req, requiredActionRole(action, request))
 
       if (action.endsWith('.preview')) {
         const result = await previewAction(admin, action, request)
+        if (result?.reconciliationRequired === true || result?.preview?.reconciliationRequired === true && action === 'shipping.preview') {
+          sendReconciliationRequired(res, result)
+          return
+        }
         const mutation = mutationForPreview(action) === 'invitation.send' ? result.preview?.suggestedAction : mutationForPreview(action)
         if (!mutation || !actionRoles[mutation]) throw new AdminRequestError(409, 'invalid_transition', 'No action is currently available for this record.')
         const requestHash = actionRequestHash(mutation, request)
@@ -98,12 +117,19 @@ export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter
         p_idempotency_key: key,
         p_request_hash: requestHash,
       })
+      if (replay?.found && replay.result?.deliveryStatus === 'pending' && replay.result?.reconciliationRequired === true) {
+        sendReconciliationRequired(res, replay.result)
+        return
+      }
       if (replay?.found && replay.result?.deliveryStatus !== 'pending') {
         sendJson(res, 200, { ...replay.result, replay: true })
         return
       }
       if (proof.exp < Date.now()) throw new AdminRequestError(409, 'confirmation_expired', 'The confirmation expired. Preview the action again.')
       const currentPreview = await previewAction(admin, previewForMutation[action], request)
+      if (currentPreview?.reconciliationRequired === true || currentPreview?.preview?.reconciliationRequired === true && action === 'shipping.retry') {
+        throw new AdminRequestError(409, 'reconciliation_required', 'The provider outcome is uncertain. Verify it outside this application before choosing a reconciliation outcome.')
+      }
       if (previewFingerprint(currentPreview.preview) !== proof.previewHash) throw new AdminRequestError(409, 'confirmation_stale', 'The record changed after preview. Review it again before confirming.')
       let context = {}
 
@@ -148,6 +174,10 @@ export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter
         const claimId = deliveryClaimId()
         const claim = await adminRpc('admin_a32_claim_delivery', { p_actor: admin.userId, p_attempt_id: result.emailAttemptId, p_claim_id: claimId })
         if (!claim.claimed) {
+          if (claim.reconciliationRequired === true) {
+            sendReconciliationRequired(res, { ...result, reconciliationRequired: true })
+            return
+          }
           const completed = await adminRpc('admin_a3_replay_action', { p_actor: admin.userId, p_action: action, p_idempotency_key: key, p_request_hash: requestHash })
           sendJson(res, 200, { ...completed.result, replay: true })
           return
@@ -166,7 +196,19 @@ export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter
           delivery = await deliver({ ...message, idempotencyKey: deliveryIdempotencyKey(result.emailAttemptId) })
         }
         if (delivery.status === 'pending') {
-          sendJson(res, 202, { ...result, deliveryStatus: 'pending', reconciliationRequired: true })
+          if (payload.template === 'shipping_confirmation') {
+            result = await adminRpc('admin_a32_complete_delivery', {
+              p_actor: admin.userId,
+              p_action: action,
+              p_idempotency_key: key,
+              p_request_hash: requestHash,
+              p_attempt_id: result.emailAttemptId,
+              p_claim_id: claimId,
+              p_delivery_status: 'pending',
+              p_provider_id: null,
+            })
+          }
+          sendReconciliationRequired(res, result)
           return
         }
         result = await adminRpc('admin_a32_complete_delivery', {
