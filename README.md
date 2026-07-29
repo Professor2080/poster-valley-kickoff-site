@@ -17,19 +17,38 @@ ready.
 ## Local Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-`npm run dev` is enough for visual frontend work. Use Vercel's local dev flow when testing the API
-functions with real Supabase environment variables.
+`npm run dev` is enough for visual frontend work. Local development is database-free by default.
+Remote API/provider validation is a separate, explicitly approved task and may target only the
+isolated Staging environment during normal development.
 
 ## Checks
 
-```bash
-npm run lint
-npm run build
+On Windows/PowerShell:
+
+```powershell
+npm run preflight -- <explicit worktree-contract arguments>
+npm run verify -- <the same active-worktree contract arguments>
 ```
+
+The verification command performs a clean install, lint, the complete test suite, a production
+build, Git whitespace checks, conflict-marker and trailing-whitespace scans, a tracked-secret and
+browser-prefix scan, the environment-key policy check, and the Vercel function-budget test. It does
+not contact a database or external provider.
+
+The required contract arguments and worktree roles are documented in the
+[worktree and branch policy](docs/worktree-and-branch-policy.md).
+
+## Development foundation
+
+- [Development workflow](docs/development-workflow.md)
+- [Environment matrix](docs/environment-matrix.md)
+- [Worktree and branch policy](docs/worktree-and-branch-policy.md)
+- [Release runbook and external-settings plan](docs/release-runbook.md)
+- [Skill governance and register](docs/skills/README.md)
 
 ## First Drop Assets
 
@@ -96,11 +115,11 @@ business and legal review.
 
 ## Supabase Setup
 
-Create the tables by running:
-
-```text
-supabase/schema.sql
-```
+`supabase/schema.sql` and `supabase/migrations/` are version-controlled database source. Do not
+execute either during ordinary local development. Local stack setup, Staging validation and every
+remote migration are separate work blocks with explicit target verification and human approval.
+See the [environment matrix](docs/environment-matrix.md) and
+[release runbook](docs/release-runbook.md).
 
 The tables have Row Level Security enabled. No public select policy is added; submissions should go
 through the Vercel API endpoints.
@@ -127,8 +146,11 @@ MOLLIE_API_KEY=
 MOLLIE_TEST_MODE=
 ```
 
-Set these in Vercel as server-side project environment variables for Production, Preview and
-Development as needed. Keep local values in `.env.local`; do not commit secrets. The Supabase
+Set only the names allowed for each environment by the
+[environment matrix](docs/environment-matrix.md). Staging/Preview use their own server-only
+invitation and confirmation secrets for approved contract validation; operational email delivery
+and live provider configuration remain Production-only. Keep local values in `.env.local`; do not
+commit secrets. The Supabase
 service-role key must remain server-side only and must never be exposed through browser-prefixed
 environment variables.
 
@@ -198,12 +220,6 @@ Use:
 - Build command: `npm run build`
 - Output directory: `dist`
 
-After setting environment variables, verify:
-
-```bash
-npm run lint
-npm run build
-```
-
-Then smoke-test one poster-specific request and one general update signup on the deployed site, and
-remove any test records from Supabase after verification.
+Do not perform a normal manual `--prod` deployment. Follow the
+[release runbook](docs/release-runbook.md); deployment, real-email/payment smoke tests and remote
+test-record handling each require explicit authorization.

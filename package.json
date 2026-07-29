@@ -3,12 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node --test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preflight": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tooling/preflight.ps1",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tooling/verify.ps1",
+    "check:versions": "node scripts/tooling/tool-versions.mjs",
+    "check:diff-local": "node scripts/tooling/git-diff-check.mjs --local",
+    "check:repository": "node scripts/tooling/repository-checks.mjs all",
+    "check:text": "node scripts/tooling/repository-checks.mjs text",
+    "check:secrets": "node scripts/tooling/repository-checks.mjs secrets",
+    "check:function-budget": "node scripts/tooling/repository-checks.mjs function-budget",
+    "check:governance": "node scripts/tooling/governance-checks.mjs",
+    "env:audit": "node scripts/tooling/environment-key-audit.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.100.0",

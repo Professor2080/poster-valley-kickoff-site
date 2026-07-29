@@ -1,0 +1,6 @@
+interface:
+  display_name: "Poster Valley Safe Change"
+  short_description: "Manage a bounded repository change safely"
+  default_prompt: "Use $poster-valley-safe-change for this explicitly requested Poster Valley repository modification."
+policy:
+  allow_implicit_invocation: false

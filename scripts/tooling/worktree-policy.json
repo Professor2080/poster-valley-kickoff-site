@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "activeBranchPattern": "^codex\\/(?!archive-|rebuild-from-stable-).+",
+  "referenceBranches": [
+    "main",
+    "codex/rebuild-from-stable-main"
+  ],
+  "archiveBranches": [
+    "codex/deterministic-schema-verification"
+  ],
+  "archiveBranchPatterns": [
+    "^archive\\/.+",
+    "^codex\\/archive-.+"
+  ]
+}

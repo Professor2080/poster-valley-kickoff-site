@@ -4,6 +4,17 @@
 
 These instructions apply to the entire `poster-valley-kickoff-site` repository.
 
+Repository identity:
+
+- GitHub: `Professor2080/poster-valley-kickoff-site`
+- package: `poster-valley-kickoff-site`
+- Production source branch: `main`
+
+There is another Poster Valley repository in a parent directory. Never infer identity from a folder
+name. Run the explicit role-based preflight contract documented in
+[`docs/worktree-and-branch-policy.md`](docs/worktree-and-branch-policy.md) before changing files.
+Stop on any root, common-directory, role, remote, branch, HEAD, upstream or worktree mismatch.
+
 Follow instructions in this order:
 
 1. The user's current request.
@@ -103,7 +114,19 @@ Use additive, reviewable Supabase migrations.
 
 ## External systems and environments
 
-Treat Local, Preview/Staging, and Production as separate environments. Verify the exact target project and deployment before any remote action.
+Treat Local, Preview, Staging, and Production as separate environments. Their boundaries and
+approved uses are defined in [`docs/environment-matrix.md`](docs/environment-matrix.md). Verify the
+exact target project and deployment before any remote action.
+
+- Local is the default. It must not contact a remote database unless a separate task explicitly
+  authorizes that contact.
+- Vercel Preview is a deployment environment. When remote validation is approved, it may use only
+  the isolated Supabase Staging project.
+- Supabase Staging (`cdmocdodehjmcgtxicaj`) is the only normal remote validation target.
+- Production (`main`, the Production Vercel environment, and Supabase
+  `epqpeoubkbftcvxjbqeo`) is outside normal agent work.
+- Keep operational email suppressed and use no live payment credential in Local, Preview, or
+  Staging.
 
 ### Production
 
@@ -132,6 +155,15 @@ Stop immediately on an unexpected dependency, target mismatch, schema difference
 
 Do not assume Staging access is authorized by a code-change request. Ask for separate authorization before remote migrations or stateful tests. Keep email suppressed and do not create real payments. Prefer transaction-wrapped synthetic fixtures with verified rollback.
 
+### Frozen workstreams
+
+A4 reporting/exports, migration-history repair and deterministic schema verification are frozen.
+Do not resume, copy, clean up or reinterpret those changes unless Pascal assigns a separate task.
+Always inspect the current worktree and remote state instead of relying on an old handover.
+
+Stop before acting when the target project, schema, migration history, credential scope, branch
+parent or intended environment is uncertain.
+
 ### Vercel, Supabase, Mollie, and Resend
 
 - Production deploys from `main` through the connected Vercel project.
@@ -149,6 +181,14 @@ Before editing:
 3. trace the real end-to-end path instead of inferring behavior from UI text;
 4. identify which environment, if any, is in scope;
 5. note unrelated user changes and leave them untouched.
+
+Use the version-controlled workflow documentation:
+
+- [`docs/development-workflow.md`](docs/development-workflow.md)
+- [`docs/environment-matrix.md`](docs/environment-matrix.md)
+- [`docs/worktree-and-branch-policy.md`](docs/worktree-and-branch-policy.md)
+- [`docs/release-runbook.md`](docs/release-runbook.md)
+- [`docs/skills/README.md`](docs/skills/README.md)
 
 When changing code:
 
@@ -185,13 +225,17 @@ Do not claim a remote deployment, migration, email, payment, or browser flow was
 
 ## Git and pull requests
 
-Unless the user explicitly asks for a direct, low-risk documentation change:
+Normal delivery is:
 
-- start from an up-to-date `main`;
-- create a focused branch;
-- keep commits intentional and scoped;
-- push the branch and open a Draft pull request;
-- do not merge without explicit approval.
+`feature branch -> Draft PR -> CI -> Vercel Preview -> review -> approved merge`
+
+- Never develop directly on `main`.
+- Start from a verified, up-to-date `origin/main` in a separate worktree.
+- Keep `main` as the sole Production source.
+- Do not commit, push, open or update a PR, merge, deploy, force-push, rewrite history or delete a
+  branch unless the current user request explicitly authorizes that action.
+- When commit and push are authorized, keep commits intentional and open a Draft PR.
+- Do not merge without explicit approval.
 
 Before merge or publication, verify the current remote head SHA, target branch, mergeability, checks, and the exact diff. Do not force-push, rewrite shared history, delete branches, or bypass required checks unless explicitly authorized.
 

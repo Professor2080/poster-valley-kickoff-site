@@ -1,0 +1,95 @@
+name: Poster Valley Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 24.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Activate npm 11.16.0
+        run: npm install --global npm@11.16.0
+      - name: Verify Node and npm versions
+        run: npm run check:versions
+      - name: Check Git commit range whitespace
+        env:
+          CHECK_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CHECK_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/tooling/git-diff-check.mjs --base "$CHECK_BASE" --head "$CHECK_HEAD"
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Run full test suite
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Scan conflict markers and trailing whitespace
+        run: npm run check:text
+      - name: Scan tracked secrets and browser prefixes
+        run: npm run check:secrets
+      - name: Enforce Vercel function budget
+        run: npm run check:function-budget
+      - name: Validate environment key policy
+        run: npm run env:audit
+      - name: Validate skill governance and MCP documentation
+        run: npm run check:governance
+
+  production-dependency-audit:
+    name: production-dependency-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Use Node.js 24.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Activate npm 11.16.0
+        run: npm install --global npm@11.16.0
+      - name: Verify Node and npm versions
+        run: npm run check:versions
+      - name: Audit production dependency graph
+        run: npm audit --omit=dev --audit-level=high
+
+  development-advisory-report:
+    name: development-advisory-report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Use Node.js 24.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Activate npm 11.16.0
+        run: npm install --global npm@11.16.0
+      - name: Verify Node and npm versions
+        run: npm run check:versions
+      - name: Report complete dependency advisory graph
+        run: npm audit --include=dev --audit-level=low
