@@ -10,7 +10,7 @@ The Vite/React site uses Vercel functions and a single Supabase schema with cust
 
 ## Prerequisites, ownership and scope
 
-Start only after accepted ADRs are frozen and **Poster Valley Kickoff Staging** exists with non-production credentials supplied by Pascal. Own `api/admin/**`, required narrowly scoped `api/_*.js` helpers, `supabase/**`, backend tests and A1 documentation. Do not modify `src/**` (except an agreed shared contract), public API/payment/Mollie/email flows, `docs/workstreams/woocommerce-*`, Vercel settings, production configuration or production data.
+Start only after accepted ADRs are frozen and **Clean Staging** exists with non-production credentials supplied by Pascal. Own `api/admin/**`, required narrowly scoped `api/_*.js` helpers, `supabase/**`, backend tests and A1 documentation. Do not modify `src/**` (except an agreed shared contract), public API/payment/Mollie/email flows, `docs/workstreams/woocommerce-*`, Vercel settings, production configuration or production data.
 
 Implement additive, compatibility-reviewed migration files only (never execute production migrations): admin role allowlist/RLS/server JWT verification; product registry; immutable audit/entity event contracts; paginated read-only admin APIs; status transition authorization. Include forward migration, rollback notes, historical backfill/compatibility plan, indexes and RLS review. Preserve webhook/provider payment authority; no endpoint may mark unpaid payment paid. Use idempotency/correlation keys for future action contracts.
 

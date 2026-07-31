@@ -45,6 +45,24 @@ The version-controlled classification rules are in `scripts/tooling/worktree-pol
 - Never reset, stash, clean, rebase, move or delete it to simplify another task.
 - `archive/*`, `codex/archive-*` and explicitly registered frozen branches are archives.
 
+## Active operating limits
+
+These are forward operating limits, not permission to remove an existing worktree. Classify and
+clean up older worktrees only in separate, owner-approved tasks after their state and provenance are
+known.
+
+| Worktree role | Maximum | Create when | Clean up when |
+| --- | ---: | --- | --- |
+| Clean reference | 1 | a verified, read-only `main` baseline is needed for comparison and branch creation | replace only after the successor is verified and the old reference is clean and unused |
+| Active track A | 1 | the primary approved product/change workstream starts | after merge verification or an explicit abandonment decision, with clean/pushed state proven |
+| Active track B | 1 | one intentionally parallel, independent workstream is approved | after merge verification or an explicit abandonment decision, with clean/pushed state proven |
+| Temporary infrastructure | 1 | a separate environment, migration-history, secret-scope, hosting, backup or recovery task is approved | immediately after the infrastructure task is completed/abandoned and evidence ownership is resolved |
+
+After a merge, retain the branch briefly for verification, then clean it up in a separate controlled
+task. Temporary recovery and verification worktrees must not become permanent. Never commit
+`.playwright-cli/`, `supabase/.temp/`, logs or temporary reports. Remove temporary output only after
+the producing task is complete and its origin and required evidence have been established.
+
 ## Preflight contract
 
 Expected values must come from the task, a trusted handoff or a separately verified reference; do
