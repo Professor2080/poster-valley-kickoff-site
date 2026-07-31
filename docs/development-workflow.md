@@ -75,8 +75,9 @@ inventory, orders, fulfilment or provider-webhook changes.
     application deploy.
 
 The migration-specific contract is authoritative in the
-[database release process](database-release-process.md). Until Clean Staging exists and matches
-`main`, migration steps 7 onward are blocked rather than redirected to Legacy Staging.
+[database release process](database-release-process.md). Clean Staging now exists, but until its
+pre-feature history matches committed `main`, migration steps 7 onward are blocked rather than
+redirected to inactive Legacy Staging.
 
 ### Infrastructure path
 
@@ -137,6 +138,13 @@ open/update a PR, merge or deploy.
 
 Use `npm run verify -- -SkipInstall` only after a successful `npm ci` in the same worktree. The
 verification path has no database, Supabase, email, payment or deployment step.
+
+Migration-bearing Schema Baseline v1 changes also run `npm run test:schema-baseline` separately.
+The GitHub `quality-gate` provides a fresh PostgreSQL 17 service for that loopback-only command; it
+applies the sole active migration twice from `template0`, executes the permanent catalog and
+runtime contracts, verifies both canonical fingerprints and removes the temporary databases. This
+is the only workflow expansion made for the baseline proof and it performs no Supabase-project or
+provider access.
 
 To compare environment key names without printing values:
 

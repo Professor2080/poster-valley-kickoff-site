@@ -17,6 +17,18 @@ jobs:
     name: quality-gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.10-bookworm
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,6 +54,14 @@ jobs:
         run: npm run lint
       - name: Run full test suite
         run: npm test
+      - name: Verify canonical schema baseline on PostgreSQL 17
+        env:
+          POSTER_VALLEY_LOCAL_PG: "1"
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: npm run test:schema-baseline
       - name: Build
         run: npm run build
       - name: Scan conflict markers and trailing whitespace

@@ -1,8 +1,8 @@
 # A3.2 Production invitation email handoff
 
 Invitation delivery is server-only and fails closed. Local development, automated tests, Vercel
-Preview and Clean Staging always suppress operational invitation mail. Legacy Staging is frozen and
-is not a feature-validation target. No migration or environment change is performed by this
+Preview and Clean Staging always suppress operational invitation mail. Legacy Staging is inactive,
+frozen and not a feature-validation target. No migration or environment change is performed by this
 workstream.
 
 ## Required Production configuration
@@ -32,8 +32,11 @@ confirm that the address is permitted. No API key or DNS value should be pasted 
 
 ## Release order and checks
 
-1. Review and apply `20260721151023_admin_invitation_delivery_confirmation.sql` through the
-   [database release process](database-release-process.md) after Clean Staging validation.
+1. Validate the A3.2 contract as part of the canonical
+   `20260731113000_schema_baseline_v1.sql` apply to empty Clean Staging. The former
+   `20260721151023_admin_invitation_delivery_confirmation.sql` is archive provenance and must not be
+   applied independently. Existing Production requires a separately approved read-only
+   compatibility check and additive DDL; never run the initial baseline DDL there.
 2. Configure the Production-only variables above. Leave Preview and Staging with
    `POSTER_VALLEY_ENV=staging` (or unset) and delivery disabled.
 3. Confirm Admin Overview reports that Production invitation delivery is enabled without displaying

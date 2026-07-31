@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-const migration = await readFile(new URL('../supabase/migrations/20260720090000_admin_auth_data_foundation.sql', import.meta.url), 'utf8')
-const hardeningMigration = await readFile(new URL('../supabase/migrations/20260720093000_admin_auth_data_hardening.sql', import.meta.url), 'utf8')
+// These byte-level provenance tests intentionally inspect the historical archive; runtime and
+// authorization contracts for the active migration are covered by the PostgreSQL 17 baseline test.
+const migration = await readFile(new URL('../supabase/migrations-archive/pre-baseline-v1/20260720090000_admin_auth_data_foundation.sql', import.meta.url), 'utf8')
+const hardeningMigration = await readFile(new URL('../supabase/migrations-archive/pre-baseline-v1/20260720093000_admin_auth_data_hardening.sql', import.meta.url), 'utf8')
 
 test('migration establishes protected append-only foundations and product code', () => {
   for (const phrase of ['create table public.admin_roles', 'create table public.admin_audit_events', 'create table public.entity_events', 'create table public.product_registry', "'eurofighter-typhoon-a2'", 'enable row level security', 'admin_audit_events_no_update', 'entity_events_no_update']) assert.match(migration, new RegExp(phrase))

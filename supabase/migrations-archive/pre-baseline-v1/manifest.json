@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "archive": "pre-baseline-v1",
+  "status": "historical_pre_baseline_generation",
+  "activeMigrationDirectory": "supabase/migrations",
+  "note": "These byte-preserved historical files are provenance only and must never be executed as active migrations by the Supabase CLI.",
+  "files": [
+    {
+      "version": "20260720090000",
+      "name": "admin_auth_data_foundation",
+      "originalPath": "supabase/migrations/20260720090000_admin_auth_data_foundation.sql",
+      "archivePath": "supabase/migrations-archive/pre-baseline-v1/20260720090000_admin_auth_data_foundation.sql",
+      "sha256": "02028ae0a0d756b2ca7029d4a7768d635aece8e56278a89ee4b65b241df2b88d",
+      "status": "historical_pre_baseline_generation",
+      "note": "Historical provenance only; this file must never again be executed as an active migration by the Supabase CLI."
+    },
+    {
+      "version": "20260720093000",
+      "name": "admin_auth_data_hardening",
+      "originalPath": "supabase/migrations/20260720093000_admin_auth_data_hardening.sql",
+      "archivePath": "supabase/migrations-archive/pre-baseline-v1/20260720093000_admin_auth_data_hardening.sql",
+      "sha256": "5e177326fb6c4e90b021d64e105656a2779a20020123981061a2c93a50ae8c03",
+      "status": "historical_pre_baseline_generation",
+      "note": "Historical provenance only; this file must never again be executed as an active migration by the Supabase CLI."
+    },
+    {
+      "version": "20260720110000",
+      "name": "admin_operational_actions",
+      "originalPath": "supabase/migrations/20260720110000_admin_operational_actions.sql",
+      "archivePath": "supabase/migrations-archive/pre-baseline-v1/20260720110000_admin_operational_actions.sql",
+      "sha256": "2b42b7071df8b2208c55154fc1abcf117049fb10920300c09e0ab9d51d83bc3a",
+      "status": "historical_pre_baseline_generation",
+      "note": "Historical provenance only; this file must never again be executed as an active migration by the Supabase CLI."
+    },
+    {
+      "version": "20260720165432",
+      "name": "admin_operational_actions_runtime_fix",
+      "originalPath": "supabase/migrations/20260720165432_admin_operational_actions_runtime_fix.sql",
+      "archivePath": "supabase/migrations-archive/pre-baseline-v1/20260720165432_admin_operational_actions_runtime_fix.sql",
+      "sha256": "aaca66183e507e7e5e4e86777303ffe445fd6a46bc6b097e86ed6eee82d16a2d",
+      "status": "historical_pre_baseline_generation",
+      "note": "Historical provenance only; this file must never again be executed as an active migration by the Supabase CLI."
+    },
+    {
+      "version": "20260721083831",
+      "name": "a3_1_admin_customer_data_record_origin",
+      "originalPath": "supabase/migrations/20260721083831_a3_1_admin_customer_data_record_origin.sql",
+      "archivePath": "supabase/migrations-archive/pre-baseline-v1/20260721083831_a3_1_admin_customer_data_record_origin.sql",
+      "sha256": "78d7cf43776927fff51cf505dd494a37e23c94eff73a2d42edc1d4508b4b1aa7",
+      "status": "historical_pre_baseline_generation",
+      "note": "Historical provenance only; this file must never again be executed as an active migration by the Supabase CLI."
+    },
+    {
+      "version": "20260721151023",
+      "name": "admin_invitation_delivery_confirmation",
+      "originalPath": "supabase/migrations/20260721151023_admin_invitation_delivery_confirmation.sql",
+      "archivePath": "supabase/migrations-archive/pre-baseline-v1/20260721151023_admin_invitation_delivery_confirmation.sql",
+      "sha256": "ff5cd913714a598ed65f99cf990445ede94d6029db531dcbc35baf94d65dc192",
+      "status": "historical_pre_baseline_generation",
+      "note": "Historical provenance only; this file must never again be executed as an active migration by the Supabase CLI."
+    }
+  ]
+}

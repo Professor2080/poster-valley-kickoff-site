@@ -9,17 +9,32 @@ Choose the fast, controlled or infrastructure route in the
 
 As recorded on 2026-07-31:
 
-- `main` is `5e58e9d75c709c52473c576ca859aee6c4f9c474`;
+- `main` is `2027378daae5bb3f29354fcd449367ff1c648909`;
 - GitHub ruleset `Protect main` is active;
 - required checks are `quality-gate` and `production-dependency-audit`;
 - the existing GitHub integration builds Vercel Preview for feature branches and Vercel Production
   from `main`;
 - Production Supabase is `epqpeoubkbftcvxjbqeo` and unchanged;
-- Legacy Staging `cdmocdodehjmcgtxicaj` is frozen and not a valid migration baseline;
-- Clean Staging has not been created.
+- Legacy Staging `cdmocdodehjmcgtxicaj` is inactive, frozen and not a valid migration baseline;
+- Clean Staging `stbunwkgvxfwmbjivgos` exists in `eu-west-1` and was supplied as
+  `ACTIVE_HEALTHY`, with zero migrations and zero public tables. The baseline-promotion task did
+  not access it.
 
 Ruleset, CI, Vercel, Supabase or provider dashboard state must be rechecked read-only for the exact
 candidate when it becomes release evidence. A recorded status never authorizes a write.
+
+Schema Baseline v1 is locally proven but has not been applied remotely. Its six source migrations
+are byte-preserved in the historical archive and only the canonical baseline remains active. The
+payment-idempotency MEDIUM/P2 finding is repaired locally. The independent Codex Security review
+was content-complete, but final report/SARIF sealing failed because of a tooling lifecycle error;
+the accepted review limit therefore forbids starting another broad review without a new BLOCKER or
+HIGH finding.
+
+After this Draft PR's required checks and exact Vercel Preview are green, the next separately
+authorized gate is to apply the canonical baseline to empty Clean Staging. Before Production, a
+read-only cardinality check and separately approved additive compatibility DDL remain mandatory.
+PR #18 stays unchanged until the baseline merges; it is then rebased with a later migration
+timestamp.
 
 ## Universal release gate
 
@@ -88,8 +103,8 @@ All controlled-without-migration items apply, plus:
   tests, provider boundaries and cleanup status.
 
 The [database release process](database-release-process.md) is authoritative for migration entry,
-database-first release and `expand -> migrate -> contract`. If Clean Staging does not exist or does
-not match `main`, this Definition of Done cannot pass.
+database-first release and `expand -> migrate -> contract`. If Clean Staging does not match `main`,
+this Definition of Done cannot pass.
 
 ## Production release control
 
@@ -108,8 +123,8 @@ not match `main`, this Definition of Done cannot pass.
 | --- | --- | --- |
 | GitHub | `Protect main` active; exact two required checks green | ruleset/check changes |
 | Vercel | GitHub-integrated Preview and `main`-only Production | environment variables, relinking, redeploy or manual deployment |
-| Clean Staging | created from `main`; exact migration-history equality; synthetic data only | cost, creation, linking, migration and stateful testing |
-| Legacy Staging | frozen; no feature migrations or release validation | later archival/removal decision |
+| Clean Staging | `stbunwkgvxfwmbjivgos`; currently empty; exact migration-history equality after canonical baseline apply; synthetic data only | linking, migration and stateful testing |
+| Legacy Staging | inactive and frozen; no access, feature migrations or release validation | later archival/removal decision |
 | Production Supabase | exact ref `epqpeoubkbftcvxjbqeo`; real data | every migration, Auth/role or data change |
 | Resend/Mollie | suppressed/test-mode outside Production | enabling real delivery/payment or any real smoke test |
 

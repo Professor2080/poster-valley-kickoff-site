@@ -314,7 +314,11 @@ export function OrderInvitationPage({ token }: { token: string }) {
     setErrorMessage('')
     setPaymentMessage('')
 
-    const result = await fetchJson<{ ok: true; checkoutUrl: string }>('/api/create-payment', {
+    const result = await fetchJson<{
+      ok: true
+      checkoutUrl?: string
+      paymentStatus?: 'open' | 'paid' | 'processing'
+    }>('/api/create-payment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -335,7 +339,17 @@ export function OrderInvitationPage({ token }: { token: string }) {
       return
     }
 
-    setPaymentMessage('Payment is not configured yet.')
+    if (result.data.paymentStatus === 'paid') {
+      setPaymentMessage('This order is already paid.')
+      return
+    }
+
+    if (result.data.paymentStatus === 'processing') {
+      setPaymentMessage('Payment is being prepared. Please wait a moment before trying again.')
+      return
+    }
+
+    setPaymentMessage('Payment could not be started. Please try again later.')
   }
 
   if (loading) {

@@ -1,39 +1,43 @@
 # Clean Staging runbook
 
-This runbook records the intended Clean Staging operating model and transition plan. Clean Staging
-does not exist yet. Nothing in this document authorizes cost, project creation, linking, database
-access, migration, Vercel configuration, provider calls or deployment.
+This runbook records the Clean Staging operating model and transition plan. Clean Staging exists;
+that fact does not authorize linking, database access, migration, Vercel configuration, provider
+calls or deployment.
 
 ## Recorded status on 2026-07-31
 
 Repository and release facts recorded for this operating-model task:
 
-- `main`: `5e58e9d75c709c52473c576ca859aee6c4f9c474`;
+- `main`: `2027378daae5bb3f29354fcd449367ff1c648909`;
 - GitHub ruleset `Protect main`: active;
 - required checks: `quality-gate` and `production-dependency-audit`;
 - Vercel Preview and Production: built through the existing GitHub integration;
 - Production Supabase: `epqpeoubkbftcvxjbqeo`, unchanged and never a feature-test target;
-- Legacy Staging: `cdmocdodehjmcgtxicaj`, frozen and not a reproducible migration baseline;
-- Clean Staging project ref: `not created yet`.
+- Legacy Staging: `cdmocdodehjmcgtxicaj`, inactive, frozen and not a reproducible migration
+  baseline;
+- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, supplied as `ACTIVE_HEALTHY`, with zero
+  migrations and zero public tables. This repository task did not connect to or independently
+  re-query the project.
 
 | Component | Status |
 | --- | --- |
 | Production | active and unchanged |
-| Legacy Staging | frozen; not a valid migration baseline |
-| Clean Staging | not created yet |
-| PR #18 | Draft; waiting for Clean Staging validation |
+| Legacy Staging | inactive and frozen; not a valid migration baseline |
+| Clean Staging | `ACTIVE_HEALTHY`; empty; not accessed by the baseline-promotion task |
+| PR #18 | Draft; unchanged; rebase only after the baseline merge, with a later migration timestamp |
 | A4 | frozen and outside the active release path |
 | Migration-history recovery | stopped |
 | WooCommerce architecture | recorded on `main` |
-| Next infrastructure step | cost confirmation and creation of Clean Staging |
+| Next database gate | separately authorize and apply the merged canonical baseline to empty Clean Staging |
 
 ### Shipping PR #18
 
 Draft PR #18, **Add safe shipping confirmation workflow**, is on branch
 `codex/shipping-confirmation` at `67742210c3036c9ed9efccedd89e0b0771ca0d40`. It is not merged.
 Migration `20260729120000_shipping_confirmation_safety.sql` has not been applied permanently to any
-environment. The PR remains blocked on validation against a newly created Clean Staging environment;
-do not redirect that validation to Legacy Staging or Production.
+environment. The PR remains unchanged. After the canonical baseline merges, rebase PR #18 and give
+its migration a later timestamp before separately authorized Clean Staging validation; do not
+redirect that validation to Legacy Staging or Production.
 
 ### Why Legacy Staging is frozen
 
@@ -43,15 +47,16 @@ migration files there, and produced an A4 migration that did not exactly match a
 The fetched/recovery files are not a source of truth, and recovery is stopped.
 
 Do not use migration-history repair, `db pull`, placeholder migrations or manual migration-table
-changes to make Legacy Staging appear aligned. Do not deploy any new feature migration there. Keep
-the environment intact and frozen until a separate post-transition archive/removal decision.
+changes to make Legacy Staging appear aligned. Do not access it or deploy any new feature migration
+there. Keep the environment inactive and frozen until a separate post-transition archive/removal
+decision.
 
 ## Clean Staging target contract
 
 Clean Staging is a separate Supabase environment that:
 
-- is created only after Pascal explicitly confirms current organization cost and the bounded
-  infrastructure action;
+- has project ref `stbunwkgvxfwmbjivgos` in `eu-west-1` and was recorded as `ACTIVE_HEALTHY`;
+- starts with zero migrations and zero public tables before the canonical baseline gate;
 - is built solely by applying committed migrations from `main` in order;
 - is disposable and fully rebuildable from that history plus an approved synthetic seed process;
 - contains no Production copy, customer record, real address or other real personal data;
@@ -91,23 +96,24 @@ defines the process only and intentionally creates no seed file or data.
 
 Each external or stateful step below is a separately authorized infrastructure action.
 
-1. Request the Supabase organization context and current cost.
-2. Pascal explicitly confirms the cost.
-3. Create the Clean Staging project in an appropriate EU region.
-4. Record the project ref safely in environment documentation without exposing secrets.
-5. Link it only from a dedicated infrastructure worktree after exact target verification.
-6. Apply migrations from `main` in their committed order.
-7. Prove exact migration-history equality between `main` and Clean Staging.
-8. Add the repeatable synthetic seed and cleanup mechanism in a separate repository change.
-9. Switch Vercel Preview to Clean Staging with suppressed/test provider configuration.
-10. Migrate and test PR #18 against Clean Staging, including its controlled-path evidence.
-11. Keep Legacy Staging frozen during the transition.
-12. After successful transition, make a separate decision to archive or remove Legacy Staging.
+1. Merge the reviewed canonical baseline through the normal GitHub release path.
+2. Under separate authorization, verify the exact Clean Staging project, empty history and empty
+   public schema, then require the dry-run to contain only `20260731113000_schema_baseline_v1.sql`.
+3. Apply that baseline to Clean Staging and verify schema, RLS, grants, payment contracts and the
+   two canonical fingerprints.
+4. Add the repeatable synthetic seed and cleanup mechanism in a separate repository change.
+5. Switch an isolated Vercel Preview to Clean Staging with suppressed/test provider configuration.
+6. Rebase PR #18 after the baseline merge, assign its migration a later timestamp, and validate it
+   through the same controlled path.
+7. Keep inactive Legacy Staging frozen during the transition.
+8. Before Production, complete the separately approved read-only cardinality check and additive
+   compatibility-DDL plan; never apply the initial baseline DDL to the existing Production schema.
 
-## Completion evidence for environment creation
+## Recorded creation evidence and remaining release evidence
 
-The infrastructure task is not complete until its report records the organization/region, approved
-cost, new project ref, source `main` SHA, applied migration versions, exact history-equality result,
-environment-variable scopes by name only, provider suppression/test mode, synthetic seed/cleanup
-status, Vercel Preview linkage status and every deferred action. Never include credential values or
-personal data.
+This task was supplied the environment name, project ref, region, `ACTIVE_HEALTHY` status, zero
+migrations and zero public tables. It did not access the project or inspect credentials. Before the
+first baseline apply, re-verify those facts, the exact source `main` SHA, dry-run scope,
+environment-variable scopes by name only, provider suppression/test mode and every deferred action.
+After apply, record migration-history equality, schema contracts, synthetic seed/cleanup status and
+Vercel Preview linkage. Never include credential values or personal data.

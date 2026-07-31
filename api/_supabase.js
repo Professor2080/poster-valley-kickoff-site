@@ -8,6 +8,14 @@ export class PublicRequestError extends Error {
   }
 }
 
+export class SupabaseRequestError extends Error {
+  constructor(status, databaseCode = '') {
+    super(`Supabase request failed with status ${status}.`)
+    this.status = status
+    this.databaseCode = databaseCode
+  }
+}
+
 export function sendJson(res, status, payload) {
   res.status(status).setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(payload))
@@ -193,7 +201,16 @@ async function supabaseRequest(table, { method, query, body, prefer = 'return=mi
 
   const text = await response.text()
 
-  if (!response.ok) throw new Error(`Supabase ${method} failed with status ${response.status}.`)
+  if (!response.ok) {
+    let databaseCode = ''
+    try {
+      const errorPayload = text ? JSON.parse(text) : null
+      databaseCode = typeof errorPayload?.message === 'string' ? errorPayload.message : ''
+    } catch {
+      databaseCode = ''
+    }
+    throw new SupabaseRequestError(response.status, databaseCode)
+  }
 
   if (!text) {
     return null
@@ -257,6 +274,18 @@ export async function updateRows(table, query, row) {
   })
 
   return Array.isArray(result) ? result : []
+}
+
+export async function callRpc(functionName, body) {
+  if (!/^[a-z][a-z0-9_]{2,99}$/.test(functionName)) {
+    throw new Error('Invalid Supabase RPC name.')
+  }
+
+  return supabaseRequest(`rpc/${functionName}`, {
+    method: 'POST',
+    body,
+    prefer: undefined,
+  })
 }
 
 export function handleEndpointError(res, error) {

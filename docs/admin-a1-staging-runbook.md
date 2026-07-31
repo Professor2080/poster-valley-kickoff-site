@@ -1,17 +1,18 @@
 # A1 admin foundation: staging runbook and A2 contract handoff
 
-> **Execution status:** blocked until Clean Staging exists and is built from committed migrations on
-> `main`. Project `cdmocdodehjmcgtxicaj` is Legacy Staging, is not a valid migration baseline and
-> must not receive this feature workflow. See the
+> **Execution status:** blocked until the canonical baseline is merged and applied to Clean Staging
+> `stbunwkgvxfwmbjivgos` under separate authorization. Project `cdmocdodehjmcgtxicaj` is inactive
+> Legacy Staging, is not a valid migration baseline and must not receive this feature workflow. See the
 > [Clean Staging runbook](clean-staging-runbook.md).
 
 ## Scope and identity
 
 This runbook is retained for its A1 contract and scenario design, not as evidence that Legacy
 Staging matches Git. Its earlier remote-execution record was tied to the now-frozen environment and
-cannot establish a current migration baseline. Committed migrations on `main`, including
-`supabase/migrations/20260720090000_admin_auth_data_foundation.sql` and
-`supabase/migrations/20260720093000_admin_auth_data_hardening.sql`, are authoritative. ADR-001's sole
+cannot establish a current migration baseline. The sole active canonical migration is
+`supabase/migrations/20260731113000_schema_baseline_v1.sql`. The former A1 source files are
+byte-preserved under `supabase/migrations-archive/pre-baseline-v1/` for provenance and must never be
+executed as active migrations. ADR-001's sole
 initial manager is Pascal. `studio@postervalley.nl` is Pascal's approved Supabase Auth login
 identity, not a second manager. No operator or other manager is approved initially.
 
@@ -37,9 +38,9 @@ The foundation migration adds `admin_roles`, append-only `admin_audit_events` an
 
 Forward compatibility: all additions are new objects; no existing table, column, constraint, status, flow, or RLS policy changes. Existing service-role server flows continue. Rollback is a decision, not automatic: first stop A1 writers and export/review new event/role/product data; dropping tables would discard newly written records and is unsafe after use. Prefer a forward corrective migration.
 
-## Revalidation procedure after Clean Staging exists
+## Revalidation procedure after the canonical Clean Staging apply
 
-1. Prerequisite: Pascal has separately approved the Clean Staging task, and the exact newly recorded
+1. Prerequisite: Pascal has separately approved the Clean Staging task, and the exact recorded
    project ref matches the [environment matrix](environment-matrix.md). Stop on Legacy Staging,
    Production `epqpeoubkbftcvxjbqeo`, or any other ref.
 2. Build Clean Staging from committed migrations on `main` in order. Before any A1-specific

@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node --test",
+    "test:schema-baseline": "node scripts/database/verify-schema-baseline.mjs",
     "preview": "vite preview",
     "preflight": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tooling/preflight.ps1",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tooling/verify.ps1",

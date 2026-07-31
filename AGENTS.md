@@ -135,11 +135,12 @@ exact target project and deployment before any remote action.
 - Vercel Preview is a deployment environment. When remote validation is separately approved, it
   may use only Clean Staging with browser-safe public Staging configuration, suppressed operational
   email and Mollie test mode.
-- Clean Staging does not exist yet. Its creation is a separate cost-bearing infrastructure task;
-  after creation it is the only normal remote validation target and is built solely from committed
-  migrations on `main` with synthetic data.
-- Legacy Staging (`cdmocdodehjmcgtxicaj`) is a **frozen legacy environment — not a valid migration
-  baseline**. Do not deploy new feature migrations to it.
+- Clean Staging (`stbunwkgvxfwmbjivgos`, `eu-west-1`) exists and was recorded as
+  `ACTIVE_HEALTHY`, with zero migrations and zero public tables. It is the only normal remote
+  validation target, but it remains off-limits until a separate task authorizes access and the
+  canonical baseline has been merged on `main`.
+- Legacy Staging (`cdmocdodehjmcgtxicaj`) is an **INACTIVE frozen legacy environment — not a valid
+  migration baseline**. Do not access it or deploy new feature migrations to it.
 - Production (`main`, the Production Vercel environment, and Supabase
   `epqpeoubkbftcvxjbqeo`) is outside normal agent work.
 - Keep operational email suppressed and use no live payment credential in Local, Preview, or
@@ -172,8 +173,8 @@ Stop immediately on an unexpected dependency, target mismatch, schema difference
 
 Do not assume Staging access is authorized by a code-change request. Ask for separate authorization before remote migrations or stateful tests. Keep email suppressed and do not create real payments. Prefer transaction-wrapped synthetic fixtures with verified rollback.
 
-Follow [`docs/clean-staging-runbook.md`](docs/clean-staging-runbook.md). Until Clean Staging exists
-and its pre-feature migration history exactly equals `main`, database-backed Preview feature
+Follow [`docs/clean-staging-runbook.md`](docs/clean-staging-runbook.md). Until Clean Staging's
+pre-feature migration history exactly equals committed `main`, database-backed Preview feature
 validation is blocked.
 
 ### Frozen workstreams

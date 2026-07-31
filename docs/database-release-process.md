@@ -23,6 +23,24 @@ separate recovery plan, preserved evidence, exact provenance, independent review
 approval; the resulting files are not authoritative until their contents and history are reconciled
 through an approved repository change.
 
+## Schema Baseline v1 promotion status
+
+- `supabase/migrations/20260731113000_schema_baseline_v1.sql` is the only active migration in this
+  branch and has been proven twice from `template0` on PostgreSQL 17.
+- The six pre-baseline-generation migrations are preserved byte-for-byte under
+  `supabase/migrations-archive/pre-baseline-v1/`; their manifest is provenance, never active CLI
+  input.
+- The payment-start idempotency finding is repaired locally through one canonical order per
+  invitation, one payment per order/provider, atomic server-only RPCs and persistent Mollie keys.
+- Clean Staging `stbunwkgvxfwmbjivgos` exists and was supplied to this task as `ACTIVE_HEALTHY`,
+  with zero migrations and zero public tables. This promotion task does not access it.
+- The next separately authorized database gate is to apply the canonical baseline to that empty
+  Clean Staging project after merge and verify schema, grants and payment contracts.
+- Before Production, perform a separately authorized read-only cardinality check and approve the
+  additive compatibility DDL. The baseline file itself must never be run against the existing
+  Production schema.
+- Legacy Staging `cdmocdodehjmcgtxicaj` remains inactive and is not a release target.
+
 ## Feature-migration entry gate
 
 Before applying any feature migration to a persistent target:
