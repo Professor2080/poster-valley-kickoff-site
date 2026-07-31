@@ -22,8 +22,8 @@ npm run dev
 ```
 
 `npm run dev` is enough for visual frontend work. Local development is database-free by default.
-Remote API/provider validation is a separate, explicitly approved task and may target only the
-isolated Staging environment during normal development.
+Remote API/provider validation is a separate, explicitly approved task and may target only Clean
+Staging after that environment has been created and verified.
 
 ## Checks
 
@@ -46,9 +46,18 @@ The required contract arguments and worktree roles are documented in the
 
 - [Development workflow](docs/development-workflow.md)
 - [Environment matrix](docs/environment-matrix.md)
+- [Database release process](docs/database-release-process.md)
+- [Clean Staging runbook](docs/clean-staging-runbook.md)
 - [Worktree and branch policy](docs/worktree-and-branch-policy.md)
 - [Release runbook and external-settings plan](docs/release-runbook.md)
 - [Skill governance and register](docs/skills/README.md)
+
+Changes follow one of three routes: fast for low-risk repository work, controlled for data,
+authorization, payments, operational email and other trust-boundary changes, and infrastructure for
+environment or platform work. Committed migrations on `main` are the sole database-history source.
+The existing Supabase project `cdmocdodehjmcgtxicaj` is frozen as Legacy Staging and is not a valid
+migration baseline. Clean Staging has not been created yet; creating it requires a separate cost
+approval and infrastructure task.
 
 ## First Drop Assets
 
@@ -115,10 +124,13 @@ business and legal review.
 
 ## Supabase Setup
 
-`supabase/schema.sql` and `supabase/migrations/` are version-controlled database source. Do not
-execute either during ordinary local development. Local stack setup, Staging validation and every
-remote migration are separate work blocks with explicit target verification and human approval.
-See the [environment matrix](docs/environment-matrix.md) and
+`supabase/schema.sql` and `supabase/migrations/` are version-controlled database source. Committed
+migration files on `main` are the only authoritative migration history; an applied migration is
+never edited in place. Do not execute schema or migration files during ordinary local development.
+Local stack setup, Clean Staging validation and every remote migration are separate work blocks with
+explicit target verification and human approval. See the
+[database release process](docs/database-release-process.md),
+[environment matrix](docs/environment-matrix.md) and
 [release runbook](docs/release-runbook.md).
 
 The tables have Row Level Security enabled. No public select policy is added; submissions should go
@@ -192,9 +204,10 @@ Mollie webhooks are received at:
 /api/mollie/webhook
 ```
 
-For local development, Mollie must be able to reach the webhook URL. Use a tunnel such as ngrok, or
-test on a Vercel preview deployment. The webhook is idempotent for customer/internal paid emails by
-checking sent timestamp columns on the order before sending.
+Provider-backed webhook testing belongs to the controlled path and may use only an explicitly
+approved Clean Staging/Preview setup; it must not use Production or Legacy Staging for feature
+verification. The webhook is idempotent for customer/internal paid emails by checking sent
+timestamp columns on the order before sending.
 
 ## Not Production-Ready Yet
 

@@ -28,21 +28,96 @@ archive worktree without requiring `-ContinueExistingChanges`; it prints only Gi
 does not reset, stash, clean, checkout or otherwise mutate the worktree. Change mode remains
 restricted to the active role and retains its explicit dirty-tree authorization.
 
-## Normal change path
+## Choose one change route
+
+Every task starts with the same repository preflight and then uses exactly one of these routes.
+Database or environment drift changes the route; it is never an incidental repair inside a feature
+task. Definitions of Done and release gates are in the [release runbook](release-runbook.md).
+
+### Fast path
+
+Use this only when the diff has no database, authentication/authorization, payment, operational
+email or external-provider impact. Ordinary documentation, styling and isolated UI changes qualify
+when they do not change a security boundary.
+
+1. Create a focused branch and separate active worktree from verified `origin/main`.
+2. Implement the bounded change.
+3. Run repository-local verification proportional to the change.
+4. Perform at most one targeted review when the diff warrants it.
+5. After separate publication authority, open a Draft PR.
+6. Require GitHub Actions and the exact Vercel Preview for the candidate commit to pass.
+7. Obtain explicit merge approval.
+8. Perform the Production-route check from the release runbook.
+
+A normal documentation, styling or isolated UI change without security impact does not require an
+independent broad security review.
+
+### Controlled path
+
+Use this for database, authentication/authorization, payments, operational email, personal data,
+inventory, orders, fulfilment or provider-webhook changes.
+
+1. Implement the bounded change in its active worktree.
+2. Run the complete local verification contract.
+3. Obtain exactly one independent broad review.
+4. Perform at most one targeted repair round.
+5. Do not start another broad review after a successful repair unless a new `BLOCKER` or `HIGH`
+   finding is discovered.
+6. After separate publication authority, open a Draft PR and verify both required GitHub checks.
+7. For a migration, prove that Clean Staging and `main` have identical pre-feature migration
+   history and that the dry-run lists only the intended migration.
+8. Apply the migration only after separate Clean Staging authorization.
+9. Run synthetic concurrency, idempotency and transaction tests.
+10. Run the authenticated Vercel Preview scenario against Clean Staging.
+11. Remove synthetic test records and record cleanup evidence.
+12. Obtain separate Production-release approval.
+13. Use database-first release when backward-compatible, then verify Production read-only after the
+    application deploy.
+
+The migration-specific contract is authoritative in the
+[database release process](database-release-process.md). Until Clean Staging exists and matches
+`main`, migration steps 7 onward are blocked rather than redirected to Legacy Staging.
+
+### Infrastructure path
+
+Always use a separate infrastructure task and, when files change, a temporary infrastructure
+worktree for:
+
+- creating or replacing an environment;
+- migration-history problems;
+- environment scopes, project links or secret rotation;
+- GitHub rulesets;
+- hosting, domains or provider configuration;
+- backups and recovery.
+
+An infrastructure problem is not solved in the middle of a product feature. The Clean Staging
+creation sequence is in the [Clean Staging runbook](clean-staging-runbook.md).
+
+## Common change discipline
 
 1. Fetch refs only with `git fetch origin --prune`.
 2. Verify the expected `origin/main` SHA and a clean reference worktree.
 3. Create a focused `codex/<topic>` branch and separate worktree from that exact SHA.
-4. Read `AGENTS.md` and the documents linked from it.
+4. Read `AGENTS.md` and the task-relevant linked documents.
 5. Make only the approved change; preserve unrelated and protected worktrees.
-6. Run `npm run verify -- <the same active-worktree contract arguments>`.
+6. Run the verification required by the selected route.
 7. Review the complete diff and prove that out-of-scope files did not change.
 8. Stop uncommitted unless the current request explicitly authorizes a commit.
-9. When authorized: focused commit, push, Draft PR, CI, Vercel Preview, human review, then a
+9. When authorized, use a focused commit, push, Draft PR, CI, Vercel Preview, human review and a
    separately approved merge.
 
 Never develop directly on `main`. Never treat permission to edit as permission to commit, push,
 open/update a PR, merge or deploy.
+
+## Review severity and stop rules
+
+- `BLOCKER` and `HIGH` findings must be resolved before publication or release.
+- `MEDIUM` findings must be resolved before release or explicitly accepted by Pascal.
+- `LOW` and `NOTE` findings are recorded but do not automatically block.
+- Do not create review-on-review loops without a concrete new technical finding.
+- Stop immediately on a wrong project target, a Production target during Staging work, migration
+  drift, unexpected diff files, secrets or personal data in output, an ambiguous dry-run, or any
+  provider/database action outside scope.
 
 ## Local verification
 
