@@ -11,6 +11,12 @@ const activeDirectory = new URL('../supabase/migrations/', import.meta.url)
 const archiveDirectory = new URL('../supabase/migrations-archive/pre-baseline-v1/', import.meta.url)
 const canonicalName = '20260731113000_schema_baseline_v1.sql'
 const canonicalSha = 'e4db9505f590ba934543e1ed33e25a8172e66c430596047afe4321d619d8f510'
+const hardeningName = '20260731193947_harden_default_privileges.sql'
+const hardeningSha = '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9'
+const activeMigrations = [
+  [canonicalName, canonicalSha],
+  [hardeningName, hardeningSha],
+]
 const archivePromotionCommit = '73fed0224056f040ce085fbedeb27461695d8c30'
 
 const originalGitHashes = new Map([
@@ -48,9 +54,14 @@ function canonicalizeCheckoutBytes(bytes, fileName) {
   return Buffer.from(text.replace(/\r\n/gu, '\n'), 'utf8')
 }
 
-test('the canonical baseline is the only active migration and retains its proven bytes', async () => {
+test('the canonical baseline and allowlisted hardening are the only active migrations', async () => {
   const activeFiles = (await readdir(activeDirectory)).sort()
-  assert.deepEqual(activeFiles, [canonicalName])
+  assert.deepEqual(activeFiles, activeMigrations.map(([fileName]) => fileName))
+
+  for (const [fileName, expectedSha] of activeMigrations) {
+    const migration = await readFile(new URL(fileName, activeDirectory))
+    assert.equal(sha256(migration), expectedSha, `${fileName} must retain its allowlisted SHA-256`)
+  }
 
   const canonical = await readFile(new URL(canonicalName, activeDirectory))
   assert.equal(canonical.byteLength, 98_654)

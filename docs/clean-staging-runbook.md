@@ -15,20 +15,20 @@ Repository and release facts recorded for this operating-model task:
 - Production Supabase: `epqpeoubkbftcvxjbqeo`, unchanged and never a feature-test target;
 - Legacy Staging: `cdmocdodehjmcgtxicaj`, inactive, frozen and not a reproducible migration
   baseline;
-- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, supplied as `ACTIVE_HEALTHY`, with zero
-  migrations and zero public tables. This repository task did not connect to or independently
-  re-query the project.
+- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, `ACTIVE_HEALTHY`; the canonical baseline was
+  applied under separate authorization and its migration history, schema, grants and contracts were
+  verified. The default-privilege-hardening task performs no remote database write.
 
 | Component | Status |
 | --- | --- |
 | Production | active and unchanged |
 | Legacy Staging | inactive and frozen; not a valid migration baseline |
-| Clean Staging | `ACTIVE_HEALTHY`; empty; not accessed by the baseline-promotion task |
+| Clean Staging | `ACTIVE_HEALTHY`; canonical baseline applied and verified; hardening not applied |
 | PR #18 | Draft; unchanged; rebase only after the baseline merge, with a later migration timestamp |
 | A4 | frozen and outside the active release path |
 | Migration-history recovery | stopped |
 | WooCommerce architecture | recorded on `main` |
-| Next database gate | separately authorize and apply the merged canonical baseline to empty Clean Staging |
+| Next database gate | separately authorize and apply only `20260731193947_harden_default_privileges.sql` |
 
 ### Shipping PR #18
 
@@ -56,7 +56,7 @@ decision.
 Clean Staging is a separate Supabase environment that:
 
 - has project ref `stbunwkgvxfwmbjivgos` in `eu-west-1` and was recorded as `ACTIVE_HEALTHY`;
-- starts with zero migrations and zero public tables before the canonical baseline gate;
+- started with zero migrations and zero public tables before the completed canonical baseline gate;
 - is built solely by applying committed migrations from `main` in order;
 - is disposable and fully rebuildable from that history plus an approved synthetic seed process;
 - contains no Production copy, customer record, real address or other real personal data;
@@ -96,11 +96,13 @@ defines the process only and intentionally creates no seed file or data.
 
 Each external or stateful step below is a separately authorized infrastructure action.
 
-1. Merge the reviewed canonical baseline through the normal GitHub release path.
-2. Under separate authorization, verify the exact Clean Staging project, empty history and empty
-   public schema, then require the dry-run to contain only `20260731113000_schema_baseline_v1.sql`.
-3. Apply that baseline to Clean Staging and verify schema, RLS, grants, payment contracts and the
-   two canonical fingerprints.
+1. Keep Draft PR #20 on the normal GitHub review path; the canonical baseline apply and its
+   read-only schema, RLS, grant, payment-contract and fingerprint verification are complete.
+2. Under separate authorization, prove that Clean Staging history contains exactly
+   `20260731113000_schema_baseline_v1.sql` and require the dry-run to contain only
+   `20260731193947_harden_default_privileges.sql`.
+3. Apply only that hardening migration and verify migration history plus the future-object
+   default-ACL contracts; stop on every extra, missing or reordered version.
 4. Add the repeatable synthetic seed and cleanup mechanism in a separate repository change.
 5. Switch an isolated Vercel Preview to Clean Staging with suppressed/test provider configuration.
 6. Rebase PR #18 after the baseline merge, assign its migration a later timestamp, and validate it
@@ -111,9 +113,9 @@ Each external or stateful step below is a separately authorized infrastructure a
 
 ## Recorded creation evidence and remaining release evidence
 
-This task was supplied the environment name, project ref, region, `ACTIVE_HEALTHY` status, zero
-migrations and zero public tables. It did not access the project or inspect credentials. Before the
-first baseline apply, re-verify those facts, the exact source `main` SHA, dry-run scope,
-environment-variable scopes by name only, provider suppression/test mode and every deferred action.
-After apply, record migration-history equality, schema contracts, synthetic seed/cleanup status and
-Vercel Preview linkage. Never include credential values or personal data.
+The environment name, project ref, region and `ACTIVE_HEALTHY` status are recorded, and the
+canonical baseline apply has separate verification evidence. Before the hardening apply, re-verify
+the exact source commit, baseline-only remote history, dry-run scope, environment-variable scopes by
+name only, provider suppression/test mode and every deferred action. After apply, record migration-
+history equality, existing-object contracts, future-object default ACLs, synthetic seed/cleanup
+status and Vercel Preview linkage. Never include credential values or personal data.

@@ -1,9 +1,10 @@
 # Poster Valley Schema Baseline v1 — lokaal uitvoeringsbewijs
 
-Status: **canonical baseline inclusief de gerichte payment-idempotencyreparatie lokaal tweemaal
-bewezen en als enige actieve migratie gepromoveerd; geen remote databaseactie uitgevoerd**.
+Status: **canonical baseline inclusief de gerichte payment-idempotencyreparatie op Clean Staging
+toegepast en geverifieerd; de allowlisted post-baseline-default-privilege-hardening is lokaal
+tweemaal bewezen en nog niet remote toegepast**.
 
-Deze repositorypromotie omvat één commit, branchpush en Draft PR. Zij autoriseert geen migration
+Deze hardeninguitbreiding omvat één commit en branchpush naar de bestaande Draft PR. Zij autoriseert geen migration
 apply, `db push`, `db pull`, `migration fetch`, `migration repair`, remote reset,
 Productionwijziging, Clean Staging-wijziging, deployment of merge.
 
@@ -13,11 +14,12 @@ Productionwijziging, Clean Staging-wijziging, deployment of merge.
 - Worktree:
   `C:\Users\pbenr\Projects\PosterValley\PosterValley\.worktrees\schema-baseline-v1`.
 - Branch: `codex/schema-baseline-v1`.
-- HEAD en actuele `origin/main`: `2027378daae5bb3f29354fcd449367ff1c648909`.
+- Start-HEAD: `f5e7fce47fa1a2b82ba34b51c24125cf1e418e9f`; actuele `origin/main`:
+  `2027378daae5bb3f29354fcd449367ff1c648909`.
 - Production: `epqpeoubkbftcvxjbqeo`.
-- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, door de opdracht vastgelegd als
-  `ACTIVE_HEALTHY`, met 0
-  migrations en 0 public tables; niet benaderd en geen target in deze taak.
+- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, `ACTIVE_HEALTHY`; de canonical baseline is
+  daar onder aparte autorisatie toegepast en de schema-, grant- en contractcontroles zijn
+  read-only uitgevoerd. De hardeningmigratie wordt in deze taak niet remote toegepast.
 - Legacy Staging: `cdmocdodehjmcgtxicaj`; INACTIVE, niet benaderd en geen target.
 - PR #18 en A4 vallen buiten de baselinepromotie.
 
@@ -76,10 +78,15 @@ Er ontbreekt geen objectgroep uit de lokale bronset.
 
 ## Canonical baseline en historisch archief
 
-- Actief pad: `supabase/migrations/20260731113000_schema_baseline_v1.sql`.
+- Eerste actieve migratie: `supabase/migrations/20260731113000_schema_baseline_v1.sql`.
 - Grootte: 98.654 bytes; 1.513 regels.
 - SHA-256: `e4db9505f590ba934543e1ed33e25a8172e66c430596047afe4321d619d8f510`.
-- `supabase/migrations/` bevat exact dit ene bestand.
+- Exact allowlisted post-baselinepad:
+  `supabase/migrations/20260731193947_harden_default_privileges.sql`.
+- Hardening-SHA-256:
+  `8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9`.
+- `supabase/migrations/` bevat exact deze twee strikt oplopende bestanden. De runner blokkeert
+  ontbrekende, verwisselde of onverwachte actieve migraties fail-closed.
 - De zes bronmigraties staan byte-ongewijzigd in
   `supabase/migrations-archive/pre-baseline-v1/`; `manifest.json` bindt ieder oorspronkelijk pad en
   archivepad aan de SHA-256 en markeert het bestand als `historical_pre_baseline_generation`.
@@ -96,6 +103,12 @@ overgenomen. De enige top-level DML is:
 
 Runtime-DML in de bewezen A3–A3.2-functies blijft behouden; dat is applicatielogica, geen
 baseline-seed of backfill.
+
+De tweede migratie wijzigt geen bestaand applicatieobject of bestaande object-ACL. Zij verwijdert
+voor toekomstige `public`-objecten de standaardprivileges van `PUBLIC`, `anon`, `authenticated` en
+`service_role` op tabellen, functies en sequences. De globale PostgreSQL-default `EXECUTE` voor
+`PUBLIC` wordt globaal ingetrokken; de Supabase-rollen worden daarnaast schemaspecifiek
+ingetrokken. Latere migraties moeten hun minimaal benodigde grants expliciet toevoegen.
 
 ## Applicatiecallers en minimale grants
 
@@ -241,15 +254,19 @@ De permanente lokale bootstrap staat in `supabase/tests/schema-baseline-v1-boots
 - minimale `auth.uid()`-stub;
 - schema `extensions`;
 - extensies `pgcrypto` en `uuid-ossp`.
+- de relevante gehoste Supabase-defaultprivileges, zodat de hardening ook lokaal tegen de verwachte
+  uitgangssituatie wordt bewezen.
 
 Bootstrap SHA-256:
-`be3f9a6b21d5bf5b58ba9bf2c562ca0eeee2c5b885e4c9b24d69f6bef81a65ec`.
+`e9be53604e1ede96d095f2bf6e63d4b6685238f4a03e4576e39d91ec5f430fe0`.
 De bootstrap bevat geen applicatieobject, Auth-gebruiker, klantdata of credential.
 
 De runner `scripts/database/verify-schema-baseline.mjs` accepteert uitsluitend expliciet
 geactiveerde loopbacktoegang en PostgreSQL 17. De tijdelijke server luisterde uitsluitend op een
 lokale `127.0.0.1`-poort; datamap en logs bleven onder de tijdelijke taakroot. Er is geen
-Windows-service geregistreerd.
+Windows-service geregistreerd. De uitvoervolgorde is vast: compatibility bootstrap, canonical
+baseline, default-privilege-hardening en daarna de SQL-contracttests. Baseline- en hardening-SHA's
+zijn expliciet gepind.
 
 De historische fingerprintserialisatie bevatte het ruwe OID van de policyrol `authenticated`.
 Omdat een OID geen semantisch schemaonderdeel is, reserveert de runner op een verse cluster vier
@@ -264,24 +281,34 @@ De formele run 1 is schoon vanaf `template0` uitgevoerd:
 
 - bootstrap: geslaagd;
 - canonical baseline: geslaagd zonder SQL-fout;
+- default-privilege-hardening: geslaagd zonder SQL-fout;
+- bestaande objectcontracten en nieuwe default-ACL-contracttests: geslaagd;
 - baseline-SHA vóór/na identiek;
+- hardening-SHA vóór/na identiek;
 - structurele fingerprint:
   `6b21a5c80183d9cffed0b5395fcfe231934a55654788dbc3d3a08d0ec5c8409c`;
 - volledige genormaliseerde fingerprint inclusief ACL en datacounts:
-  `3c6d52fc996ded4cd77a316e1984315fd08aeec96e37ed66a07b58bb02613434`.
+  `3c6d52fc996ded4cd77a316e1984315fd08aeec96e37ed66a07b58bb02613434`;
+- default-ACL-fingerprint:
+  `b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135`.
 
 ### Run 2
 
 Run 1 is volledig verwijderd. Run 2 is opnieuw vanaf `template0` uitgevoerd met exact dezelfde
-bootstrap en byte-ongewijzigde baseline:
+bootstrap, byte-ongewijzigde baseline en byte-ongewijzigde hardening:
 
 - bootstrap: geslaagd;
 - canonical baseline: geslaagd zonder SQL-fout;
+- default-privilege-hardening: geslaagd zonder SQL-fout;
+- bestaande objectcontracten en nieuwe default-ACL-contracttests: geslaagd;
 - baseline-SHA vóór/na identiek;
+- hardening-SHA vóór/na identiek;
 - structurele fingerprint:
   `6b21a5c80183d9cffed0b5395fcfe231934a55654788dbc3d3a08d0ec5c8409c`;
 - volledige genormaliseerde fingerprint:
-  `3c6d52fc996ded4cd77a316e1984315fd08aeec96e37ed66a07b58bb02613434`.
+  `3c6d52fc996ded4cd77a316e1984315fd08aeec96e37ed66a07b58bb02613434`;
+- default-ACL-fingerprint:
+  `b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135`.
 
 Beide runs hadden bovendien:
 
@@ -296,13 +323,18 @@ Beide runs hadden bovendien:
 - alle vijf benoemde payment-cardinaliteits-/stateconstraints aanwezig;
 - exact 1 `product_registry`-regel met lifecycle `interest` en authority `custom`;
 - 0 rijen in alle 12 overige applicatietabellen;
-- exact de minimale grantmatrix hierboven.
+- exact de minimale grantmatrix hierboven;
+- geen standaardprivilege voor toekomstige `public`-tabellen, functies of sequences aan
+  `PUBLIC`, `anon`, `authenticated` of `service_role`;
+- een transactionele future-objectproef waarin geen impliciet privilege ontstaat en een expliciete
+  smalle `service_role`-grant wel werkt, gevolgd door volledige rollback.
 
 De structurele fingerprint is SHA-256 over een deterministische, geordende serialisatie van de
 relevante PostgreSQL-catalogi. De volledige fingerprint voegt ACL's en het deterministische
 datamanifest toe. Beide formele databases zijn volledig onafhankelijk vanaf `template0` opgebouwd;
-run 1 is vóór run 2 verwijderd. SHA, omvang en regelcount van de baseline bleven voor en na beide
-runs bytegelijk.
+run 1 is vóór run 2 verwijderd. SHA, omvang en regelcount van de baseline en de SHA van de hardening
+bleven voor en na beide runs bytegelijk. De canonical structurele en volledige fingerprints bleven
+ongewijzigd; de nieuwe default-ACL-fingerprint was in beide runs identiek.
 
 ### Gelijktijdigheidsbewijs
 
@@ -378,13 +410,14 @@ toegepast. Zij mag daarom niet als bestaande Productionstructuur worden gepresen
 
 ## Vervolg na de baselinepromotie
 
-1. Laat de Draft PR, beide vereiste GitHub-checks en de exacte Vercel Preview groen worden; voer
-   geen remote databaseactie uit vanuit deze promotietaak.
+1. Laat Draft PR #20, beide vereiste GitHub-checks en de exacte Vercel Preview groen worden; voer
+   geen remote databaseactie uit vanuit deze hardeningtaak.
 2. Merge uitsluitend na aparte goedkeuring.
-3. Verifieer onder aparte autorisatie dat Clean Staging nog exact leeg is en de dry-run alleen
-   `20260731113000_schema_baseline_v1.sql` bevat.
-4. Pas de canonical baseline toe op Clean Staging en verifieer schema, grants, fingerprints en
-   paymentcontracten met synthetische data en onderdrukte providers.
+3. Verifieer onder aparte autorisatie dat Clean Staging exact de canonical baseline als enige
+   migration-historyversie bevat en de dry-run alleen
+   `20260731193947_harden_default_privileges.sql` bevat.
+4. Pas uitsluitend die hardeningmigratie toe en verifieer migration history, bestaande
+   objectcontracten en toekomstige default-ACL-contracten read-only.
 5. Rebase PR #18 pas na de baseline-merge, maak via de CLI een nieuwe latere timestamp en behandel
    de shippingmigration als gewone additive migration.
 6. Voer vóór Production afzonderlijk de read-only cardinaliteitscontrole uit en keur daarna pas
@@ -456,11 +489,12 @@ reparatieronde niet gewijzigd.
 
 ## Huidig besluit
 
-De gerichte payment-idempotencyfinding is lokaal gerepareerd en bewezen; twee volledig lege lokale
-rebuilds zijn identiek en de concurrentieharness is groen. De canonical baseline is de enige actieve
-migratie en de zes bronbestanden zijn bytegelijk gearchiveerd. Zij is na deze bewuste uitbreiding
-niet zonder meer gelijk aan de vastgelegde Productioninventaris. De volgende databasegate is een
-apart geautoriseerde apply naar lege Clean Staging; vóór Production blijven de read-only
-cardinaliteitscontrole en afzonderlijke additive-DDL-goedkeuring verplicht.
+De gerichte payment-idempotencyfinding en default-privilege-hardening zijn lokaal bewezen; twee
+volledig lege lokale rebuilds zijn identiek, de default-ACL-contracttests zijn groen en de
+concurrentieharness is groen. De canonical baseline blijft bytegelijk en is de immutable eerste
+actieve migratie; alleen de exact gepinde hardening volgt. De baseline is op Clean Staging toegepast,
+maar de hardening niet. De volgende databasegate is een apart geautoriseerde apply van uitsluitend
+die hardeningmigratie; vóór Production blijven de read-only cardinaliteitscontrole en afzonderlijke
+additive-DDL-goedkeuring verplicht.
 
-**PAYMENT IDEMPOTENCY LOKAAL GEREPAREERD; CANONICAL BASELINE LOKAAL GEPROMOVEERD**
+**CANONICAL BASELINE ONGEWIJZIGD; DEFAULT-PRIVILEGE-HARDENING LOKAAL BEWEZEN**

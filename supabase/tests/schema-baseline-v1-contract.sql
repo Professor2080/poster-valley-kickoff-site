@@ -272,3 +272,96 @@ begin
 end;
 $$;
 rollback;
+
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from pg_catalog.pg_default_acl d
+    join pg_catalog.pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral pg_catalog.aclexplode(d.defaclacl) a
+    where d.defaclrole = 'postgres'::regrole
+      and n.nspname = 'public'
+      and d.defaclobjtype = 'r'
+      and a.grantee in (0, 'anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
+  ),
+  'future public tables have no default grants for PUBLIC or Data API roles'
+);
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from pg_catalog.pg_default_acl d
+    left join pg_catalog.pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral pg_catalog.aclexplode(d.defaclacl) a
+    where d.defaclrole = 'postgres'::regrole
+      and (d.defaclnamespace = 0 or n.nspname = 'public')
+      and d.defaclobjtype = 'f'
+      and a.grantee in (0, 'anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
+  ),
+  'future functions have no default EXECUTE for PUBLIC or Data API roles'
+);
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from pg_catalog.pg_default_acl d
+    join pg_catalog.pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral pg_catalog.aclexplode(d.defaclacl) a
+    where d.defaclrole = 'postgres'::regrole
+      and n.nspname = 'public'
+      and d.defaclobjtype = 'S'
+      and a.grantee in (0, 'anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
+  ),
+  'future public sequences have no default grants for PUBLIC or Data API roles'
+);
+
+begin;
+create table public.pv_default_acl_table_contract (id bigint primary key);
+create function public.pv_default_acl_function_contract()
+returns integer
+language sql
+as 'select 1';
+create sequence public.pv_default_acl_sequence_contract;
+
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from pg_catalog.pg_class c
+    cross join lateral pg_catalog.aclexplode(c.relacl) a
+    where c.oid = 'public.pv_default_acl_table_contract'::regclass and a.grantee = 0
+  )
+  and not pg_catalog.has_table_privilege('anon', 'public.pv_default_acl_table_contract', 'select,insert,update,delete,truncate,references,trigger,maintain')
+  and not pg_catalog.has_table_privilege('authenticated', 'public.pv_default_acl_table_contract', 'select,insert,update,delete,truncate,references,trigger,maintain')
+  and not pg_catalog.has_table_privilege('service_role', 'public.pv_default_acl_table_contract', 'select,insert,update,delete,truncate,references,trigger,maintain'),
+  'new public table is deny-by-default'
+);
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from pg_catalog.pg_proc p
+    cross join lateral pg_catalog.aclexplode(p.proacl) a
+    where p.oid = 'public.pv_default_acl_function_contract()'::regprocedure and a.grantee = 0
+  )
+  and not pg_catalog.has_function_privilege('anon', 'public.pv_default_acl_function_contract()', 'execute')
+  and not pg_catalog.has_function_privilege('authenticated', 'public.pv_default_acl_function_contract()', 'execute')
+  and not pg_catalog.has_function_privilege('service_role', 'public.pv_default_acl_function_contract()', 'execute'),
+  'new public function is deny-by-default'
+);
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from pg_catalog.pg_class c
+    cross join lateral pg_catalog.aclexplode(c.relacl) a
+    where c.oid = 'public.pv_default_acl_sequence_contract'::regclass and a.grantee = 0
+  )
+  and not pg_catalog.has_sequence_privilege('anon', 'public.pv_default_acl_sequence_contract', 'usage,select,update')
+  and not pg_catalog.has_sequence_privilege('authenticated', 'public.pv_default_acl_sequence_contract', 'usage,select,update')
+  and not pg_catalog.has_sequence_privilege('service_role', 'public.pv_default_acl_sequence_contract', 'usage,select,update'),
+  'new public sequence is deny-by-default'
+);
+
+grant select on table public.pv_default_acl_table_contract to service_role;
+select pg_temp.assert_true(
+  pg_catalog.has_table_privilege('service_role', 'public.pv_default_acl_table_contract', 'select')
+  and not pg_catalog.has_table_privilege('service_role', 'public.pv_default_acl_table_contract', 'insert,update,delete,truncate,references,trigger,maintain'),
+  'explicit later service_role grant remains possible and narrowly scoped'
+);
+rollback;

@@ -25,17 +25,22 @@ through an approved repository change.
 
 ## Schema Baseline v1 promotion status
 
-- `supabase/migrations/20260731113000_schema_baseline_v1.sql` is the only active migration in this
-  branch and has been proven twice from `template0` on PostgreSQL 17.
+- `supabase/migrations/20260731113000_schema_baseline_v1.sql` is the immutable first active
+  migration and has been proven twice from `template0` on PostgreSQL 17.
+- `supabase/migrations/20260731193947_harden_default_privileges.sql` is the exact allowlisted first
+  post-baseline migration. It revokes implicit default privileges for future `public` tables,
+  functions and sequences; later migrations must grant only their explicitly reviewed surface.
 - The six pre-baseline-generation migrations are preserved byte-for-byte under
   `supabase/migrations-archive/pre-baseline-v1/`; their manifest is provenance, never active CLI
   input.
 - The payment-start idempotency finding is repaired locally through one canonical order per
   invitation, one payment per order/provider, atomic server-only RPCs and persistent Mollie keys.
-- Clean Staging `stbunwkgvxfwmbjivgos` exists and was supplied to this task as `ACTIVE_HEALTHY`,
-  with zero migrations and zero public tables. This promotion task does not access it.
-- The next separately authorized database gate is to apply the canonical baseline to that empty
-  Clean Staging project after merge and verify schema, grants and payment contracts.
+- Clean Staging `stbunwkgvxfwmbjivgos` is `ACTIVE_HEALTHY`; the canonical baseline was applied there
+  under separate authorization and its migration history, schema, grants and contracts were
+  verified. This hardening task performs no remote database write.
+- The next separately authorized database gate is to require exact pre-feature history containing
+  only the canonical baseline, dry-run only the allowlisted hardening migration, apply it, and
+  verify the new default-ACL contracts before Preview validation.
 - Before Production, perform a separately authorized read-only cardinality check and approve the
   additive compatibility DDL. The baseline file itself must never be run against the existing
   Production schema.
@@ -73,6 +78,11 @@ Every migration change must be deterministic, reviewable and safe in its intende
 Add SQL-contract regression tests for permissions, RLS, function configuration, indexes,
 constraints and other critical invariants. Never expose service-role credentials, raw invitation
 tokens, personal data or privileged RPC execution to public clients.
+
+Default privileges and existing-object privileges are separate controls. Keep future objects in
+the exposed `public` schema deny-by-default for `PUBLIC`, `anon`, `authenticated` and
+`service_role`; every later migration must add only narrow, reviewed grants and must still configure
+RLS where a Data API role receives table access.
 
 ## Database-first release for additive changes
 
