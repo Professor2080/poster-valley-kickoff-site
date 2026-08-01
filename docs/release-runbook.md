@@ -17,7 +17,9 @@ As recorded on 2026-08-01:
 - Production Supabase is `epqpeoubkbftcvxjbqeo` and unchanged;
 - Legacy Staging `cdmocdodehjmcgtxicaj` is inactive, frozen and not a valid migration baseline;
 - Clean Staging `stbunwkgvxfwmbjivgos` is `ACTIVE_HEALTHY`; the canonical baseline and
-  default-privilege hardening are applied and verified. No synthetic fixture seed has been run.
+  default-privilege hardening are applied and verified. The `PV-CLEAN-STAGING-V1` fixtures remain
+  present and were reconfirmed read-only on 2026-08-02; no fixture write was performed in the PR
+  #20 Production-preparation task.
 
 Ruleset, CI, Vercel, Supabase or provider dashboard state must be rechecked read-only for the exact
 candidate when it becomes release evidence. A recorded status never authorizes a write.
@@ -115,6 +117,19 @@ this Definition of Done cannot pass.
   concurrency testing.
 - No automatic Production database migration is added to CI.
 - A successful Draft PR, CI run, Preview or Clean Staging migration grants no Production authority.
+
+### Explicit pre-launch route for PR #20
+
+PR #20 uses a one-off shortened route because there is not yet a public launch, real visitor flow
+or real order stream. Required CI must still be green and the database remains database-first.
+Only `BLOCKER` and `HIGH` findings automatically stop this specific release; no new broad review or
+further Preview login/fixture test is required. The bounded alignment SQL and metadata-only history
+plan live outside the active migration directory under
+`supabase/production-alignment-candidates/`. Neither file authorizes a Production write.
+
+After separately approved alignment and reconciliation, PR #20 still needs explicit merge
+approval. The GitHub integration then deploys `main`; Pascal reviews frontend and Admin directly on
+Production. The smoke must not create a payment or send operational email.
 
 ## Infrastructure and environment gates
 

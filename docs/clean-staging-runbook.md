@@ -23,7 +23,7 @@ Repository and release facts recorded for this operating-model task:
 | --- | --- |
 | Production | active and unchanged |
 | Legacy Staging | inactive and frozen; not a valid migration baseline |
-| Clean Staging | `ACTIVE_HEALTHY`; canonical baseline and hardening applied and verified; no fixtures seeded |
+| Clean Staging | `ACTIVE_HEALTHY`; canonical baseline and hardening applied and verified; `PV-CLEAN-STAGING-V1` fixtures present |
 | PR #18 | Draft; unchanged; rebase only after the baseline merge, with a later migration timestamp |
 | A4 | frozen and outside the active release path |
 | Migration-history recovery | stopped |
@@ -142,8 +142,10 @@ unambiguously marked synthetic records; ambiguity is a stop, not permission to d
 version-controlled `PV-CLEAN-STAGING-V1` path now provides repeatable seed, verify and limited
 cleanup commands through the scripts under [`scripts/staging`](../scripts/staging/) and the package
 commands documented above. Limited cleanup intentionally retains marked append-only synthetic
-history; a complete reset uses the disposable rebuild route. This tooling had not been executed
-against remote Clean Staging when this documentation correction was committed.
+history; a complete reset uses the disposable rebuild route. A later separately authorized task
+executed the tooling. A read-only check on 2026-08-02 reconfirmed 14 reservations, 11 invitations,
+9 orders and 7 payments, with all 14 reservations marked `test`; this check performed no seed or
+cleanup.
 
 ## Clean Staging roadmap
 

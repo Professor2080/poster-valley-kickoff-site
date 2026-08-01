@@ -1,8 +1,8 @@
 # Poster Valley Schema Baseline v1 — lokaal uitvoeringsbewijs
 
-Status: **canonical baseline inclusief de gerichte payment-idempotencyreparatie op Clean Staging
-toegepast en geverifieerd; de allowlisted post-baseline-default-privilege-hardening is lokaal
-tweemaal bewezen en nog niet remote toegepast**.
+Status: **canonical baseline inclusief de gerichte payment-idempotencyreparatie en de allowlisted
+post-baseline-default-privilege-hardening zijn op Clean Staging toegepast en geverifieerd; de
+synthetische fixtures blijven aanwezig**.
 
 Deze hardeninguitbreiding omvat één commit en branchpush naar de bestaande Draft PR. Zij autoriseert geen migration
 apply, `db push`, `db pull`, `migration fetch`, `migration repair`, remote reset,
@@ -19,7 +19,8 @@ Productionwijziging, Clean Staging-wijziging, deployment of merge.
 - Production: `epqpeoubkbftcvxjbqeo`.
 - Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, `ACTIVE_HEALTHY`; de canonical baseline is
   daar onder aparte autorisatie toegepast en de schema-, grant- en contractcontroles zijn
-  read-only uitgevoerd. De hardeningmigratie wordt in deze taak niet remote toegepast.
+  read-only uitgevoerd. De hardeningmigratie en fixtures zijn later onder afzonderlijke
+  autorisaties toegepast; deze Productionvoorbereiding controleert ze uitsluitend read-only.
 - Legacy Staging: `cdmocdodehjmcgtxicaj`; INACTIVE, niet benaderd en geen target.
 - PR #18 en A4 vallen buiten de baselinepromotie.
 
@@ -487,14 +488,32 @@ reparatieronde niet gewijzigd.
 - **Na Production reconciliation:** een Git-revert alleen is onvoldoende; de oude historyrecords
   moeten via de vooraf bewezen inverse route herstelbaar blijven.
 
+## Verkorte pre-launch Productionvoorbereiding
+
+Voor PR #20 is op 2026-08-02 uitsluitend read-only vastgesteld dat Production additief kan worden
+uitgelijnd: de cardinaliteits- en backfillgates zijn schoon en de ontbrekende paymentobjecten en
+privilegehardening zijn begrensd. De nog niet actieve SQL-candidate en het afzonderlijke
+historyreconciliationplan staan onder `supabase/production-alignment-candidates/`, buiten de
+Supabase migration directory. De candidate behoudt de twee bestaande redundante lookupindexes en
+voegt tijdelijk één compatibilitytrigger toe voor de oude applicatie tijdens de database-first
+releasewindow; beide keuzes zijn expliciet en worden niet als canonical-baselineobjecten
+voorgesteld.
+
+Deze verkorte route slaat een nieuwe brede review en verdere Preview-login/fixturetests over, maar
+niet required CI, Production read-only gates, database-first uitvoering, afzonderlijke approvals,
+of de stop vóór Production-DDL en PR-merge. Na een later afzonderlijk goedgekeurde database-
+alignment en historyreconciliation wordt PR #20 normaal gemerged; Pascal beoordeelt frontend en
+Admin daarna rechtstreeks op Production zonder echte betaling of operationele e-mail.
+
 ## Huidig besluit
 
 De gerichte payment-idempotencyfinding en default-privilege-hardening zijn lokaal bewezen; twee
 volledig lege lokale rebuilds zijn identiek, de default-ACL-contracttests zijn groen en de
 concurrentieharness is groen. De canonical baseline blijft bytegelijk en is de immutable eerste
-actieve migratie; alleen de exact gepinde hardening volgt. De baseline is op Clean Staging toegepast,
-maar de hardening niet. De volgende databasegate is een apart geautoriseerde apply van uitsluitend
-die hardeningmigratie; vóór Production blijven de read-only cardinaliteitscontrole en afzonderlijke
-additive-DDL-goedkeuring verplicht.
+actieve migratie; alleen de exact gepinde hardening volgt. Baseline en hardening zijn op Clean
+Staging toegepast en de fixtures blijven aanwezig. De Production read-only cardinaliteitscontrole
+is groen; de volgende muterende databasegate is afzonderlijke goedkeuring van de lokale
+alignmentcandidate. Historyreconciliation, PR-merge en Productiondeployment blijven elk aparte
+goedkeuringsgrenzen.
 
 **CANONICAL BASELINE ONGEWIJZIGD; DEFAULT-PRIVILEGE-HARDENING LOKAAL BEWEZEN**
