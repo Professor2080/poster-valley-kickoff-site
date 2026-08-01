@@ -4,7 +4,7 @@ This runbook records the Clean Staging operating model and transition plan. Clea
 that fact does not authorize linking, database access, migration, Vercel configuration, provider
 calls or deployment.
 
-## Recorded status on 2026-07-31
+## Recorded status on 2026-08-01
 
 Repository and release facts recorded for this operating-model task:
 
@@ -15,20 +15,20 @@ Repository and release facts recorded for this operating-model task:
 - Production Supabase: `epqpeoubkbftcvxjbqeo`, unchanged and never a feature-test target;
 - Legacy Staging: `cdmocdodehjmcgtxicaj`, inactive, frozen and not a reproducible migration
   baseline;
-- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, `ACTIVE_HEALTHY`; the canonical baseline was
-  applied under separate authorization and its migration history, schema, grants and contracts were
-  verified. The default-privilege-hardening task performs no remote database write.
+- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, `ACTIVE_HEALTHY`; the canonical baseline and
+  default-privilege hardening were applied under separate authorizations. Migration history,
+  schema, grants, baseline contracts and default ACLs were verified.
 
 | Component | Status |
 | --- | --- |
 | Production | active and unchanged |
 | Legacy Staging | inactive and frozen; not a valid migration baseline |
-| Clean Staging | `ACTIVE_HEALTHY`; canonical baseline applied and verified; hardening not applied |
+| Clean Staging | `ACTIVE_HEALTHY`; canonical baseline and hardening applied and verified; no fixtures seeded |
 | PR #18 | Draft; unchanged; rebase only after the baseline merge, with a later migration timestamp |
 | A4 | frozen and outside the active release path |
 | Migration-history recovery | stopped |
 | WooCommerce architecture | recorded on `main` |
-| Next database gate | separately authorize and apply only `20260731193947_harden_default_privileges.sql` |
+| Next database gate | separately authorize the version-controlled synthetic seed on exact Clean Staging |
 
 ### Shipping PR #18
 
@@ -69,9 +69,58 @@ The migration authority and entry gate are defined in the
 [database release process](database-release-process.md). The exact environment separation is in the
 [environment matrix](environment-matrix.md).
 
+## Disposable synthetic fixture process
+
+Clean Staging is disposable and contains no authoritative business data. Fixture set
+`PV-CLEAN-STAGING-V1` supplies fourteen deterministic Admin-review scenarios. The tooling requires
+all of the following before it connects:
+
+- `POSTER_VALLEY_ENV=clean-staging`;
+- `SUPABASE_URL` for exact project `stbunwkgvxfwmbjivgos` and its server-only service-role key;
+- an owner-level `psql` session identified by `PGHOST`, `PGUSER`, `PGDATABASE=postgres`,
+  `PGPORT=5432` and TLS;
+- explicit CLI acknowledgement `--confirm-clean-staging`.
+
+Keep the service-role and owner credentials in the process environment or enter the database
+password through the hidden prompt. Never put either value in a command argument, file or log. The
+manager email is also entered through a hidden interactive prompt and is not stored in Git or the
+ledger. The seed uses the Supabase Admin API to create or reuse one confirmed Auth user without
+sending mail, then uses the owner session to establish exactly one active manager role and the
+fixtures. During Pascal's later login, the existing login flow may send at most one Supabase Auth
+login email.
+
+```powershell
+npm run staging:seed -- --confirm-clean-staging
+npm run staging:verify -- --confirm-clean-staging
+npm run staging:cleanup -- --confirm-clean-staging
+```
+
+The cleanup command is a dry-run unless `--confirm` is also supplied:
+
+```powershell
+npm run staging:cleanup -- --confirm-clean-staging --confirm
+npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-role
+npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-role --remove-manager-user
+```
+
+Manager removal is independent and explicit. `--remove-manager-user` requires
+`--remove-manager-role` and performs only a Supabase soft-delete of a fixture-owned Auth user; a
+reused user is never deleted. The local ledger is `.tmp/clean-staging-seed-ledger.json` and contains
+only fixture/version identifiers, UUIDs, table names and timestamps.
+
+Limited cleanup removes marked mutable reservations, invitations, orders, payments and unreferenced
+delivery attempts. It never deletes `product_registry`, migration history or append-only audit,
+entity and delivery events. Delivery attempts referenced by retained delivery events also remain.
+Every retained row is deterministic and marked, so reseeding does not grow history without bound.
+
+Fixtures remain available throughout Pascal's review. Operational email stays suppressed and
+Mollie is never called. A full reset is deliberately not automated: pause or replace Clean Staging,
+rebuild it from the two committed migrations, seed again, and relink the isolated Preview only if
+the project ref changed. Never disable triggers or manually delete append-only history.
+
 ## Synthetic data standard
 
-The future seed and cleanup design must provide:
+The seed and cleanup implementation provides:
 
 - fixed synthetic administrator accounts with documented roles;
 - fixed test SKUs;
@@ -98,13 +147,12 @@ Each external or stateful step below is a separately authorized infrastructure a
 
 1. Keep Draft PR #20 on the normal GitHub review path; the canonical baseline apply and its
    read-only schema, RLS, grant, payment-contract and fingerprint verification are complete.
-2. Under separate authorization, prove that Clean Staging history contains exactly
-   `20260731113000_schema_baseline_v1.sql` and require the dry-run to contain only
-   `20260731193947_harden_default_privileges.sql`.
-3. Apply only that hardening migration and verify migration history plus the future-object
-   default-ACL contracts; stop on every extra, missing or reordered version.
-4. Add the repeatable synthetic seed and cleanup mechanism in a separate repository change.
-5. Switch an isolated Vercel Preview to Clean Staging with suppressed/test provider configuration.
+2. Keep the verified Clean Staging history exactly equal to the canonical baseline followed by the
+   allowlisted default-privilege hardening.
+3. After separate authorization, run the version-controlled seed and verification, leaving the
+   fixtures in place for Pascal's review.
+4. Use limited cleanup after acceptance, or rebuild the disposable environment for a full reset.
+5. Keep the isolated Vercel Preview on Clean Staging with suppressed/test provider configuration.
 6. Rebase PR #18 after the baseline merge, assign its migration a later timestamp, and validate it
    through the same controlled path.
 7. Keep inactive Legacy Staging frozen during the transition.

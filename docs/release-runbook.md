@@ -7,7 +7,7 @@ Choose the fast, controlled or infrastructure route in the
 
 ## Recorded release-platform status
 
-As recorded on 2026-07-31:
+As recorded on 2026-08-01:
 
 - `main` is `2027378daae5bb3f29354fcd449367ff1c648909`;
 - GitHub ruleset `Protect main` is active;
@@ -16,9 +16,8 @@ As recorded on 2026-07-31:
   from `main`;
 - Production Supabase is `epqpeoubkbftcvxjbqeo` and unchanged;
 - Legacy Staging `cdmocdodehjmcgtxicaj` is inactive, frozen and not a valid migration baseline;
-- Clean Staging `stbunwkgvxfwmbjivgos` exists in `eu-west-1` and was supplied as
-  `ACTIVE_HEALTHY`, with zero migrations and zero public tables. The baseline-promotion task did
-  not access it.
+- Clean Staging `stbunwkgvxfwmbjivgos` is `ACTIVE_HEALTHY`; the canonical baseline and
+  default-privilege hardening are applied and verified. No synthetic fixture seed has been run.
 
 Ruleset, CI, Vercel, Supabase or provider dashboard state must be rechecked read-only for the exact
 candidate when it becomes release evidence. A recorded status never authorizes a write.
@@ -31,10 +30,10 @@ the accepted review limit therefore forbids starting another broad review withou
 HIGH finding.
 
 After this Draft PR's required checks and exact Vercel Preview are green, the next separately
-authorized gate is to apply the canonical baseline to empty Clean Staging. Before Production, a
-read-only cardinality check and separately approved additive compatibility DDL remain mandatory.
-PR #18 stays unchanged until the baseline merges; it is then rebased with a later migration
-timestamp.
+authorized gate is to seed and verify `PV-CLEAN-STAGING-V1`, perform Pascal's authenticated review,
+and then run limited cleanup or rebuild the disposable environment. Before Production, a read-only
+cardinality check and separately approved additive compatibility DDL remain mandatory. PR #18 stays
+unchanged until the baseline merges; it is then rebased with a later migration timestamp.
 
 ## Universal release gate
 
@@ -123,13 +122,23 @@ this Definition of Done cannot pass.
 | --- | --- | --- |
 | GitHub | `Protect main` active; exact two required checks green | ruleset/check changes |
 | Vercel | GitHub-integrated Preview and `main`-only Production | environment variables, relinking, redeploy or manual deployment |
-| Clean Staging | `stbunwkgvxfwmbjivgos`; currently empty; exact migration-history equality after canonical baseline apply; synthetic data only | linking, migration and stateful testing |
+| Clean Staging | `stbunwkgvxfwmbjivgos`; exact baseline-plus-hardening history; disposable `PV-CLEAN-STAGING-V1` data only | seeding, cleanup, linking, migration and stateful testing |
 | Legacy Staging | inactive and frozen; no access, feature migrations or release validation | later archival/removal decision |
 | Production Supabase | exact ref `epqpeoubkbftcvxjbqeo`; real data | every migration, Auth/role or data change |
 | Resend/Mollie | suppressed/test-mode outside Production | enabling real delivery/payment or any real smoke test |
 
 The current transition status and next steps are in the
 [Clean Staging runbook](clean-staging-runbook.md).
+
+### Disposable fixture release evidence
+
+Run the repository seed, verify and cleanup commands only with exact Clean Staging target checks
+and explicit acknowledgement. The seed sends no login or operational email and makes no provider
+call. Fixtures remain for Pascal's review; his actual login may send at most one Supabase Auth login
+email. Limited cleanup deletes only marked mutable rows and deliberately retains deterministic,
+marked append-only audit/entity/delivery history plus required delivery attempts. A full reset is a
+project rebuild from committed migrations, never trigger bypass or manual deletion of protected
+history.
 
 ## Stop conditions
 

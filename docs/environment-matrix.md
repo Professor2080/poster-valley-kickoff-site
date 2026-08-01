@@ -6,13 +6,21 @@
 | --- | --- | --- | --- | --- | --- |
 | Local | active local feature worktree | local/mocked only; no remote database by default | synthetic only; never customer data | providers mocked, operational email suppressed, no live payment | development and automated tests |
 | Vercel Preview | GitHub-integrated feature-branch Preview | Clean Staging only, after separate approval and baseline apply | synthetic accounts and records only | operational email suppressed; Mollie test mode only | browser and authenticated candidate validation |
-| Clean Staging | Supabase `stbunwkgvxfwmbjivgos`, `eu-west-1`, recorded `ACTIVE_HEALTHY` | currently zero migrations and zero public tables; rebuild only from committed migrations on `main` | synthetic only; disposable and reproducible; never a Production copy | Resend delivery suppressed; Mollie test mode; no real provider calls | separately authorized migration, concurrency, idempotency, transaction and authenticated Preview tests |
+| Clean Staging | Supabase `stbunwkgvxfwmbjivgos`, `eu-west-1`, recorded `ACTIVE_HEALTHY` | canonical baseline plus default-privilege hardening applied and verified; rebuild only from committed migrations | synthetic only; disposable and reproducible; fixture set `PV-CLEAN-STAGING-V1`; never a Production copy | operational delivery suppressed; no Mollie or Resend provider calls from fixture tooling | separately authorized seed, concurrency, idempotency, transaction and authenticated Preview tests |
 | Production | Vercel Production from `main` | Supabase `epqpeoubkbftcvxjbqeo` | real customer data | real external effects possible | separately approved releases only; never feature development |
 
 Vercel Preview and Production are built through the existing GitHub integration. Until Clean
 Staging has been proven equal to the committed pre-feature migration history on `main` and the
 canonical baseline has been applied under separate authorization, database-backed Preview
 validation is blocked. It does not fall back to another remote database.
+
+The version-controlled staging tooling requires exact project-ref checks, an explicit
+`--confirm-clean-staging` acknowledgement, the server-only service-role key for Auth Admin, and a
+TLS owner-level `psql` session for the existing tables. It adds no permanent grants or staging RPC.
+Limited cleanup retains marked append-only synthetic history; a complete cleanup is a rebuild of
+the disposable project from committed migrations. Production and Legacy Staging are rejected
+targets. Fixtures remain present during review, operational email remains suppressed, and Pascal's
+actual Admin login may trigger at most one Supabase Auth login email.
 
 Never infer a target from a URL, alias or variable name. Verify the exact repository, project ref,
 deployment environment, branch/commit, migration history and credential mode before any remote
