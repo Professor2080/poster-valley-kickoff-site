@@ -138,8 +138,12 @@ The seed and cleanup implementation provides:
 - permission to rebuild Clean Staging completely from committed migrations and synthetic seed data.
 
 Public submissions must never be able to choose a trusted record origin. Cleanup operates only on
-unambiguously marked synthetic records; ambiguity is a stop, not permission to delete. This task
-defines the process only and intentionally creates no seed file or data.
+unambiguously marked synthetic records; ambiguity is a stop, not permission to delete. The
+version-controlled `PV-CLEAN-STAGING-V1` path now provides repeatable seed, verify and limited
+cleanup commands through the scripts under [`scripts/staging`](../scripts/staging/) and the package
+commands documented above. Limited cleanup intentionally retains marked append-only synthetic
+history; a complete reset uses the disposable rebuild route. This tooling had not been executed
+against remote Clean Staging when this documentation correction was committed.
 
 ## Clean Staging roadmap
 
