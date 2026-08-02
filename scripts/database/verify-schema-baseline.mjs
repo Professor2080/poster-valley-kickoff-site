@@ -3,14 +3,17 @@ import { createHash, randomBytes } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fingerprintTextItems } from './schema-fingerprint.mjs'
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const migrationDirectory = path.join(repositoryRoot, 'supabase', 'migrations')
 const baselineMigrationName = '20260731113000_schema_baseline_v1.sql'
 const hardeningMigrationName = '20260731193947_harden_default_privileges.sql'
-const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName]
+const shippingMigrationName = '20260802130000_shipping_confirmation_safety.sql'
+const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName]
 const baselineMigrationPath = path.join(migrationDirectory, baselineMigrationName)
 const hardeningMigrationPath = path.join(migrationDirectory, hardeningMigrationName)
+const shippingMigrationPath = path.join(migrationDirectory, shippingMigrationName)
 const bootstrapPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-bootstrap.sql')
 const contractPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-contract.sql')
 
@@ -19,19 +22,20 @@ const expected = {
   baselineMigrationLines: 1_513,
   baselineMigrationSha256: 'e4db9505f590ba934543e1ed33e25a8172e66c430596047afe4321d619d8f510',
   hardeningMigrationSha256: '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9',
-  structuralFingerprint: '6b21a5c80183d9cffed0b5395fcfe231934a55654788dbc3d3a08d0ec5c8409c',
-  fullFingerprint: '3c6d52fc996ded4cd77a316e1984315fd08aeec96e37ed66a07b58bb02613434',
+  shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
+  structuralFingerprint: '571fa982f68ea583d0330a3ecfd5c14133023a7ba676e01eb2aef446c1c94611',
+  fullFingerprint: '7820938e81044ff5a1448c3b5645f9fa932edf8e7b2a73593e0feb7886fc7167',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
   counts: {
     tables: 13,
     views: 4,
     enums: 2,
-    routines: 27,
+    routines: 28,
     triggers: 9,
     policies: 2,
     indexes: 57,
-    constraints: 76,
-    checks: 39,
+    constraints: 77,
+    checks: 40,
     foreign_keys: 16,
     primary_keys: 13,
     unique_constraints: 8,
@@ -93,6 +97,10 @@ function scalar(database, statement) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function canonicalMigrationBytes(file) {
+  return Buffer.from(readFileSync(file, 'utf8').replaceAll('\r\n', '\n'), 'utf8')
 }
 
 function lineCount(bytes) {
@@ -164,8 +172,12 @@ from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
 `
 
 function evidence(database) {
-  const structuralFingerprint = scalar(database, `with items as (${baseItems}) select encode(extensions.digest(string_agg(item,E'\n' order by item),'sha256'),'hex') from items`)
-  const aclFingerprint = scalar(database, `with items as (${baseItems} union all ${aclItems}) select encode(extensions.digest(string_agg(item,E'\n' order by item),'sha256'),'hex') from items`)
+  const fingerprint = (items) => fingerprintTextItems(JSON.parse(scalar(
+    database,
+    `with items as (${items}) select coalesce(jsonb_agg(item order by item),'[]'::jsonb)::text from items`,
+  )))
+  const structuralFingerprint = fingerprint(baseItems)
+  const aclFingerprint = fingerprint(`${baseItems} union all ${aclItems}`)
   const defaultAclFingerprint = scalar(database, String.raw`
 select encode(extensions.digest(string_agg(item,E'\n' order by item),'sha256'),'hex')
 from (
@@ -324,12 +336,14 @@ for (let index = 1; index < migrationVersions.length; index += 1) {
     throw new Error(`Active migrations are not strictly increasing: ${activeFiles.join(', ')}.`)
   }
 }
-const baselineMigrationBytes = readFileSync(baselineMigrationPath)
-const hardeningMigrationBytes = readFileSync(hardeningMigrationPath)
+const baselineMigrationBytes = canonicalMigrationBytes(baselineMigrationPath)
+const hardeningMigrationBytes = canonicalMigrationBytes(hardeningMigrationPath)
+const shippingMigrationBytes = canonicalMigrationBytes(shippingMigrationPath)
 assertEqual(baselineMigrationBytes.byteLength, expected.baselineMigrationBytes, 'canonical baseline migration size')
 assertEqual(lineCount(baselineMigrationBytes), expected.baselineMigrationLines, 'canonical baseline migration line count')
 assertEqual(sha256(baselineMigrationBytes), expected.baselineMigrationSha256, 'canonical baseline migration SHA-256')
 assertEqual(sha256(hardeningMigrationBytes), expected.hardeningMigrationSha256, 'default-privilege hardening migration SHA-256')
+assertEqual(sha256(shippingMigrationBytes), expected.shippingMigrationSha256, 'shipping-confirmation migration SHA-256')
 
 const serverVersion = Number(scalar(maintenanceDatabase, 'show server_version_num'))
 if (!Number.isInteger(serverVersion) || serverVersion < 170_000 || serverVersion >= 180_000) {
@@ -381,8 +395,9 @@ try {
   assertCounts(runOne.counts, 'run 1 object counts')
   assertCounts(runTwo.counts, 'run 2 object counts')
   assertEqual(JSON.stringify(runOne.manifest), JSON.stringify(runTwo.manifest), 'run data manifests')
-  assertEqual(sha256(readFileSync(baselineMigrationPath)), expected.baselineMigrationSha256, 'post-run canonical baseline migration SHA-256')
-  assertEqual(sha256(readFileSync(hardeningMigrationPath)), expected.hardeningMigrationSha256, 'post-run hardening migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(baselineMigrationPath)), expected.baselineMigrationSha256, 'post-run canonical baseline migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(hardeningMigrationPath)), expected.hardeningMigrationSha256, 'post-run hardening migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(shippingMigrationPath)), expected.shippingMigrationSha256, 'post-run shipping-confirmation migration SHA-256')
 
   await paymentRuntime(databases[1])
 
@@ -391,6 +406,7 @@ try {
     migrations: [
       { name: baselineMigrationName, bytes: baselineMigrationBytes.byteLength, lines: lineCount(baselineMigrationBytes), sha256: expected.baselineMigrationSha256 },
       { name: hardeningMigrationName, bytes: hardeningMigrationBytes.byteLength, lines: lineCount(hardeningMigrationBytes), sha256: expected.hardeningMigrationSha256 },
+      { name: shippingMigrationName, bytes: shippingMigrationBytes.byteLength, lines: lineCount(shippingMigrationBytes), sha256: expected.shippingMigrationSha256 },
     ],
     run1: { counts: runOne.counts, structuralFingerprint: runOne.structuralFingerprint, fullFingerprint: runOne.fullFingerprint, defaultAclFingerprint: runOne.defaultAclFingerprint },
     run2: { counts: runTwo.counts, structuralFingerprint: runTwo.structuralFingerprint, fullFingerprint: runTwo.fullFingerprint, defaultAclFingerprint: runTwo.defaultAclFingerprint },

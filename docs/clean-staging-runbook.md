@@ -24,7 +24,7 @@ Repository and release facts recorded for this operating-model task:
 | Production | active and unchanged |
 | Legacy Staging | inactive and frozen; not a valid migration baseline |
 | Clean Staging | `ACTIVE_HEALTHY`; canonical baseline and hardening applied and verified; `PV-CLEAN-STAGING-V1` fixtures present |
-| PR #18 | Draft; unchanged; rebase only after the baseline merge, with a later migration timestamp |
+| PR #18 | Draft; current `main` merged normally; later-timestamp migration awaiting separate validation |
 | A4 | frozen and outside the active release path |
 | Migration-history recovery | stopped |
 | WooCommerce architecture | recorded on `main` |
@@ -34,10 +34,10 @@ Repository and release facts recorded for this operating-model task:
 
 Draft PR #18, **Add safe shipping confirmation workflow**, is on branch
 `codex/shipping-confirmation` at `67742210c3036c9ed9efccedd89e0b0771ca0d40`. It is not merged.
-Migration `20260729120000_shipping_confirmation_safety.sql` has not been applied permanently to any
-environment. The PR remains unchanged. After the canonical baseline merges, rebase PR #18 and give
-its migration a later timestamp before separately authorized Clean Staging validation; do not
-redirect that validation to Legacy Staging or Production.
+Migration `20260802130000_shipping_confirmation_safety.sql` has not been applied permanently to any
+environment. Current `main` was merged normally into PR #18 and the migration now sorts after the
+canonical baseline and default-privilege hardening. Clean Staging validation still requires separate
+authorization; do not redirect that validation to Legacy Staging or Production.
 
 ### Why Legacy Staging is frozen
 
@@ -159,8 +159,8 @@ Each external or stateful step below is a separately authorized infrastructure a
    fixtures in place for Pascal's review.
 4. Use limited cleanup after acceptance, or rebuild the disposable environment for a full reset.
 5. Keep the isolated Vercel Preview on Clean Staging with suppressed/test provider configuration.
-6. Rebase PR #18 after the baseline merge, assign its migration a later timestamp, and validate it
-   through the same controlled path.
+6. Validate PR #18's later-timestamp migration through the same controlled path after its normal
+   merge of current `main`.
 7. Keep inactive Legacy Staging frozen during the transition.
 8. Before Production, complete the separately approved read-only cardinality check and additive
    compatibility-DDL plan; never apply the initial baseline DDL to the existing Production schema.

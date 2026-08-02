@@ -19,11 +19,11 @@ Roles: `operator` reads and performs approved operational transitions; `manager`
 | Reservation | `new -> reviewed -> invitation_draft -> invitation_sent -> converted`; `new/reviewed/invitation_draft/invitation_sent -> cancelled`; `reviewed -> closed` | operator; invitation creation/send also records audit |
 | Invitation | `draft -> sent -> opened -> order_started -> payment_open -> paid`; `draft/sent/opened/order_started/payment_open -> expired/cancelled` | send: operator; opened/order-started: public route; payment-open/paid: payment flow/webhook; expiry: server job/request evaluation |
 | Payment | `created -> open -> paid|failed|expired|canceled`; `paid -> refunded` only after a provider-verified refund integration | Mollie/webhook/provider reconciliation only. Admins cannot set paid. |
-| Fulfilment | `unfulfilled -> ready_to_pack -> packed -> shipped -> completed`; pre-shipment states may go to `cancelled`; shipment corrections require manager confirmation/audit | operator/manager |
+| Fulfilment | `unfulfilled -> ready_to_pack -> packed -> shipped -> completed`; pre-shipment states may go to `cancelled`; marking shipped, shipping-email retry and shipment corrections require manager confirmation/audit | operator/manager for internal preparation; manager for shipping |
 
 Current schema uses reservation `new/contacted/order_invited/converted/cancelled` plus legacy `status`; order `draft/awaiting_payment/payment_open/paid/payment_failed/payment_expired/cancelled/shipped`; payment lacks `refunded`. A1 must map/backfill deliberately, retain compatibility during rollout, and never silently reinterpret historical rows.
 
-Payment paid, failed, expired and canceled transitions are webhook/provider-authoritative. `sent` email transitions happen after an idempotent send claim; payment confirmation occurs once after paid; shipping confirmation is opt-in per transition and requires tracking/carrier data or a consciously approved no-tracking exception. Sending/resending, canceling, manual quote acceptance, shipping-rate changes and completion require confirmation dialogs appropriate to impact.
+Payment paid, failed, expired and canceled transitions are webhook/provider-authoritative. `sent` email transitions happen after an idempotent send claim; payment confirmation occurs once after paid; shipping confirmation is opt-in per transition and requires validated tracking/carrier data. Marking shipped and retrying shipping email are manager-only. Sending/resending, canceling, manual quote acceptance, shipping-rate changes and completion require confirmation dialogs appropriate to impact.
 
 ## Proposed data additions (no migration executed here)
 

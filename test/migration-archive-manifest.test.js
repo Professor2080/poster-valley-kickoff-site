@@ -13,9 +13,12 @@ const canonicalName = '20260731113000_schema_baseline_v1.sql'
 const canonicalSha = 'e4db9505f590ba934543e1ed33e25a8172e66c430596047afe4321d619d8f510'
 const hardeningName = '20260731193947_harden_default_privileges.sql'
 const hardeningSha = '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9'
+const shippingName = '20260802130000_shipping_confirmation_safety.sql'
+const shippingSha = '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf'
 const activeMigrations = [
   [canonicalName, canonicalSha],
   [hardeningName, hardeningSha],
+  [shippingName, shippingSha],
 ]
 const archivePromotionCommit = '73fed0224056f040ce085fbedeb27461695d8c30'
 
@@ -54,16 +57,16 @@ function canonicalizeCheckoutBytes(bytes, fileName) {
   return Buffer.from(text.replace(/\r\n/gu, '\n'), 'utf8')
 }
 
-test('the canonical baseline and allowlisted hardening are the only active migrations', async () => {
+test('the canonical baseline, hardening, and shipping feature are the only active migrations', async () => {
   const activeFiles = (await readdir(activeDirectory)).sort()
   assert.deepEqual(activeFiles, activeMigrations.map(([fileName]) => fileName))
 
   for (const [fileName, expectedSha] of activeMigrations) {
-    const migration = await readFile(new URL(fileName, activeDirectory))
+    const migration = canonicalizeCheckoutBytes(await readFile(new URL(fileName, activeDirectory)), fileName)
     assert.equal(sha256(migration), expectedSha, `${fileName} must retain its allowlisted SHA-256`)
   }
 
-  const canonical = await readFile(new URL(canonicalName, activeDirectory))
+  const canonical = canonicalizeCheckoutBytes(await readFile(new URL(canonicalName, activeDirectory)), canonicalName)
   assert.equal(canonical.byteLength, 98_654)
   assert.equal(sha256(canonical), canonicalSha)
   assert.equal(canonical.toString('utf8').split(/\r?\n/u).filter((_, index, lines) => index < lines.length - 1 || lines[index] !== '').length, 1_513)

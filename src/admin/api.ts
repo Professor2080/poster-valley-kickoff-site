@@ -15,6 +15,12 @@ export type AdminActionResult = {
   entityId?: string
   emailAttemptId?: string
   deliveryStatus?: 'pending' | 'suppressed' | 'sent' | 'failed' | null
+  reconciliationRequired?: boolean
+  reconciliationOutcome?: 'provider_acceptance_confirmed' | 'provider_non_acceptance_confirmed'
+  providerOutcome?: 'uncertain'
+  automaticRetryBlocked?: boolean
+  providerAcceptanceConfirmed?: boolean
+  inboxDeliveryConfirmed?: false
   fulfilmentStatus?: string
   fulfilmentVersion?: number
   quoteId?: string

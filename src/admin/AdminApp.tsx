@@ -16,7 +16,7 @@ const recordOrigins = ['customer', 'test', 'internal_pilot'] as const
 const listFields: Partial<Record<AdminResource, string[]>> = {
   reservations: ['customer_name', 'masked_email', 'drop_title', 'reservation_status', 'quantity', 'created_at', 'record_origin', 'record_origin_needs_review'],
   invitations: ['drop_title', 'status', 'delivery_status', 'delivery_completed_at', 'quantity', 'expires_at', 'sent_at', 'record_origin', 'record_origin_needs_review'],
-  orders: ['customer_name', 'status', 'payment_status', 'fulfilment_status', 'shipping_country_code', 'created_at', 'record_origin', 'record_origin_needs_review'],
+  orders: ['customer_name', 'status', 'payment_status', 'fulfilment_status', 'shipping_country_code', 'shipping_email_status', 'shipping_reconciliation_required', 'created_at', 'record_origin', 'record_origin_needs_review'],
   payments: ['provider', 'status', 'amount', 'currency', 'paid_at', 'created_at', 'record_origin', 'record_origin_needs_review'],
 }
 
@@ -195,7 +195,7 @@ function RecordDetailFields({ resource, item, hasPersonalDetail, fulfilment }: {
     return <><DetailList item={item} fields={fields} />{hasPersonalDetail && fulfilment ? <ShippingAddress item={fulfilment} /> : null}</>
   }
   if (resource === 'orders') {
-    const summary = <DetailList item={item} fields={['drop_title', 'status', 'payment_status', 'fulfilment_status', 'fulfilment_version', 'shipping_country_code', 'created_at', 'record_origin', 'record_origin_needs_review']} />
+    const summary = <DetailList item={item} fields={['drop_title', 'status', 'payment_status', 'fulfilment_status', 'fulfilment_version', 'shipping_email_status', 'shipping_reconciliation_required', 'shipping_country_code', 'created_at', 'record_origin', 'record_origin_needs_review']} />
     if (!hasPersonalDetail) return summary
     return <>{summary}<section className="admin-customer-detail" aria-labelledby="customer-detail-title"><h3 id="customer-detail-title">Customer</h3><DetailList item={item} fields={['first_name', 'last_name', 'email']} /></section><ShippingAddress item={item} /></>
   }
@@ -238,6 +238,8 @@ function LifecycleActionControl({ action, item, resource, token, onChanged, onBu
   const [expiresAt, setExpiresAt] = useState('')
   const [carrier, setCarrier] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
+  const [reconciliationOutcome, setReconciliationOutcome] = useState('')
+  const [evidenceNote, setEvidenceNote] = useState('')
   const submitting = useRef(false)
   const initiatingButton = useRef<HTMLButtonElement>(null)
   const outcome = useRef<HTMLParagraphElement>(null)
@@ -247,7 +249,8 @@ function LifecycleActionControl({ action, item, resource, token, onChanged, onBu
   const actionPayload = () => {
     if (action.kind === 'invitation') return { reservationId: String(resource === 'reservations' ? item.id : item.interest_request_id) }
     if (action.kind === 'quote') return { invitationId: String(item.id), countryCode, shippingAmount: Number(shippingAmount), expiresAt: new Date(expiresAt).toISOString(), expectedInvitationUpdatedAt: String(item.updated_at) }
-    if (action.kind === 'shipping') return { orderId: String(item.id) }
+    if (action.kind === 'reconciliation') return { orderId: String(item.id), expectedStatus: String(item.fulfilment_status), expectedVersion: fulfilmentVersion(item), reconciliationOutcome, evidenceNote }
+    if (action.kind === 'shipping') return { orderId: String(item.id), expectedStatus: String(item.fulfilment_status), expectedVersion: fulfilmentVersion(item) }
     return { orderId: String(item.id), targetStatus: action.targetStatus, expectedStatus: String(item.fulfilment_status), expectedVersion: fulfilmentVersion(item), ...(action.targetStatus === 'shipped' ? { carrier, trackingNumber } : {}) }
   }
 
@@ -257,9 +260,12 @@ function LifecycleActionControl({ action, item, resource, token, onChanged, onBu
     try {
       const payload = actionPayload()
       const result = await runAdminAction(token, { action: action.previewAction, ...payload })
+      if (result.deliveryStatus === 'pending' && result.reconciliationRequired) {
+        setMessage(actionResultMessage(result)); setPhase('conflict'); onChanged(); return
+      }
       const suggested = typeof result.preview?.suggestedAction === 'string' ? result.preview.suggestedAction : null
       const mutation = (action.mutationAction ?? suggested) as NonNullable<ContextAction['mutationAction']> | null
-      if (!mutation || !['invitation.send', 'invitation.resend', 'quote.approve', 'fulfilment.transition', 'shipping.retry'].includes(mutation)) throw new Error('The preview did not provide a safe action.')
+      if (!mutation || !['invitation.send', 'invitation.resend', 'quote.approve', 'fulfilment.transition', 'shipping.retry', 'shipping.reconciliation.resolve'].includes(mutation)) throw new Error('The preview did not provide a safe action.')
       if (!result.confirmation || result.confirmation.action !== mutation) throw new Error('The server did not provide a valid confirmation step.')
       setAttempt(createActionAttempt(mutation, payload, result.preview ?? {}, result.confirmation)); setPhase('confirming')
     } catch (error) {
@@ -287,7 +293,7 @@ function LifecycleActionControl({ action, item, resource, token, onChanged, onBu
   const statusLabel = phase === 'conflict' ? `The record changed or conflicts with this action. ${message || 'Refresh the action preview.'}` : phase === 'forbidden' ? 'Your current role is not allowed to complete this action.' : message
   const canRetryAttempt = !actionInputsDisabled(phase, attempt)
 
-  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating. A separate explicit confirmation is required.</p>{action.kind === 'quote' && <div className="admin-action-fields"><label>Destination country code<input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} pattern="[A-Za-z]{2}" maxLength={2} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Shipping amount (EUR)<input type="number" min="0" max="10000" step="0.01" value={shippingAmount} onChange={(event) => setShippingAmount(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Quote expires<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{action.kind === 'fulfilment' && action.targetStatus === 'shipped' && <div className="admin-action-fields"><label>Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} maxLength={120} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Tracking number<input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} maxLength={160} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{!attempt && (phase === 'idle' || phase === 'previewing') && <button ref={initiatingButton} type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <ConfirmationStep action={action} attempt={attempt} phase={phase} onConfirm={submit} onCancel={reset} />}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'} aria-live="polite">{statusLabel}</p>{phase !== 'success' && !attempt && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}{phase === 'conflict' && <button type="button" className="admin-secondary" onClick={reset}>Refresh action preview</button>}</>}</article>
+  return <article className="admin-action-card"><h4>{action.label}</h4><form onSubmit={preview} aria-describedby={`${formId}-help`}><p id={`${formId}-help`} className="admin-muted">Preview is non-mutating. A separate explicit confirmation is required.</p>{action.kind === 'quote' && <div className="admin-action-fields"><label>Destination country code<input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} pattern="[A-Za-z]{2}" maxLength={2} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Shipping amount (EUR)<input type="number" min="0" max="10000" step="0.01" value={shippingAmount} onChange={(event) => setShippingAmount(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Quote expires<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{action.kind === 'fulfilment' && action.targetStatus === 'shipped' && <div className="admin-action-fields"><label>Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} maxLength={120} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><label>Tracking number<input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} maxLength={160} required disabled={phase !== 'idle' && !canRetryAttempt} /></label></div>}{action.kind === 'reconciliation' && <div className="admin-action-fields"><p className="admin-warning">The provider outcome is uncertain. No email is automatically resent; verify the outcome outside this application.</p><label>Provider outcome<select value={reconciliationOutcome} onChange={(event) => setReconciliationOutcome(event.target.value)} required disabled={phase !== 'idle' && !canRetryAttempt}><option value="">Select verified outcome</option><option value="provider_acceptance_confirmed">Provider acceptance confirmed</option><option value="provider_non_acceptance_confirmed">Provider non-acceptance confirmed</option></select></label><label>Evidence note<textarea value={evidenceNote} onChange={(event) => setEvidenceNote(event.target.value)} minLength={10} maxLength={500} required disabled={phase !== 'idle' && !canRetryAttempt} /></label><p className="admin-muted">Do not include customer contact, address, provider IDs, secrets or tokens.</p></div>}{!attempt && (phase === 'idle' || phase === 'previewing') && <button ref={initiatingButton} type="submit" disabled={phase === 'previewing'}>{phase === 'previewing' ? 'Loading preview…' : action.label}</button>}</form>{attempt && <ConfirmationStep action={action} attempt={attempt} phase={phase} onConfirm={submit} onCancel={reset} />}{['success', 'conflict', 'forbidden', 'failure'].includes(phase) && <><p ref={outcome} tabIndex={-1} className={`admin-message ${statusClass}`} role={phase === 'success' ? 'status' : 'alert'} aria-live="polite">{statusLabel}</p>{phase !== 'success' && !attempt && <button type="button" className="admin-secondary" onClick={reset}>Start a new preview</button>}{phase === 'conflict' && <button type="button" className="admin-secondary" onClick={reset}>Refresh action preview</button>}</>}</article>
 }
 
 function ActionControl(props: { action: ContextAction; item: Record<string, unknown>; resource: AdminResource; token: string; onChanged: () => void; onBusy: (busy: boolean) => void }) {

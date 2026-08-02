@@ -60,11 +60,12 @@ async function orderDetail(id) {
   const record = await one('orders', 'id,invitation_id,interest_request_id,drop_slug,drop_title,status,email,first_name,last_name,shipping_name,shipping_company,address_line1,address_line2,postal_code,city,region,shipping_country,shipping_country_code,fulfilment_status,fulfilment_version,carrier,tracking_number,shipped_at,shipping_email_status,quantity,currency,subtotal_amount,shipping_amount,total_amount,created_at,updated_at', id)
   if (!record) throw new AdminRequestError(404, 'not_found', 'The requested record was not found.')
   const reservationId = typeof record.interest_request_id === 'string' ? record.interest_request_id : ''
-  const [reservation, invitation, paymentRecords, attempts] = await Promise.all([
+  const [reservation, invitation, paymentRecords, attempts, shippingAttempts] = await Promise.all([
     reservationId ? one('drop_interest_requests', 'id,created_at,drop_slug,drop_title,full_name,status,reservation_status,record_origin,record_origin_needs_review,record_origin_version', reservationId) : null,
     one('order_invitations', 'id,interest_request_id,drop_slug,drop_title,quantity,status,expires_at,sent_at,opened_at,created_at,updated_at', record.invitation_id),
     rows('payments', 'id,order_id,provider,status,amount,currency,webhook_received_at,paid_at,created_at,updated_at', { order_id: id }),
     reservationId ? rows('operational_email_attempts', 'id,actor_user_id,action,idempotency_key,template,template_version,entity_type,entity_id,delivery_status,created_at,completed_at', { interest_request_id: reservationId }) : [],
+    rows('operational_email_attempts', 'id,delivery_status,reconciliation_required,dispatch_started_at,created_at', { template: 'shipping_confirmation', entity_type: 'order', entity_id: id }, { limit: 1 }),
   ])
   const payments = paymentRecords.map(({ provider_payment_id: _providerPaymentId, ...payment }) => payment)
   const invitations = invitation ? [invitation] : []
@@ -73,6 +74,11 @@ async function orderDetail(id) {
   record.record_origin = reservation?.record_origin ?? 'customer'
   record.record_origin_needs_review = reservation?.record_origin_needs_review ?? true
   record.record_origin_version = reservation?.record_origin_version ?? 0
+  const latestShipping = shippingAttempts[0]
+  const staleDispatch = latestShipping?.delivery_status === 'pending'
+    && typeof latestShipping.dispatch_started_at === 'string'
+    && Date.parse(latestShipping.dispatch_started_at) <= Date.now() - 23 * 60 * 60 * 1000
+  record.shipping_reconciliation_required = Boolean(latestShipping?.reconciliation_required || staleDispatch)
   const orders = [{ id: record.id, status: record.status, fulfilment_status: record.fulfilment_status, fulfilment_version: record.fulfilment_version, carrier: record.carrier, tracking_number: record.tracking_number, shipped_at: record.shipped_at, shipping_email_status: record.shipping_email_status, created_at: record.created_at, updated_at: record.updated_at }]
   const history = await historyFor(reservationId || id, invitations, orders, payments, attempts)
   history.reservation = reservation ? [reservation] : []

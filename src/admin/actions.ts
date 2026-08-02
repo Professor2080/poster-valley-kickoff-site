@@ -2,10 +2,10 @@ import type { AdminActionResult } from './api'
 import type { AdminResource, AdminRole } from './contracts'
 
 export type ContextAction = {
-  kind: 'invitation' | 'quote' | 'fulfilment' | 'shipping' | 'origin'
+  kind: 'invitation' | 'quote' | 'fulfilment' | 'shipping' | 'reconciliation' | 'origin'
   label: string
-  previewAction: 'invitation.preview' | 'quote.preview' | 'fulfilment.preview' | 'shipping.preview' | 'origin.preview'
-  mutationAction?: 'invitation.send' | 'invitation.resend' | 'quote.approve' | 'fulfilment.transition' | 'shipping.retry' | 'origin.change'
+  previewAction: 'invitation.preview' | 'quote.preview' | 'fulfilment.preview' | 'shipping.preview' | 'shipping.reconciliation.preview' | 'origin.preview'
+  mutationAction?: 'invitation.send' | 'invitation.resend' | 'quote.approve' | 'fulfilment.transition' | 'shipping.retry' | 'shipping.reconciliation.resolve' | 'origin.change'
   targetStatus?: 'ready_to_pack' | 'packed' | 'shipped'
   confirmLabel: string
 }
@@ -47,8 +47,11 @@ export function contextualActions(resource: AdminResource, item: Record<string, 
   }
   if (resource === 'orders' && text(item, 'status') === 'paid') {
     const target = { unfulfilled: 'ready_to_pack', ready_to_pack: 'packed', packed: 'shipped' }[text(item, 'fulfilment_status')] as ContextAction['targetStatus']
-    if (target) return [{ kind: 'fulfilment', label: `Review ${target.replaceAll('_', ' ')}`, previewAction: 'fulfilment.preview', mutationAction: 'fulfilment.transition', targetStatus: target, confirmLabel: target === 'shipped' ? 'Mark as shipped' : target === 'packed' ? 'Mark packed' : 'Mark ready to pack' }]
-    if (text(item, 'fulfilment_status') === 'shipped' && text(item, 'shipping_email_status') !== 'sent') {
+    if (target && (target !== 'shipped' || role === 'manager')) return [{ kind: 'fulfilment', label: `Review ${target.replaceAll('_', ' ')}`, previewAction: 'fulfilment.preview', mutationAction: 'fulfilment.transition', targetStatus: target, confirmLabel: target === 'shipped' ? 'Mark as shipped' : target === 'packed' ? 'Mark packed' : 'Mark ready to pack' }]
+    if (role === 'manager' && text(item, 'fulfilment_status') === 'shipped' && item.shipping_reconciliation_required === true) {
+      return [{ kind: 'reconciliation', label: 'Review uncertain provider outcome', previewAction: 'shipping.reconciliation.preview', mutationAction: 'shipping.reconciliation.resolve', confirmLabel: 'Record verified provider outcome' }]
+    }
+    if (role === 'manager' && text(item, 'fulfilment_status') === 'shipped' && !['sent', 'pending'].includes(text(item, 'shipping_email_status'))) {
       return [{ kind: 'shipping', label: 'Review shipping email retry', previewAction: 'shipping.preview', mutationAction: 'shipping.retry', confirmLabel: 'Retry shipping email' }]
     }
     return []
@@ -87,15 +90,18 @@ export function createActionAttempt(action: NonNullable<ContextAction['mutationA
 export function classifyActionError(error: unknown): 'conflict' | 'forbidden' | 'failure' {
   const candidate = error as { status?: number; code?: string }
   if (candidate.status === 403) return 'forbidden'
-  if (candidate.status === 409 || ['idempotency_conflict', 'stale_transition', 'invalid_transition', 'quote_in_use', 'operation_in_progress'].includes(candidate.code ?? '')) return 'conflict'
+  if (candidate.status === 409 || ['idempotency_conflict', 'stale_transition', 'invalid_transition', 'quote_in_use', 'operation_in_progress', 'reconciliation_required', 'invalid_shipping_details'].includes(candidate.code ?? '')) return 'conflict'
   return 'failure'
 }
 
 export function actionResultMessage(result: AdminActionResult) {
+  if (result.reconciliationOutcome === 'provider_acceptance_confirmed') return 'Manual reconciliation recorded provider acceptance, not inbox delivery. No email was resent.'
+  if (result.reconciliationOutcome === 'provider_non_acceptance_confirmed') return 'Manual reconciliation recorded provider non-acceptance and closed the old attempt without sending email. A new retry may now be previewed.'
+  if (result.deliveryStatus === 'pending' && result.reconciliationRequired) return 'The provider outcome is uncertain. The email is not automatically resent; a manager must verify the outcome outside this application.'
   if (result.deliveryStatus === 'pending') return 'Email delivery is already in progress. Refresh history before trying again.'
   if (result.deliveryStatus === 'suppressed') return 'The action completed and customer email was safely suppressed.'
   if (result.deliveryStatus === 'failed') return 'The record was preserved, but email delivery failed. Start a new preview to retry safely.'
-  if (result.deliveryStatus === 'sent') return 'The action completed and the provider confirmed email delivery.'
+  if (result.deliveryStatus === 'sent') return 'The action completed and the provider accepted the email request. This is not proof of inbox delivery.'
   if (result.fulfilmentStatus) return `Fulfilment moved to ${result.fulfilmentStatus.replaceAll('_', ' ')}.`
   if (result.quoteId) return 'The manual shipping quote was approved.'
   if (result.recordOrigin) return `Record origin changed to ${result.recordOrigin.replaceAll('_', ' ')}.`
@@ -103,6 +109,7 @@ export function actionResultMessage(result: AdminActionResult) {
 }
 
 export function completionPhase(result: AdminActionResult): ActionPhase {
+  if (result.reconciliationOutcome) return 'success'
   if (result.deliveryStatus === 'pending') return 'conflict'
   if (result.deliveryStatus === 'failed') return 'failure'
   return 'success'

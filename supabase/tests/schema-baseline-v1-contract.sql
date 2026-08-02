@@ -24,8 +24,8 @@ select pg_temp.assert_true(
   '2 public enums'
 );
 select pg_temp.assert_true(
-  (select count(*) = 27 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
-  '27 public routines'
+  (select count(*) = 28 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
+  '28 public routines'
 );
 select pg_temp.assert_true(
   (select count(*) = 9 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal),
@@ -40,8 +40,8 @@ select pg_temp.assert_true(
   '57 indexes'
 );
 select pg_temp.assert_true(
-  (select count(*) = 76 from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid = c.connamespace where n.nspname = 'public'),
-  '76 constraints'
+  (select count(*) = 77 from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid = c.connamespace where n.nspname = 'public'),
+  '77 constraints'
 );
 
 select pg_temp.assert_true(
@@ -187,12 +187,12 @@ select pg_temp.assert_true(
 );
 
 select pg_temp.assert_true(
-  (select count(*) = 19 and bool_and(p.prosecdef) and bool_and(
+  (select count(*) = 20 and bool_and(p.prosecdef) and bool_and(
     p.proconfig is not null
     and exists (select 1 from unnest(p.proconfig) setting where setting like 'search_path=%')
     and not exists (select 1 from unnest(p.proconfig) setting where setting ~ '(^|,)extensions(,|$)')
   ) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef),
-  'all 19 SECURITY DEFINER routines have a fixed restricted search_path'
+  'all 20 SECURITY DEFINER routines have a fixed restricted search_path'
 );
 select pg_temp.assert_true(
   (select count(*) = 8 and bool_and(
