@@ -2,11 +2,12 @@
 
 This draft does not authorize a deployment, migration, customer email, or payment.
 
-> **Execution status:** blocked until Clean Staging exists and its pre-feature migration history is
-> exactly equal to `main`. Legacy Staging `cdmocdodehjmcgtxicaj` is frozen and is not a validation
+> **Execution status:** blocked until the canonical baseline is merged and the Clean Staging
+> pre-feature migration history is exactly equal to `main`. Legacy Staging
+> `cdmocdodehjmcgtxicaj` is inactive and frozen and is not a validation
 > target. See the [Clean Staging runbook](clean-staging-runbook.md).
 
-1. Review the additive migration `20260720110000_admin_operational_actions.sql`, including its rollback comment. After separate authorization, verify the exact Clean Staging ref, prove pre-feature migration-history equality, require a dry-run containing only the intended pending migration, and only then apply it to Clean Staging.
+1. Review the canonical migration `20260731113000_schema_baseline_v1.sql`. The former A3 source file is historical archive provenance only. After separate authorization, verify the exact Clean Staging ref, prove the empty pre-baseline history, require a dry-run containing only the canonical baseline, and only then apply it to Clean Staging.
 2. Use newly created, removable `A3-STAGING-*` fixture rows and an approved manager UUID. Do not use customer or Production data.
 3. Verify RLS remains enabled and browser clients have no mutation policies for the new tables.
 4. Confirm a manager can approve a manual quote and an operator cannot; confirm unauthenticated users cannot invoke an action.
@@ -17,7 +18,7 @@ This draft does not authorize a deployment, migration, customer email, or paymen
 9. Confirm a Mollie `payments` row with `status = paid`, provider ID, webhook timestamp, paid timestamp, matching amount and matching currency is required before every fulfilment transition. Exercise `unfulfilled -> ready_to_pack -> packed -> shipped`, stale version conflicts, whitespace/length validation, and the shipping-confirmation suppressed/failed/sent histories. For a suppressed or failed shipping confirmation, use the contextual `shipping.retry` preview and confirmation; it must not repeat the fulfilment transition.
 10. Verify each finalized operational email writes exactly one correlated email event, admin audit event and entity event in the same transaction. Confirm invitation and reservation lifecycle changes add their own before/after events without PII or token data. Verify email history is append-only and does not expose recipients, provider IDs, message bodies, token hashes or secrets through Admin reads.
 11. The legacy `x-admin-action-secret` invitation sender is intentionally a `410 Gone` compatibility tombstone; it cannot send or mutate. Only the authenticated Admin action contract is active.
-12. Migration/code rollout order matters: apply the reviewed A3 migration before enabling manual international quotes. Automatic NL/EU quote and checkout paths do not query the A3 quote table and remain compatible before migration.
-13. No local PostgreSQL/Supabase runtime is configured in this repository. Node tests validate production handlers and the SQL contract structure, but real concurrent-session, trigger and migration execution must still be proven in Clean Staging before any release approval.
+12. Migration/code rollout order matters: apply the reviewed canonical baseline to empty Clean Staging before enabling manual international quotes there. Automatic NL/EU quote and checkout paths do not query the A3 quote table and remain compatible before migration.
+13. The repository's loopback-only PostgreSQL 17 contract harness applies the baseline twice and exercises concurrent payment claims, triggers and catalog contracts. Clean Staging execution still requires separate authorization before release approval.
 14. Rollback requires revoking/dropping the six A3 RPCs and order validation trigger/function before removing the A3 tables, indexes, constraints and additive order columns. Preserve required audit exports first; do not roll back a quote referenced by an order.
 15. Do not create Mollie payments, write WooCommerce, deploy, merge, or access Production as part of this handoff.

@@ -1,7 +1,8 @@
 # A2 admin frontend: Preview and staging runbook
 
-> **Execution status:** blocked until Clean Staging exists, matches committed migrations on `main`
-> and is linked to Vercel Preview. Legacy Staging `cdmocdodehjmcgtxicaj` is frozen and must not be
+> **Execution status:** blocked until the canonical baseline is applied to Clean Staging, its
+> history matches committed migrations on `main` and it is linked to Vercel Preview. Legacy Staging
+> `cdmocdodehjmcgtxicaj` is inactive and frozen and must not be
 > used for this validation. See the [Clean Staging runbook](clean-staging-runbook.md).
 
 ## Boundary and prerequisites

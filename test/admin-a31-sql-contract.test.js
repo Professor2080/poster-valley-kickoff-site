@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const migrationName = '20260721083831_a3_1_admin_customer_data_record_origin.sql'
-const sql = await readFile(new URL(`../supabase/migrations/${migrationName}`, import.meta.url), 'utf8')
+const sql = await readFile(new URL(`../supabase/migrations-archive/pre-baseline-v1/${migrationName}`, import.meta.url), 'utf8')
 
 test('A3.1 establishes canonical constrained origin and a conservative legacy backfill', () => {
   assert.match(sql, /create type public\.record_origin as enum \('customer', 'test', 'internal_pilot'\)/i)

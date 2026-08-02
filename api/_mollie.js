@@ -29,15 +29,25 @@ function withOptionalTestMode(payload) {
   }
 }
 
-async function mollieRequest(path, { method = 'GET', body } = {}) {
+async function mollieRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
   requireMollie()
+
+  if (idempotencyKey !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
+    throw new Error('Invalid Mollie idempotency key.')
+  }
+
+  const headers = {
+    Authorization: `Bearer ${MOLLIE_API_KEY}`,
+    'Content-Type': 'application/json',
+  }
+
+  if (method === 'POST' && idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey
+  }
 
   const response = await fetch(`${MOLLIE_API_BASE}${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${MOLLIE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
@@ -51,10 +61,11 @@ async function mollieRequest(path, { method = 'GET', body } = {}) {
   return text ? JSON.parse(text) : null
 }
 
-export async function createMolliePayment(payload) {
+export async function createMolliePayment(payload, idempotencyKey) {
   const payment = await mollieRequest('/payments', {
     method: 'POST',
     body: withOptionalTestMode(payload),
+    idempotencyKey,
   })
 
   const checkoutUrl = payment?._links?.checkout?.href

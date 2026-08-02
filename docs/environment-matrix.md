@@ -5,13 +5,22 @@
 | Environment | Code/deployment | Data target | Data | Email/payment | Normal use |
 | --- | --- | --- | --- | --- | --- |
 | Local | active local feature worktree | local/mocked only; no remote database by default | synthetic only; never customer data | providers mocked, operational email suppressed, no live payment | development and automated tests |
-| Vercel Preview | GitHub-integrated feature-branch Preview | Clean Staging only, after separate approval and creation | synthetic accounts and records only | operational email suppressed; Mollie test mode only | browser and authenticated candidate validation |
-| Clean Staging | separate Supabase project; project ref: `not created yet` | schema rebuilt only from committed migrations on `main` | synthetic only; disposable and reproducible; never a Production copy | Resend delivery suppressed; Mollie test mode; no real provider calls | migration, concurrency, idempotency, transaction and authenticated Preview tests |
+| Vercel Preview | GitHub-integrated feature-branch Preview | Clean Staging only, after separate approval and baseline apply | synthetic accounts and records only | operational email suppressed; Mollie test mode only | browser and authenticated candidate validation |
+| Clean Staging | Supabase `stbunwkgvxfwmbjivgos`, `eu-west-1`, recorded `ACTIVE_HEALTHY` | canonical baseline plus default-privilege hardening applied and verified; rebuild only from committed migrations | synthetic only; disposable and reproducible; fixture set `PV-CLEAN-STAGING-V1`; never a Production copy | operational delivery suppressed; no Mollie or Resend provider calls from fixture tooling | separately authorized seed, concurrency, idempotency, transaction and authenticated Preview tests |
 | Production | Vercel Production from `main` | Supabase `epqpeoubkbftcvxjbqeo` | real customer data | real external effects possible | separately approved releases only; never feature development |
 
 Vercel Preview and Production are built through the existing GitHub integration. Until Clean
-Staging exists and has been proven equal to the committed pre-feature migration history on `main`,
-database-backed Preview validation is blocked. It does not fall back to another remote database.
+Staging has been proven equal to the committed pre-feature migration history on `main` and the
+canonical baseline has been applied under separate authorization, database-backed Preview
+validation is blocked. It does not fall back to another remote database.
+
+The version-controlled staging tooling requires exact project-ref checks, an explicit
+`--confirm-clean-staging` acknowledgement, the server-only service-role key for Auth Admin, and a
+TLS owner-level `psql` session for the existing tables. It adds no permanent grants or staging RPC.
+Limited cleanup retains marked append-only synthetic history; a complete cleanup is a rebuild of
+the disposable project from committed migrations. Production and Legacy Staging are rejected
+targets. Fixtures remain present during review, operational email remains suppressed, and Pascal's
+actual Admin login may trigger at most one Supabase Auth login email.
 
 Never infer a target from a URL, alias or variable name. Verify the exact repository, project ref,
 deployment environment, branch/commit, migration history and credential mode before any remote
@@ -22,12 +31,12 @@ migration, provider call or deployment.
 
 Supabase project `cdmocdodehjmcgtxicaj` is:
 
-> **frozen legacy environment — not a valid migration baseline**
+> **INACTIVE frozen legacy environment — not a valid migration baseline**
 
 It contains remote-only migration-history versions `20260719175848` and `20260722111632` and is not
 reproducible solely from the committed migrations on `main`. Keep it frozen for now. Do not deploy
-new feature migrations to it, use it for feature validation, copy its remote-only history into Git,
-or treat it as a source of truth.
+new feature migrations to it, access it for this transition, use it for feature validation, copy
+its remote-only history into Git, or treat it as a source of truth.
 
 Migration-history recovery is stopped. A prior `migration fetch` overwrote tracked migration files
 inside a temporary verification worktree, and the fetched A4 migration did not exactly match a
@@ -44,8 +53,9 @@ classified.
 
 - Browser-safe: only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
 - Server-only: every other listed key, including every service-role key and application secret.
-- Preview uses only Clean Staging public/server configuration after the environment exists. It must
-  never reuse Production Supabase values.
+- Preview uses only Clean Staging public/server configuration after the baseline has been applied
+  and the environment linkage is separately approved. It must never reuse Production Supabase
+  values.
 - Preview and Clean Staging use distinct non-production Admin secrets, suppressed operational mail
   and a verified Mollie test credential/test mode.
 - Operational Production-only settings include real Resend delivery, real sender identity and live
@@ -74,8 +84,9 @@ Stop immediately when:
 This heading and server name are retained for tooling compatibility. The configuration below is a
 disabled, read-only **Legacy Staging inspection** template only. It is not a normal validation
 target, does not authorize access, and must never be used to establish release readiness or repair
-history. A future Clean Staging project requires a separate, reviewed MCP configuration with its
-then-recorded project ref; do not edit this placeholder by guessing.
+history. The existing Clean Staging project requires a separate, reviewed MCP configuration for
+`stbunwkgvxfwmbjivgos`; this Legacy-only placeholder is not that configuration and must not be
+enabled or repointed during a product task.
 
 In a separately approved interactive Legacy-inspection task only:
 

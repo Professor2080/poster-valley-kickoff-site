@@ -61,13 +61,16 @@ test('manual quote is snapshotted on the order before a mocked Mollie checkout i
   let createdOrder = null
   globalThis.fetch = async (url, init = {}) => {
     const parsed = new URL(url); const body = init.body ? JSON.parse(init.body) : null
-    calls.push({ host: parsed.hostname, path: parsed.pathname, method: init.method, body })
+    calls.push({ host: parsed.hostname, path: parsed.pathname, method: init.method, body, headers: init.headers })
     if (parsed.hostname === 'api.mollie.com') return new Response(JSON.stringify({ id: 'tr_mocked', status: 'open', _links: { checkout: { href: 'https://checkout.test/tr_mocked' } } }))
     if (parsed.pathname.endsWith('/order_invitations') && init.method === 'GET') return new Response(JSON.stringify([invitation]))
     if (parsed.pathname.endsWith('/manual_shipping_quotes')) return new Response(JSON.stringify([manualQuote]))
-    if (parsed.pathname.endsWith('/orders') && init.method === 'POST') { createdOrder = { id: '44444444-4444-4444-8444-444444444444', ...body }; return new Response(JSON.stringify([createdOrder])) }
-    if (parsed.pathname.endsWith('/payments') && init.method === 'POST') return new Response(JSON.stringify([{ id: 'payment-fixture', ...body }]))
-    if ((parsed.pathname.endsWith('/orders') || parsed.pathname.endsWith('/order_invitations')) && init.method === 'PATCH') return new Response(JSON.stringify([{ ...body }]))
+    if (parsed.pathname.endsWith('/rpc/payment_start_claim')) {
+      createdOrder = { id: '44444444-4444-4444-8444-444444444444', ...body.p_order }
+      return new Response(JSON.stringify({ orderId: createdOrder.id, providerIdempotencyKey: '55555555-5555-4555-8555-555555555555', paymentStartStatus: 'claimed', claimOwner: true, paymentStatus: null, checkoutUrl: null }))
+    }
+    if (parsed.pathname.endsWith('/rpc/payment_start_begin_provider')) return new Response(JSON.stringify({ started: true, orderId: createdOrder.id, paymentStartStatus: 'provider_pending', claimOwner: true, paymentStatus: null, checkoutUrl: null }))
+    if (parsed.pathname.endsWith('/rpc/payment_start_complete')) return new Response(JSON.stringify({ orderId: createdOrder.id, paymentStartStatus: 'provider_created', claimOwner: false, paymentStatus: 'open', checkoutUrl: 'https://checkout.test/tr_mocked' }))
     throw new Error(`Unexpected request ${parsed.pathname} ${init.method}`)
   }
   const res = response()
@@ -85,6 +88,7 @@ test('manual quote is snapshotted on the order before a mocked Mollie checkout i
   assert.equal(createdOrder.metadata.manual_quote_expires_at, manualQuote.expires_at)
   const mollie = calls.find((call) => call.host === 'api.mollie.com')
   assert.equal(mollie.body.amount.value, '39.25')
+  assert.equal(mollie.headers['Idempotency-Key'], '55555555-5555-4555-8555-555555555555')
 })
 
 test('public invitation summary uses the persisted order quote instead of recomputing a replaced quote', async () => {

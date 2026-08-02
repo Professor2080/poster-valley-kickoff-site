@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const originalSql = await readFile(new URL('../supabase/migrations/20260720110000_admin_operational_actions.sql', import.meta.url), 'utf8')
-const fixSql = await readFile(new URL('../supabase/migrations/20260720165432_admin_operational_actions_runtime_fix.sql', import.meta.url), 'utf8')
+const originalSql = await readFile(new URL('../supabase/migrations-archive/pre-baseline-v1/20260720110000_admin_operational_actions.sql', import.meta.url), 'utf8')
+const fixSql = await readFile(new URL('../supabase/migrations-archive/pre-baseline-v1/20260720165432_admin_operational_actions_runtime_fix.sql', import.meta.url), 'utf8')
 
 function applyFunction(sql) {
   const start = sql.indexOf('create or replace function public.admin_a3_apply_action(')
