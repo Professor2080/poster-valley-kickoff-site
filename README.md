@@ -137,7 +137,10 @@ business and legal review.
 ## Supabase Setup
 
 `supabase/migrations/` contains the canonical baseline followed by additive default-privilege,
-shipping-confirmation and Order Flow Board migrations. The six files used to construct the baseline are preserved byte-for-byte under
+shipping-confirmation, Order Flow Board and production-threshold-default migrations. New drops use
+`production_threshold = 5` unless an authorized creation flow explicitly supplies another non-null
+value; Eurofighter A2 is explicitly configured as `5`, while other existing configured thresholds
+are not rewritten. The column remains nullable for historical compatibility. The six files used to construct the baseline are preserved byte-for-byte under
 `supabase/migrations-archive/pre-baseline-v1/`, with immutable hashes in `manifest.json`; archived
 files are historical provenance and must never be executed by the Supabase CLI. `supabase/schema.sql`
 is retained as historical source material, not as active migration history. Committed migration

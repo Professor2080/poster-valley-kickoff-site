@@ -24,12 +24,12 @@ select pg_temp.assert_true(
   '2 public enums'
 );
 select pg_temp.assert_true(
-  (select count(*) = 32 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
-  '32 public routines'
+  (select count(*) = 33 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
+  '33 public routines'
 );
 select pg_temp.assert_true(
-  (select count(*) = 10 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal),
-  '10 application triggers'
+  (select count(*) = 11 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal),
+  '11 application triggers'
 );
 select pg_temp.assert_true(
   (select count(*) = 2 from pg_catalog.pg_policy p join pg_catalog.pg_class c on c.oid = p.polrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'),
@@ -201,12 +201,12 @@ select pg_temp.assert_true(
   'all 24 SECURITY DEFINER routines have a fixed restricted search_path'
 );
 select pg_temp.assert_true(
-  (select count(*) = 8 and bool_and(
+  (select count(*) = 9 and bool_and(
     not pg_catalog.has_function_privilege('service_role', p.oid, 'execute')
     and not pg_catalog.has_function_privilege('authenticated', p.oid, 'execute')
     and not pg_catalog.has_function_privilege('anon', p.oid, 'execute')
   ) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and not p.prosecdef),
-  'all 8 trigger/helper routines remain internal'
+  'all 9 trigger/helper routines remain internal'
 );
 
 select pg_temp.assert_true(
@@ -226,12 +226,12 @@ select pg_temp.assert_true(
   'all protected-history triggers exist'
 );
 select pg_temp.assert_true(
-  (select count(*) = 1 from pg_catalog.pg_trigger where not tgisinternal and tgname = 'product_registry_code_immutable'),
-  'product_code immutability trigger exists'
+  (select count(*) = 2 from pg_catalog.pg_trigger where not tgisinternal and tgname in ('product_registry_code_immutable', 'product_registry_normalize_production_threshold')),
+  'product_code immutability and threshold normalization triggers exist'
 );
 
 select pg_temp.assert_true(
-  (select count(*) = 1 and min(product_code) = 'eurofighter-typhoon-a2' and min(lifecycle_mode) = 'interest' and min(commerce_authority) = 'custom' from public.product_registry),
+  (select count(*) = 1 and min(product_code) = 'eurofighter-typhoon-a2' and min(lifecycle_mode) = 'interest' and min(commerce_authority) = 'custom' and min(production_threshold) = 5 from public.product_registry),
   'exactly one canonical product configuration row'
 );
 select pg_temp.assert_true(

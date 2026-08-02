@@ -67,12 +67,25 @@ addresses, payment identifiers, tokens or provider responses.
 
 ## Threshold and compatibility backfill
 
-The migration maps the existing canonical product to `eurofighter-typhoon` but deliberately leaves
-`production_threshold` null. No fake first-drop goal is invented. If historical invitations already
-exist when the migration is applied, their earliest timestamp proves that invitations were already
-open; the product lifecycle is preserved as `preorder`. On a fresh database the product remains
-`interest`, and `Open invitations` stays unavailable until a manager-approved threshold is
-configured through a separately authorized data operation.
+The board migration maps the existing canonical product to `eurofighter-typhoon`. The additive
+threshold-default migration then configures `eurofighter-typhoon-a2` explicitly with a production
+threshold of `5` and makes `5` the database default for every newly inserted product registry row.
+An insert trigger also normalizes an explicitly supplied `NULL` to `5`, so an authorized current or
+future server-side creation path cannot accidentally bypass the default. A deliberate non-null
+per-drop value remains unchanged, allowing a manager-authorized creation flow to configure an
+exception.
+
+`production_threshold` remains nullable at the schema level. Existing historical rows with `NULL`
+are not bulk-filled, and updates can preserve that legacy state; making the column `NOT NULL` would
+therefore be an unsafe compatibility contraction. The migration updates no existing threshold
+except Eurofighter A2. If historical invitations already exist when the board migration is applied,
+their earliest timestamp still proves that invitations were already open and the product lifecycle
+is preserved as `preorder`.
+
+The drop overview and `drop.open` preview both consume the stored threshold returned by
+`admin_order_flow_drop_v1`. For Eurofighter this yields `qualified units / 5` and the corresponding
+`... more needed` value without a frontend-specific threshold constant. The qualified-unit filter
+is unchanged: only customer-origin, reviewed, non-cancelled reservation quantities count.
 
 The board derives historical Process evidence from existing downstream states so already handled
 records do not regress into New. A newly submitted interest has no such evidence and requires the

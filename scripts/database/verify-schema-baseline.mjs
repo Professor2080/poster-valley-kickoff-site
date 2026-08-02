@@ -11,11 +11,13 @@ const baselineMigrationName = '20260731113000_schema_baseline_v1.sql'
 const hardeningMigrationName = '20260731193947_harden_default_privileges.sql'
 const shippingMigrationName = '20260802130000_shipping_confirmation_safety.sql'
 const orderFlowMigrationName = '20260802192136_order_flow_board.sql'
-const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName, orderFlowMigrationName]
+const thresholdMigrationName = '20260802210626_default_drop_production_threshold.sql'
+const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName, orderFlowMigrationName, thresholdMigrationName]
 const baselineMigrationPath = path.join(migrationDirectory, baselineMigrationName)
 const hardeningMigrationPath = path.join(migrationDirectory, hardeningMigrationName)
 const shippingMigrationPath = path.join(migrationDirectory, shippingMigrationName)
 const orderFlowMigrationPath = path.join(migrationDirectory, orderFlowMigrationName)
+const thresholdMigrationPath = path.join(migrationDirectory, thresholdMigrationName)
 const bootstrapPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-bootstrap.sql')
 const contractPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-contract.sql')
 const orderFlowContractPath = path.join(repositoryRoot, 'supabase', 'tests', 'order-flow-board-contract.sql')
@@ -27,6 +29,7 @@ const expected = {
   hardeningMigrationSha256: '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9',
   shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
   orderFlowMigrationSha256: '87dd0afc52f760317c1d2fa0dfbc95fd0fe8275e685e1fac7e1c165618f9b658',
+  thresholdMigrationSha256: '76324138304c2c41c956c9ea1c0cd2438d65696666b8193c676d59b515d4c993',
   structuralFingerprint: '9f11d4987bbc82a66aa16bc90f29854d20078cb0bd7b900eea838e2e23e06501',
   fullFingerprint: 'e068e27b15d6b3ff9f27cd60e79195e2898e628eb71b707c322210d6a0ca63ac',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
@@ -34,8 +37,8 @@ const expected = {
     tables: 14,
     views: 6,
     enums: 2,
-    routines: 32,
-    triggers: 10,
+    routines: 33,
+    triggers: 11,
     policies: 2,
     indexes: 64,
     constraints: 89,
@@ -129,7 +132,14 @@ function createDatabase(database) {
   run(createdb, [...connectionArguments, '-U', user, '-T', 'template0', database])
   sqlFile(database, bootstrapPath)
   for (const migrationName of allowedMigrationNames) {
+    if (migrationName === thresholdMigrationName) {
+      sql(database, "insert into public.product_registry(product_code,drop_slug,title,lifecycle_mode,production_threshold) values('preexisting-threshold-contract','preexisting-threshold-contract','Pre-existing threshold contract','interest',9)")
+    }
     sqlFile(database, path.join(migrationDirectory, migrationName))
+    if (migrationName === thresholdMigrationName) {
+      assertEqual(scalar(database, "select production_threshold from public.product_registry where product_code='preexisting-threshold-contract'"), '9', 'pre-existing explicit threshold preservation')
+      sql(database, "delete from public.product_registry where product_code='preexisting-threshold-contract'")
+    }
   }
 }
 
@@ -202,7 +212,7 @@ from (
 `)
   const tables = sql(database, "select quote_ident(c.relname) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' order by c.relname").split(/\r?\n/u).filter(Boolean)
   const manifest = tables.map((table) => `${table}=${scalar(database, `select count(*) from public.${table}`)}`)
-  manifest.push(`product_config=${scalar(database, "select coalesce(jsonb_agg(jsonb_build_object('product_code',product_code,'title',title,'lifecycle_mode',lifecycle_mode,'commerce_authority',commerce_authority) order by product_code)::text,'[]') from public.product_registry")}`)
+  manifest.push(`product_config=${scalar(database, "select coalesce(jsonb_agg(jsonb_build_object('product_code',product_code,'drop_slug',drop_slug,'title',title,'lifecycle_mode',lifecycle_mode,'commerce_authority',commerce_authority,'production_threshold',production_threshold) order by product_code)::text,'[]') from public.product_registry")}`)
   const counts = JSON.parse(scalar(database, String.raw`
 select jsonb_build_object(
 'tables',(select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r'),
@@ -344,12 +354,14 @@ const baselineMigrationBytes = canonicalMigrationBytes(baselineMigrationPath)
 const hardeningMigrationBytes = canonicalMigrationBytes(hardeningMigrationPath)
 const shippingMigrationBytes = canonicalMigrationBytes(shippingMigrationPath)
 const orderFlowMigrationBytes = canonicalMigrationBytes(orderFlowMigrationPath)
+const thresholdMigrationBytes = canonicalMigrationBytes(thresholdMigrationPath)
 assertEqual(baselineMigrationBytes.byteLength, expected.baselineMigrationBytes, 'canonical baseline migration size')
 assertEqual(lineCount(baselineMigrationBytes), expected.baselineMigrationLines, 'canonical baseline migration line count')
 assertEqual(sha256(baselineMigrationBytes), expected.baselineMigrationSha256, 'canonical baseline migration SHA-256')
 assertEqual(sha256(hardeningMigrationBytes), expected.hardeningMigrationSha256, 'default-privilege hardening migration SHA-256')
 assertEqual(sha256(shippingMigrationBytes), expected.shippingMigrationSha256, 'shipping-confirmation migration SHA-256')
 assertEqual(sha256(orderFlowMigrationBytes), expected.orderFlowMigrationSha256, 'order-flow migration SHA-256')
+assertEqual(sha256(thresholdMigrationBytes), expected.thresholdMigrationSha256, 'production-threshold migration SHA-256')
 
 const serverVersion = Number(scalar(maintenanceDatabase, 'show server_version_num'))
 if (!Number.isInteger(serverVersion) || serverVersion < 170_000 || serverVersion >= 180_000) {
@@ -407,6 +419,7 @@ try {
   assertEqual(sha256(canonicalMigrationBytes(hardeningMigrationPath)), expected.hardeningMigrationSha256, 'post-run hardening migration SHA-256')
   assertEqual(sha256(canonicalMigrationBytes(shippingMigrationPath)), expected.shippingMigrationSha256, 'post-run shipping-confirmation migration SHA-256')
   assertEqual(sha256(canonicalMigrationBytes(orderFlowMigrationPath)), expected.orderFlowMigrationSha256, 'post-run order-flow migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(thresholdMigrationPath)), expected.thresholdMigrationSha256, 'post-run production-threshold migration SHA-256')
 
   await paymentRuntime(databases[1])
 
@@ -417,6 +430,7 @@ try {
       { name: hardeningMigrationName, bytes: hardeningMigrationBytes.byteLength, lines: lineCount(hardeningMigrationBytes), sha256: expected.hardeningMigrationSha256 },
       { name: shippingMigrationName, bytes: shippingMigrationBytes.byteLength, lines: lineCount(shippingMigrationBytes), sha256: expected.shippingMigrationSha256 },
       { name: orderFlowMigrationName, bytes: orderFlowMigrationBytes.byteLength, lines: lineCount(orderFlowMigrationBytes), sha256: expected.orderFlowMigrationSha256 },
+      { name: thresholdMigrationName, bytes: thresholdMigrationBytes.byteLength, lines: lineCount(thresholdMigrationBytes), sha256: expected.thresholdMigrationSha256 },
     ],
     run1: { counts: runOne.counts, structuralFingerprint: runOne.structuralFingerprint, fullFingerprint: runOne.fullFingerprint, defaultAclFingerprint: runOne.defaultAclFingerprint },
     run2: { counts: runTwo.counts, structuralFingerprint: runTwo.structuralFingerprint, fullFingerprint: runTwo.fullFingerprint, defaultAclFingerprint: runTwo.defaultAclFingerprint },

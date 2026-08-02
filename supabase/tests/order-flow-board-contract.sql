@@ -9,8 +9,59 @@ insert into public.admin_roles(user_id, role) values
   ('91000000-0000-4000-8000-000000000001', 'manager'),
   ('91000000-0000-4000-8000-000000000002', 'operator');
 
+do $contract$
+begin
+  if (select production_threshold from public.product_registry where product_code = 'eurofighter-typhoon-a2') <> 5 then
+    raise exception 'Eurofighter A2 production threshold must be five';
+  end if;
+  if (select attnotnull from pg_catalog.pg_attribute where attrelid = 'public.product_registry'::regclass and attname = 'production_threshold') then
+    raise exception 'production threshold must remain nullable for historical compatibility';
+  end if;
+end
+$contract$;
+
+insert into public.product_registry(product_code, drop_slug, title, lifecycle_mode)
+values ('threshold-default-contract', 'threshold-default-contract', 'Threshold default contract', 'interest');
+insert into public.product_registry(product_code, drop_slug, title, lifecycle_mode, production_threshold)
+values ('threshold-null-contract', 'threshold-null-contract', 'Threshold null contract', 'interest', null);
+insert into public.product_registry(product_code, drop_slug, title, lifecycle_mode, production_threshold)
+values ('threshold-override-contract', 'threshold-override-contract', 'Threshold override contract', 'interest', 7);
+
+insert into public.drop_interest_requests(
+  id, drop_slug, drop_title, full_name, email, email_normalized, country, country_code,
+  preferred_format, quantity, record_origin
+) values (
+  '92000000-0000-4000-8000-000000000002', 'threshold-override-contract', 'Threshold override contract',
+  'Threshold Contract', 'threshold-contract@example.test', 'threshold-contract@example.test',
+  'Netherlands', 'NL', 'A2', 2, 'customer'
+);
+
+do $contract$
+begin
+  if (select production_threshold from public.product_registry where product_code = 'threshold-default-contract') <> 5 then
+    raise exception 'omitted production threshold must default to five';
+  end if;
+  if (select production_threshold from public.product_registry where product_code = 'threshold-null-contract') <> 5 then
+    raise exception 'explicit null production threshold must normalize to five on insert';
+  end if;
+  if (select production_threshold from public.product_registry where product_code = 'threshold-override-contract') <> 7 then
+    raise exception 'explicit production threshold override must be preserved';
+  end if;
+  if not exists (
+    select 1 from public.admin_order_flow_drop_v1
+    where product_code = 'threshold-override-contract'
+      and production_threshold = 7
+      and qualified_units = 2
+      and units_needed = 5
+      and threshold_reached is false
+  ) then
+    raise exception 'board progress must use the stored production threshold';
+  end if;
+end
+$contract$;
+
 update public.product_registry
-set lifecycle_mode = 'interest', production_threshold = 1, invitations_opened_at = null,
+set lifecycle_mode = 'interest', invitations_opened_at = null,
     invitations_opened_by = null, updated_at = '2026-08-02T12:00:00Z'
 where product_code = 'eurofighter-typhoon-a2';
 
@@ -20,7 +71,7 @@ insert into public.drop_interest_requests(
 ) values (
   '92000000-0000-4000-8000-000000000001', 'eurofighter-typhoon', 'Eurofighter Typhoon',
   'Board Contract', 'board-contract@example.test', 'board-contract@example.test',
-  'Netherlands', 'NL', 'A2', 1, 'customer'
+  'Netherlands', 'NL', 'A2', 5, 'customer'
 );
 
 do $contract$
@@ -48,6 +99,16 @@ begin
   end if;
   if (select reservation_status from public.drop_interest_requests where id = '92000000-0000-4000-8000-000000000001') <> 'new' then
     raise exception 'Process must not mutate reservation lifecycle truth';
+  end if;
+  if not exists (
+    select 1 from public.admin_order_flow_drop_v1
+    where product_code = 'eurofighter-typhoon-a2'
+      and production_threshold = 5
+      and qualified_units = 5
+      and units_needed = 0
+      and threshold_reached is true
+  ) then
+    raise exception 'Eurofighter board progress must use its stored threshold of five';
   end if;
 
   begin

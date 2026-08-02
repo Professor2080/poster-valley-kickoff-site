@@ -34,7 +34,7 @@ Payment paid, failed, expired and canceled transitions are webhook/provider-auth
 | `entity_events` | append-only business timeline, including webhook/system events; no browser direct writes; entity/date index; avoid duplicating mutable truth | A1 |
 | `internal_notes` | operator notes on reservation/order; admin-only, author/date/entity indexes; sensitive operational data | A2/A3 |
 | `email_events` | provider/template/version/recipient redacted status/idempotency key; server-only insert, admin read; unique action key + entity/date index | A3 |
-| `product_registry` | custom public lifecycle/product-code/custom config/Woo link reference; manager writes, public-safe projection; unique product code and mode index; moderate backfill | A1 |
+| `product_registry` | custom public lifecycle/product-code/custom config/Woo link reference; new drops default to production threshold `5`, explicit per-drop overrides remain supported, and Eurofighter A2 is configured as `5`; manager-authorized writes, public-safe projection; unique product code and mode index; moderate backfill | A1 / Order Flow |
 | `shipping_profiles`, `shipping_rate_rules` | server-authoritative versioned profile/rules; manager write, server quote read; profile/active/country indexes; high pricing migration risk | A3 after parity |
 | `manual_shipping_quotes` | quote amount/currency/expiry/approval snapshot; admin-only; invitation/status/expiry indexes; money/PII sensitive | A3 |
 | order fulfilment fields/events | `fulfilment_status`, tracking, shipped/completed timestamps plus timeline; admin/server guarded; status/date indexes; backfill only after contract | A3 |
