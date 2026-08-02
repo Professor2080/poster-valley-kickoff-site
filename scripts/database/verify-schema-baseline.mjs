@@ -27,7 +27,7 @@ const expected = {
   hardeningMigrationSha256: '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9',
   shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
   orderFlowMigrationSha256: '87dd0afc52f760317c1d2fa0dfbc95fd0fe8275e685e1fac7e1c165618f9b658',
-  structuralFingerprint: 'c4127b2b71e6ded6c6c703c36c8d12e77a0382f568469ab71538c7aab8e73e8e',
+  structuralFingerprint: '9f11d4987bbc82a66aa16bc90f29854d20078cb0bd7b900eea838e2e23e06501',
   fullFingerprint: '0d01a56e1525b961ee98200949a3c35bb669be64d19bfe1055700911013b4c47',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
   counts: {
