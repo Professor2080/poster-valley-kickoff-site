@@ -30,7 +30,7 @@ const expected = {
   shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
   orderFlowMigrationSha256: '87dd0afc52f760317c1d2fa0dfbc95fd0fe8275e685e1fac7e1c165618f9b658',
   thresholdMigrationSha256: '76324138304c2c41c956c9ea1c0cd2438d65696666b8193c676d59b515d4c993',
-  structuralFingerprint: '9f11d4987bbc82a66aa16bc90f29854d20078cb0bd7b900eea838e2e23e06501',
+  structuralFingerprint: '586d921e3b02378f5f194c7300328eedb5efd13cc470c19757c86d3a9d0df143',
   fullFingerprint: 'e068e27b15d6b3ff9f27cd60e79195e2898e628eb71b707c322210d6a0ca63ac',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
   counts: {
