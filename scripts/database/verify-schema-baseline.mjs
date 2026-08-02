@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fingerprintTextItems } from './schema-fingerprint.mjs'
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const migrationDirectory = path.join(repositoryRoot, 'supabase', 'migrations')
@@ -22,8 +23,8 @@ const expected = {
   baselineMigrationSha256: 'e4db9505f590ba934543e1ed33e25a8172e66c430596047afe4321d619d8f510',
   hardeningMigrationSha256: '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9',
   shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
-  structuralFingerprint: '9d5887346e9cfeb846a7eab788a75033f59e380e45f6bcc44a0cd5f56a019c69',
-  fullFingerprint: 'd521925af868f6f0845636c0b0fc156ae8845ae7a6e7a266a5a0b100dc86629c',
+  structuralFingerprint: '571fa982f68ea583d0330a3ecfd5c14133023a7ba676e01eb2aef446c1c94611',
+  fullFingerprint: '7820938e81044ff5a1448c3b5645f9fa932edf8e7b2a73593e0feb7886fc7167',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
   counts: {
     tables: 13,
@@ -171,8 +172,12 @@ from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
 `
 
 function evidence(database) {
-  const structuralFingerprint = scalar(database, `with items as (${baseItems}) select encode(extensions.digest(string_agg(item,E'\n' order by item),'sha256'),'hex') from items`)
-  const aclFingerprint = scalar(database, `with items as (${baseItems} union all ${aclItems}) select encode(extensions.digest(string_agg(item,E'\n' order by item),'sha256'),'hex') from items`)
+  const fingerprint = (items) => fingerprintTextItems(JSON.parse(scalar(
+    database,
+    `with items as (${items}) select coalesce(jsonb_agg(item order by item),'[]'::jsonb)::text from items`,
+  )))
+  const structuralFingerprint = fingerprint(baseItems)
+  const aclFingerprint = fingerprint(`${baseItems} union all ${aclItems}`)
   const defaultAclFingerprint = scalar(database, String.raw`
 select encode(extensions.digest(string_agg(item,E'\n' order by item),'sha256'),'hex')
 from (
