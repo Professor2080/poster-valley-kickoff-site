@@ -100,6 +100,9 @@ export async function adminRpc(functionName, body) {
       ambiguous_invitations: [409, 'ambiguous_invitations', 'Multiple invitations are linked to this reservation. Resolve the records before sending.'],
       recipient_mismatch: [409, 'recipient_mismatch', 'The invitation recipient no longer matches the reservation. Resolve it before sending.'],
       invalid_provider_id: [502, 'delivery_failed', 'The email provider response could not be verified.'],
+      delivery_not_confirmed: [409, 'delivery_not_confirmed', 'Delivery must be explicitly confirmed before this item can be closed.'],
+      invalid_filter: [400, 'invalid_filter', 'One or more board filters are invalid.'],
+      invalid_pagination: [400, 'invalid_pagination', 'Board pagination is invalid.'],
     }[databaseCode]
     if (known) throw new AdminRequestError(...known)
     throw new AdminRequestError(response.status === 409 ? 409 : 500, 'operation_failed', 'The operation could not be completed.')

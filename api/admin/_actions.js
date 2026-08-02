@@ -15,6 +15,14 @@ export const actionRoles = {
   'shipping.reconciliation.resolve': 'manager',
   'origin.preview': 'manager',
   'origin.change': 'manager',
+  'board.process.preview': 'operator',
+  'board.process': 'operator',
+  'drop.open.preview': 'manager',
+  'drop.open': 'manager',
+  'delivery.confirm.preview': 'manager',
+  'delivery.confirm': 'manager',
+  'board.close.preview': 'manager',
+  'board.close': 'manager',
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -25,6 +33,10 @@ const shippingActions = new Set(['shipping.preview', 'shipping.retry'])
 const shippingReconciliationActions = new Set(['shipping.reconciliation.preview', 'shipping.reconciliation.resolve'])
 const shippingReconciliationOutcomes = new Set(['provider_acceptance_confirmed', 'provider_non_acceptance_confirmed'])
 const originActions = new Set(['origin.preview', 'origin.change'])
+const boardProcessActions = new Set(['board.process.preview', 'board.process'])
+const dropOpenActions = new Set(['drop.open.preview', 'drop.open'])
+const deliveryConfirmActions = new Set(['delivery.confirm.preview', 'delivery.confirm'])
+const boardCloseActions = new Set(['board.close.preview', 'board.close'])
 const fulfilmentStatuses = new Set(['unfulfilled', 'ready_to_pack', 'packed', 'shipped'])
 const fulfilmentTargets = new Set(['ready_to_pack', 'packed', 'shipped'])
 
@@ -64,6 +76,12 @@ function futureTimestamp(value, label) {
   if (Number.isNaN(timestamp.valueOf()) || timestamp.valueOf() <= Date.now()) invalid(`${label} must be in the future.`, 'invalid_expiry')
   if (timestamp.valueOf() > Date.now() + 366 * 24 * 60 * 60 * 1000) invalid(`${label} must be within one year.`, 'invalid_expiry')
   return timestamp.toISOString()
+}
+
+function nonNegativeVersion(value, label = 'Board version') {
+  const version = Number(value)
+  if (!Number.isSafeInteger(version) || version < 0) invalid(`${label} is invalid.`)
+  return version
 }
 
 export function normalizeActionRequest(action, body) {
@@ -134,6 +152,32 @@ export function normalizeActionRequest(action, body) {
     if (reason.includes('@') || /https?:\/\//i.test(reason) || [...reason].some((character) => character.codePointAt(0) < 32)) invalid('Reason must not contain customer contact data, URLs or control characters.')
     if (!Number.isSafeInteger(expectedOriginVersion) || expectedOriginVersion < 0) invalid('Record origin version is invalid.')
     return { reservationId: uuid(body.reservationId, 'Reservation id'), recordOrigin, reason, expectedOriginVersion }
+  }
+
+  if (boardProcessActions.has(action)) {
+    if (body.sourceType !== 'drop') invalid('Board source type is invalid.')
+    return {
+      sourceType: 'drop',
+      sourceId: uuid(body.sourceId, 'Board source id'),
+      expectedVersion: nonNegativeVersion(body.expectedVersion),
+    }
+  }
+
+  if (dropOpenActions.has(action)) {
+    const productCode = text(body.productCode, 'Product code', 100)
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(productCode)) invalid('Product code is invalid.')
+    const expectedUpdatedAt = text(body.expectedUpdatedAt, 'Product version', 40)
+    if (Number.isNaN(new Date(expectedUpdatedAt).valueOf())) invalid('Product version is invalid.')
+    return { productCode, expectedUpdatedAt }
+  }
+
+  if (deliveryConfirmActions.has(action) || boardCloseActions.has(action)) {
+    return {
+      sourceType: 'drop',
+      sourceId: uuid(body.sourceId, 'Board source id'),
+      orderId: uuid(body.orderId, 'Order id'),
+      expectedVersion: nonNegativeVersion(body.expectedVersion),
+    }
   }
 
   invalid('Unknown operational action.', 'invalid_action')
@@ -207,6 +251,10 @@ export function confirmationSummary(action, preview) {
       reversibility: 'The audit record is permanent. A confirmed non-acceptance permits a separately previewed retry.',
     }
   }
+  if (action === 'board.process') return { ...base, destination: preview.nextStage, externalEffect: 'Marks this item as reviewed in the Admin inbox only.', reversibility: 'The underlying reservation, order and payment records are unchanged.' }
+  if (action === 'drop.open') return { ...base, destination: 'Ready to invite', externalEffect: 'Opens this qualified drop for personal payment invitations.', reversibility: 'The lifecycle change is audited and is not reversed from this board.' }
+  if (action === 'delivery.confirm') return { ...base, destination: 'Delivery confirmed', externalEffect: 'Records a manager-verified delivery confirmation. No carrier or customer message is sent.', reversibility: 'The audit record is permanent.' }
+  if (action === 'board.close') return { ...base, destination: 'Closed archive', externalEffect: 'Removes the delivered item from the default board and preserves its lifecycle snapshot.', reversibility: 'The item remains searchable in the closed archive.' }
   return { ...base, destination: preview.newOrigin || preview.recordOrigin, externalEffect: 'Updates linked record classification and audit history.', reversibility: 'A later audited change can correct the classification.' }
 }
 
@@ -266,5 +314,9 @@ export function mutationForPreview(action) {
     'shipping.preview': 'shipping.retry',
     'shipping.reconciliation.preview': 'shipping.reconciliation.resolve',
     'origin.preview': 'origin.change',
+    'board.process.preview': 'board.process',
+    'drop.open.preview': 'drop.open',
+    'delivery.confirm.preview': 'delivery.confirm',
+    'board.close.preview': 'board.close',
   }[action] ?? null
 }

@@ -21,6 +21,13 @@ before(() => {
       const user = parsed.searchParams.get('user_id')
       return new Response(JSON.stringify(user.includes('nonadmin') ? [] : [{ role: user.includes('operator') ? 'operator' : 'manager' }]), { status: 200 })
     }
+    if (parsed.pathname.endsWith('/rpc/admin_order_flow_read')) {
+      const body = JSON.parse(options.body)
+      assert.equal(body.p_actor, 'good')
+      assert.equal(body.p_stage, 'paid_to_ship')
+      assert.equal(body.p_needs_attention, true)
+      return new Response(JSON.stringify({ items: [{ source_id: 'board-row', stage: 'paid_to_ship' }], drops: [], page: { limit: 25, offset: 0, total: 1 } }), { status: 200 })
+    }
     if (parsed.pathname.endsWith('/admin_reservation_list_v1')) {
       assert.match(parsed.searchParams.get('select'), /customer_name,masked_email/)
       assert.equal(parsed.searchParams.get('record_origin'), 'not.in.(customer)')
@@ -60,6 +67,13 @@ test('operator can use read contracts but cannot satisfy manager-only authorizat
 test('origin exclusion removes downstream test records through the service projection', async () => {
   const res = response(); await read(request({ resource: 'orders', limit: 25, offset: 0, filters: { exclude_origin: 'test,internal_pilot' } }), res)
   assert.equal(res.statusCode, 200); assert.equal(res.payload.items.length, 0)
+})
+
+test('order-flow read uses one allowlisted RPC with normalized filters', async () => {
+  const res = response(); await read(request({ resource: 'order_flow', limit: 25, offset: 0, filters: { stage: 'paid_to_ship', needs_attention: 'true' } }), res)
+  assert.equal(res.statusCode, 200); assert.equal(res.payload.resource, 'order_flow'); assert.equal(res.payload.items[0].stage, 'paid_to_ship')
+  const invalid = response(); await read(request({ resource: 'order_flow', filters: { source_type: 'parallel_order_system' } }), invalid)
+  assert.equal(invalid.statusCode, 400); assert.equal(invalid.payload.error.code, 'invalid_filter')
 })
 
 test('origin reads reject conflicting, unsupported, duplicate, and oversized exclusions', async () => {

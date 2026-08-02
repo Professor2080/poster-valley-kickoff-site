@@ -12,45 +12,45 @@ end;
 $$;
 
 select pg_temp.assert_true(
-  (select count(*) = 13 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'),
-  '13 public tables'
+  (select count(*) = 14 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'),
+  '14 public tables'
 );
 select pg_temp.assert_true(
-  (select count(*) = 4 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'v'),
-  '4 public views'
+  (select count(*) = 6 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'v'),
+  '6 public views'
 );
 select pg_temp.assert_true(
   (select count(*) = 2 from pg_catalog.pg_type t join pg_catalog.pg_namespace n on n.oid = t.typnamespace where n.nspname = 'public' and t.typtype = 'e'),
   '2 public enums'
 );
 select pg_temp.assert_true(
-  (select count(*) = 28 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
-  '28 public routines'
+  (select count(*) = 32 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
+  '32 public routines'
 );
 select pg_temp.assert_true(
-  (select count(*) = 9 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal),
-  '9 application triggers'
+  (select count(*) = 10 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal),
+  '10 application triggers'
 );
 select pg_temp.assert_true(
   (select count(*) = 2 from pg_catalog.pg_policy p join pg_catalog.pg_class c on c.oid = p.polrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'),
   '2 RLS policies'
 );
 select pg_temp.assert_true(
-  (select count(*) = 57 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'i'),
-  '57 indexes'
+  (select count(*) = 64 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'i'),
+  '64 indexes'
 );
 select pg_temp.assert_true(
-  (select count(*) = 77 from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid = c.connamespace where n.nspname = 'public'),
-  '77 constraints'
+  (select count(*) = 89 from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid = c.connamespace where n.nspname = 'public' and c.contype <> 'n'),
+  '89 constraints'
 );
 
 select pg_temp.assert_true(
-  (select count(*) = 13 and bool_and(c.relrowsecurity) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'),
-  'RLS on all 13 tables'
+  (select count(*) = 14 and bool_and(c.relrowsecurity) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'),
+  'RLS on all 14 tables'
 );
 select pg_temp.assert_true(
-  (select count(*) = 4 and bool_and(coalesce(c.reloptions @> array['security_invoker=true'], false)) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'v'),
-  'security_invoker on all 4 views'
+  (select count(*) = 6 and bool_and(coalesce(c.reloptions @> array['security_invoker=true'], false)) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'v'),
+  'security_invoker on all 6 views'
 );
 
 select pg_temp.assert_true(
@@ -124,6 +124,9 @@ select pg_temp.assert_true(
       where n.nspname = 'public' and a.grantee = 'service_role'::regrole
     ), expected(relname, privilege_type) as (
       values
+        ('admin_order_flow_drop_v1', 'SELECT'),
+        ('admin_order_flow_state', 'SELECT'),
+        ('admin_order_flow_v1', 'SELECT'),
         ('admin_audit_events', 'SELECT'),
         ('admin_invitation_list_v1', 'SELECT'),
         ('admin_order_list_v1', 'SELECT'),
@@ -161,6 +164,9 @@ select pg_temp.assert_true(
       where n.nspname = 'public' and pg_catalog.has_function_privilege('service_role', p.oid, 'execute')
     ), expected(proname) as (
       values
+        ('admin_order_flow_apply_action'),
+        ('admin_order_flow_preview_action'),
+        ('admin_order_flow_read'),
         ('admin_a31_assert_shipping_ready'),
         ('admin_a31_change_origin'),
         ('admin_a31_preview_origin_change'),
@@ -183,16 +189,16 @@ select pg_temp.assert_true(
     )
     select not exists ((select * from actual except select * from expected) union all (select * from expected except select * from actual))
   ),
-  'service_role has exactly 19 approved RPC execute grants'
+  'service_role has exactly 22 approved RPC execute grants'
 );
 
 select pg_temp.assert_true(
-  (select count(*) = 20 and bool_and(p.prosecdef) and bool_and(
+  (select count(*) = 24 and bool_and(p.prosecdef) and bool_and(
     p.proconfig is not null
     and exists (select 1 from unnest(p.proconfig) setting where setting like 'search_path=%')
     and not exists (select 1 from unnest(p.proconfig) setting where setting ~ '(^|,)extensions(,|$)')
   ) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef),
-  'all 20 SECURITY DEFINER routines have a fixed restricted search_path'
+  'all 24 SECURITY DEFINER routines have a fixed restricted search_path'
 );
 select pg_temp.assert_true(
   (select count(*) = 8 and bool_and(
@@ -232,6 +238,7 @@ select pg_temp.assert_true(
   (select
     (select count(*) from public.admin_audit_events)
     + (select count(*) from public.admin_operation_idempotency)
+    + (select count(*) from public.admin_order_flow_state)
     + (select count(*) from public.admin_roles)
     + (select count(*) from public.drop_interest_requests)
     + (select count(*) from public.email_delivery_events)

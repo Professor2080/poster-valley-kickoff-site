@@ -1,4 +1,4 @@
-import type { AdminDetailResponse, AdminReadResponse, AdminResource } from './contracts'
+import type { AdminDetailResponse, AdminReadResponse, AdminResource, OrderFlowResponse } from './contracts'
 
 export class AdminApiError extends Error {
   status: number
@@ -53,6 +53,9 @@ export function getAdminRead(resource: AdminResource, token: string, limit: numb
 }
 export function getAdminDetail(resource: 'reservations' | 'orders', id: string, token: string) {
   return post<AdminDetailResponse>('/api/admin/detail', token, { resource, id })
+}
+export function getOrderFlow(token: string, limit: number, offset: number, filters: Record<string, string>) {
+  return post<OrderFlowResponse>('/api/admin/read', token, { resource: 'order_flow', limit, offset, filters })
 }
 export function runAdminAction(token: string, payload: Record<string, unknown>) {
   return post<AdminActionResult>('/api/admin/actions', token, payload)
