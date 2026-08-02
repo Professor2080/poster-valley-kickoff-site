@@ -1,12 +1,26 @@
 # ADR-006: Development and staging data environments
 
-**Status:** Accepted — implementation and production release require separate approval.
+**Status:** Accepted — operational clarification recorded 2026-07-31; implementation and
+production release require separate approval.
 
 ## Decision
 
-Admin Dashboard development, authentication, RLS work, migrations and operational tests must not run against Production Supabase. The safest practical default is a separate **Poster Valley Kickoff Staging** Supabase project. Vercel Preview uses staging variables; Vercel Production continues to use Production variables. Codex Cloud routine development receives no Production service-role key. Migrations run on staging first; a production migration is a separate, human-approved release action.
+Admin Dashboard development, authentication, RLS work, migrations and operational tests must not
+run against Production Supabase. The practical default is **Clean Staging**: a separate, disposable
+Poster Valley Kickoff Supabase project built solely from committed migrations on `main`. Vercel
+Preview uses Clean Staging variables; Vercel Production continues to use Production variables.
+Routine development receives no Production service-role key. Migrations run on Clean Staging first;
+a Production migration is a separate, human-approved release action.
 
-Staging must not send real customer email or create live Mollie payments. Test rows must be identifiable (for example, a non-production marker), removable, and never copied from production customer data. Every migration needs a forward migration, rollback notes, RLS review, backward/forward compatibility checks and staging evidence.
+The existing project `cdmocdodehjmcgtxicaj` is now **Legacy Staging**: a frozen legacy environment,
+not a valid migration baseline. Clean Staging has not yet been created and requires separate cost
+and infrastructure approval. See the [environment matrix](../environment-matrix.md) and
+[Clean Staging runbook](../clean-staging-runbook.md).
+
+Clean Staging must not send real customer email or create live Mollie payments. Test rows must be
+synthetic, identifiable, removable and never copied from Production customer data. Every migration
+needs an additive forward change, rollback or forward-fix notes, RLS/grant review,
+backward/forward-compatibility checks and Clean Staging evidence.
 
 ## Alternatives evaluated
 

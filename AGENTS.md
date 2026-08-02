@@ -103,7 +103,12 @@ Where `record_origin` exists, use only the accepted constrained values and autho
 
 Use additive, reviewable Supabase migrations.
 
+- Committed migration files on `main` are the only authoritative migration history.
 - Never edit migration history that has already been applied to any remote environment.
+- Every active Staging and Production environment must be reproducible from the committed history
+  on `main`.
+- Treat any remote-only migration version as an infrastructure blocker. Do not repair migration
+  drift inside a product-feature task.
 - Create migrations through the repository's established Supabase CLI workflow.
 - Inspect dependencies and remote migration history before applying anything.
 - Add indexes for new foreign keys and query paths when justified.
@@ -111,6 +116,13 @@ Use additive, reviewable Supabase migrations.
 - Keep migrations deterministic and safe to apply in the intended order.
 - Do not run broad resets, destructive cleanup, or schema rewrites against a remote project.
 - Never apply a migration to Staging or Production merely because it exists in a branch.
+- Do not use `migration repair`, `db pull`, `migration fetch`, placeholder migrations or direct
+  migration-history-table changes as a normal release route.
+- Before applying a feature migration, prove that Git and the target environment have exactly the
+  same migration list before that feature.
+
+The authoritative process, including database-first release and `expand -> migrate -> contract`,
+is in [`docs/database-release-process.md`](docs/database-release-process.md).
 
 ## External systems and environments
 
@@ -120,9 +132,15 @@ exact target project and deployment before any remote action.
 
 - Local is the default. It must not contact a remote database unless a separate task explicitly
   authorizes that contact.
-- Vercel Preview is a deployment environment. When remote validation is approved, it may use only
-  the isolated Supabase Staging project.
-- Supabase Staging (`cdmocdodehjmcgtxicaj`) is the only normal remote validation target.
+- Vercel Preview is a deployment environment. When remote validation is separately approved, it
+  may use only Clean Staging with browser-safe public Staging configuration, suppressed operational
+  email and Mollie test mode.
+- Clean Staging (`stbunwkgvxfwmbjivgos`, `eu-west-1`) exists and was recorded as
+  `ACTIVE_HEALTHY`, with zero migrations and zero public tables. It is the only normal remote
+  validation target, but it remains off-limits until a separate task authorizes access and the
+  canonical baseline has been merged on `main`.
+- Legacy Staging (`cdmocdodehjmcgtxicaj`) is an **INACTIVE frozen legacy environment — not a valid
+  migration baseline**. Do not access it or deploy new feature migrations to it.
 - Production (`main`, the Production Vercel environment, and Supabase
   `epqpeoubkbftcvxjbqeo`) is outside normal agent work.
 - Keep operational email suppressed and use no live payment credential in Local, Preview, or
@@ -155,6 +173,10 @@ Stop immediately on an unexpected dependency, target mismatch, schema difference
 
 Do not assume Staging access is authorized by a code-change request. Ask for separate authorization before remote migrations or stateful tests. Keep email suppressed and do not create real payments. Prefer transaction-wrapped synthetic fixtures with verified rollback.
 
+Follow [`docs/clean-staging-runbook.md`](docs/clean-staging-runbook.md). Until Clean Staging's
+pre-feature migration history exactly equals committed `main`, database-backed Preview feature
+validation is blocked.
+
 ### Frozen workstreams
 
 A4 reporting/exports, migration-history repair and deterministic schema verification are frozen.
@@ -186,6 +208,8 @@ Use the version-controlled workflow documentation:
 
 - [`docs/development-workflow.md`](docs/development-workflow.md)
 - [`docs/environment-matrix.md`](docs/environment-matrix.md)
+- [`docs/database-release-process.md`](docs/database-release-process.md)
+- [`docs/clean-staging-runbook.md`](docs/clean-staging-runbook.md)
 - [`docs/worktree-and-branch-policy.md`](docs/worktree-and-branch-policy.md)
 - [`docs/release-runbook.md`](docs/release-runbook.md)
 - [`docs/skills/README.md`](docs/skills/README.md)
@@ -199,6 +223,22 @@ When changing code:
 - Update documentation when behavior, setup, environment variables, or operational limitations change.
 - Never weaken a security boundary to simplify frontend work or testing.
 - Do not use subagents unless the user explicitly requests delegation/parallel review or an applicable workflow instruction requires it.
+
+## Change routes
+
+Classify every change before implementation:
+
+- **Fast path:** documentation, styling or isolated UI work without database, auth, payment,
+  operational-email or provider impact.
+- **Controlled path:** database, authentication/authorization, payment, operational email, personal
+  data, inventory, order, fulfilment or provider-webhook work.
+- **Infrastructure path:** environment creation/replacement, migration-history problems, environment
+  scopes, project links, secret rotation, GitHub rulesets, hosting/domains, backups or recovery.
+
+Infrastructure problems are separate tasks and are never repaired in the middle of a feature task.
+The exact steps, review limits and Definitions of Done are in
+[`docs/development-workflow.md`](docs/development-workflow.md) and
+[`docs/release-runbook.md`](docs/release-runbook.md).
 
 ## Verification
 

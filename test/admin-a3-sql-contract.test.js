@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const sql = await readFile(new URL('../supabase/migrations/20260720110000_admin_operational_actions.sql', import.meta.url), 'utf8')
+// Historical source-provenance assertions only; the canonical baseline is executed separately.
+const sql = await readFile(new URL('../supabase/migrations-archive/pre-baseline-v1/20260720110000_admin_operational_actions.sql', import.meta.url), 'utf8')
 
 function section(start, end) {
   const startIndex = sql.indexOf(start)

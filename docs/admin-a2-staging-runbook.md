@@ -1,12 +1,22 @@
 # A2 admin frontend: Preview and staging runbook
 
+> **Execution status:** blocked until the canonical baseline is applied to Clean Staging, its
+> history matches committed migrations on `main` and it is linked to Vercel Preview. Legacy Staging
+> `cdmocdodehjmcgtxicaj` is inactive and frozen and must not be
+> used for this validation. See the [Clean Staging runbook](clean-staging-runbook.md).
+
 ## Boundary and prerequisites
 
-This runbook is for human post-review validation only. Codex Cloud must not connect to either Supabase project, run migrations, create users, send a magic link, create a payment, deploy, or touch WooCommerce/WordPress. Use **only** Poster Valley Kickoff Staging (`cdmocdodehjmcgtxicaj`). Stop immediately if any CLI or console target is Production (`epqpeoubkbftcvxjbqeo`). A1's migrations and API contracts are frozen; this frontend requires no migration.
+This runbook is for human post-review validation only. Routine development must not connect to a
+Supabase project, run migrations, create users, send a magic link, create a payment, deploy, or touch
+WooCommerce/WordPress. After separate authorization, use **only** the exact Clean Staging project ref
+recorded in the [environment matrix](environment-matrix.md). Stop immediately if any CLI or console
+target is Legacy Staging, Production (`epqpeoubkbftcvxjbqeo`) or any other ref. A1's migrations and
+API contracts are frozen; this frontend requires no migration.
 
 ## Preview configuration
 
-1. In the Preview environment only, set `VITE_SUPABASE_URL` to the Staging project URL and `VITE_SUPABASE_PUBLISHABLE_KEY` to its publishable/anon key. These values are browser-safe; the publishable key is **not** a service-role key.
+1. In the Preview environment only, set `VITE_SUPABASE_URL` to the Clean Staging project URL and `VITE_SUPABASE_PUBLISHABLE_KEY` to its publishable/anon key. These values are browser-safe; the publishable key is **not** a service-role key.
 2. Retain the existing server-side **staging** variables required by A1 (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`) in Preview only. Never prefix a service-role key with `VITE_`, commit it, or expose it in browser code.
 3. Redeploy the Preview after any environment-variable change; Vite bakes `VITE_` values into the browser build. Confirm Production variables and Production deployment remain unchanged.
 4. Open `/admin` directly. It has no public-site navigation entry.

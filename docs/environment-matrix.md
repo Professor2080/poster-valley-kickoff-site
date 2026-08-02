@@ -1,74 +1,98 @@
 # Environment matrix
 
-## Boundaries
+## Active operating model
 
-| Environment | Code/deployment | Data target | Email/payment | Normal agent access |
-| --- | --- | --- | --- | --- |
-| Local | local feature worktree | none by default | suppressed; no payment | yes, database-free |
-| Preview | Vercel feature-branch Preview | Supabase Staging only when separately approved | suppressed; Mollie test credential only after its mode is verified | code/CI yes; remote state no by default |
-| Staging | isolated validation target | `cdmocdodehjmcgtxicaj` — Poster Valley Kickoff Staging | synthetic data only; no live mail/payment | separate scoped approval |
-| Production | Vercel Production from `main` | `epqpeoubkbftcvxjbqeo` — Poster Valley Kickoff | real external effects possible | separate explicit task only |
+| Environment | Code/deployment | Data target | Data | Email/payment | Normal use |
+| --- | --- | --- | --- | --- | --- |
+| Local | active local feature worktree | local/mocked only; no remote database by default | synthetic only; never customer data | providers mocked, operational email suppressed, no live payment | development and automated tests |
+| Vercel Preview | GitHub-integrated feature-branch Preview | Clean Staging only, after separate approval and baseline apply | synthetic accounts and records only | operational email suppressed; Mollie test mode only | browser and authenticated candidate validation |
+| Clean Staging | Supabase `stbunwkgvxfwmbjivgos`, `eu-west-1`, recorded `ACTIVE_HEALTHY` | canonical baseline plus default-privilege hardening applied and verified; rebuild only from committed migrations | synthetic only; disposable and reproducible; fixture set `PV-CLEAN-STAGING-V1`; never a Production copy | operational delivery suppressed; no Mollie or Resend provider calls from fixture tooling | separately authorized seed, concurrency, idempotency, transaction and authenticated Preview tests |
+| Production | Vercel Production from `main` | Supabase `epqpeoubkbftcvxjbqeo` | real customer data | real external effects possible | separately approved releases only; never feature development |
 
-Never infer the target from a URL or variable name alone. Stop if repository, project ref,
-deployment target, schema/history or credential scope is uncertain.
+Vercel Preview and Production are built through the existing GitHub integration. Until Clean
+Staging has been proven equal to the committed pre-feature migration history on `main` and the
+canonical baseline has been applied under separate authorization, database-backed Preview
+validation is blocked. It does not fall back to another remote database.
+
+The version-controlled staging tooling requires exact project-ref checks, an explicit
+`--confirm-clean-staging` acknowledgement, the server-only service-role key for Auth Admin, and a
+TLS owner-level `psql` session for the existing tables. It adds no permanent grants or staging RPC.
+Limited cleanup retains marked append-only synthetic history; a complete cleanup is a rebuild of
+the disposable project from committed migrations. Production and Legacy Staging are rejected
+targets. Fixtures remain present during review, operational email remains suppressed, and Pascal's
+actual Admin login may trigger at most one Supabase Auth login email.
+
+Never infer a target from a URL, alias or variable name. Verify the exact repository, project ref,
+deployment environment, branch/commit, migration history and credential mode before any remote
+action. Environment access or a code-change request does not itself authorize a stateful test,
+migration, provider call or deployment.
+
+## Legacy Staging
+
+Supabase project `cdmocdodehjmcgtxicaj` is:
+
+> **INACTIVE frozen legacy environment — not a valid migration baseline**
+
+It contains remote-only migration-history versions `20260719175848` and `20260722111632` and is not
+reproducible solely from the committed migrations on `main`. Keep it frozen for now. Do not deploy
+new feature migrations to it, access it for this transition, use it for feature validation, copy
+its remote-only history into Git, or treat it as a source of truth.
+
+Migration-history recovery is stopped. A prior `migration fetch` overwrote tracked migration files
+inside a temporary verification worktree, and the fetched A4 migration did not exactly match a
+known Git version. Those recovery files are not authoritative. Do not use `migration repair`,
+`db pull`, placeholder migrations or direct changes to `supabase_migrations.schema_migrations` to
+make Legacy Staging appear aligned. See the
+[database release process](database-release-process.md) and
+[Clean Staging runbook](clean-staging-runbook.md).
 
 ## Environment key policy
 
-`.env.example` is the name-level baseline. `npm run env:audit` verifies that every key is classified.
+`.env.example` is the name-level baseline. `npm run env:audit` verifies that every key is
+classified.
 
 - Browser-safe: only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
-- Server-only: every other listed key.
-- Server-only in Preview/Staging and Production: Staging-specific Supabase server keys,
-  `ADMIN_ACTION_SECRET`, `ADMIN_INVITATION_TOKEN_SECRET` and `ADMIN_CONFIRMATION_SECRET`. Preview
-  and Staging need their own synthetic Admin secrets for approved invitation-token rotation and
-  confirmation-proof validation.
-- Operational Production-only: `RESEND_API_KEY`, legacy `VERSEL_RESEND_API_KEY`,
-  `OPERATIONAL_EMAIL_*`, live Mollie configuration and real sender identity.
-- Preview/Staging may contain only Staging server keys and test/suppressed integration settings.
-  They must never contain or reuse Production values; operational email remains suppressed.
-- Development is local and database-free by default, even if a developer has local variables.
+- Server-only: every other listed key, including every service-role key and application secret.
+- Preview uses only Clean Staging public/server configuration after the baseline has been applied
+  and the environment linkage is separately approved. It must never reuse Production Supabase
+  values.
+- Preview and Clean Staging use distinct non-production Admin secrets, suppressed operational mail
+  and a verified Mollie test credential/test mode.
+- Operational Production-only settings include real Resend delivery, real sender identity and live
+  Mollie configuration.
+- Local development remains database-free and provider-mocked by default, even if a developer has
+  local variables.
 
-The audit distinguishes allowed, required, disallowed, unexpected and browser-prefixed secret
-names. With `--names-file`, missing required names fail unless the explicitly report-only
-`--allow-missing` flag is used. The audit compares names only: it cannot prove that same-named
-variables have distinct values, that delivery is actually suppressed, or that a Mollie key is
-test-mode. Those remain human dashboard gates without copying values into logs or chat.
+The audit compares names only. It cannot prove that same-named variables have different values,
+that delivery is suppressed, or that a Mollie credential is test-mode. Verify those properties in
+the exact provider/environment without printing values, under separate authorization.
 
-## Read-only inventory on 2026-07-29
+## Environment-specific stop conditions
 
-Vercel project `Professor2080/poster-valley` is linked by deployment metadata to GitHub
-`Professor2080/poster-valley-kickoff-site`. It uses Node `24.x`; Production deployments shown by the
-connector come from `main`, while feature branches receive Preview deployments.
+Stop immediately when:
 
-Observed Vercel key names:
-
-- Production: `ADMIN_CONFIRMATION_SECRET`, `ADMIN_INVITATION_TOKEN_SECRET`,
-  `OPERATIONAL_EMAIL_REPLY_TO`, `OPERATIONAL_EMAIL_FROM`,
-  `OPERATIONAL_EMAIL_DELIVERY_ENABLED`, `POSTER_VALLEY_ENV`,
-  `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_URL`, `ADMIN_ACTION_SECRET`,
-  `MOLLIE_API_KEY`, `RESEND_API_KEY`, `SITE_URL`, `FORM_NOTIFICATION_FROM`,
-  `VERSEL_RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`.
-- Preview: `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_URL`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, `ADMIN_ACTION_SECRET`, `SITE_URL`,
-  `MOLLIE_API_KEY`, `FORM_NOTIFICATION_FROM`.
-- Development: no names were returned.
-
-No values were requested or displayed. Gaps versus `.env.example` are not automatically defects:
-some keys are optional or intentionally Production-only. The Preview `MOLLIE_API_KEY` mode and the
-separation of same-named Preview/Production Supabase values remain human verification gates.
-
-The Supabase read-only connector returned Staging `cdmocdodehjmcgtxicaj` and Production
-`epqpeoubkbftcvxjbqeo`, matching repository documentation. A branch-metadata request failed in the
-connector before returning state, so “no Supabase Branching” is the adopted policy, not a live
-dashboard fact proven by this inventory.
+- the project ref, deployment, branch/commit, migration history or credential mode differs from the
+  approved target;
+- Production appears during a Local, Preview or Staging task;
+- Preview contains Production values or could send operational email/create a live payment;
+- Clean Staging pre-feature migration history is not exactly equal to `main`;
+- a dry-run contains anything beyond the intended migration;
+- synthetic data cannot be identified and safely cleaned up.
 
 ## Future read-only Supabase Staging MCP
 
-Do not configure Production. In a separately approved interactive task:
+This heading and server name are retained for tooling compatibility. The configuration below is a
+disabled, read-only **Legacy Staging inspection** template only. It is not a normal validation
+target, does not authorize access, and must never be used to establish release readiness or repair
+history. The existing Clean Staging project requires a separate, reviewed MCP configuration for
+`stbunwkgvxfwmbjivgos`; this Legacy-only placeholder is not that configuration and must not be
+enabled or repointed during a product task.
 
-1. Put `mcp_oauth_credentials_store = "keyring"` in the user-level
-   `~/.codex/config.toml`; credential storage is machine-local.
-2. Add this disabled server to the trusted repository's `.codex/config.toml`:
+In a separately approved interactive Legacy-inspection task only:
+
+1. Put `mcp_oauth_credentials_store = "keyring"` in the user-level Codex configuration; credential
+   storage is machine-local.
+2. Add this disabled server to the trusted repository configuration:
 
    ```toml
    [mcp_servers.supabase_staging]
@@ -79,39 +103,15 @@ Do not configure Production. In a separately approved interactive task:
    enabled_tools = ["list_tables", "list_extensions", "list_migrations", "get_logs", "get_advisors"]
    ```
 
-3. Review that the URL contains exactly the Staging ref and `read_only=true`, that account,
-   functions, development, branching and storage feature groups are absent, and that write tools
-   are not allow-listed.
-4. Only then set `enabled = true` and run `codex mcp login supabase_staging` in a normal interactive
-   terminal. Complete OAuth as Pascal and verify `codex mcp get supabase_staging`.
-5. Stop if the consent screen, project scope, keyring storage or tool list differs. Never accept
-   broader scopes and never substitute the documented Production project.
+3. Verify the exact Legacy project ref, `read_only=true`, the minimal tool list and the absence of
+   write-capable feature groups. Keep the server disabled unless Pascal authorizes the bounded
+   inspection.
+4. Inspect configured servers with `codex mcp list` and the exact entry with
+   `codex mcp get supabase_staging`. Stop on any broader scope or different project.
+5. To end the separately approved inspection, disable the entry first, run
+   `codex mcp logout supabase_staging`, and use `codex mcp remove supabase_staging` only when that
+   command owns the active entry. Confirm with `codex mcp list` that no active server remains.
 
-This task stopped before config creation and OAuth because authentication is external state and the
-connector cannot itself prove the eventual consent screen and OS-keyring result.
-
-### Disable, remove and revoke
-
-These steps require a separately approved interactive task. Configuration removal and OAuth
-revocation are different actions.
-
-1. Inspect configured servers with `codex mcp list` and the exact entry with
-   `codex mcp get supabase_staging`. Stop if another project, broader feature group or unexpected
-   consent scope appears.
-2. First set only `[mcp_servers.supabase_staging].enabled = false` in the trusted repository config,
-   then repeat both read-only checks.
-3. Run `codex mcp logout supabase_staging` to remove Codex's stored authentication for this server.
-   This does not prove that the OAuth provider-side grant is revoked.
-4. Run `codex mcp remove supabase_staging` only when that command manages the entry in the active
-   Codex configuration. If the block was manually added to `.codex/config.toml`, remove exactly the
-   `mcp_servers.supabase_staging` block in the approved repository change instead; do not edit other
-   servers.
-5. Run `codex mcp list` again. `codex mcp get supabase_staging` must report that the server is no
-   longer configured. Inspect the repository config to confirm no active Supabase MCP block remains.
-6. If provider-side revocation is required, Pascal must revoke the specific Codex/Supabase OAuth
-   grant in the relevant account security UI. Re-run login only after rechecking the Staging-only
-   consent. Stop rather than guessing when provider-side grant identity is unclear.
-7. Confirm no Production server or Production project ref was added at any point.
-
-The commands above were verified as available in `codex-cli 0.145.0`; none is executed by normal
-repository verification.
+Configuration removal and provider-side OAuth revocation are distinct. If provider-side revocation
+is required, Pascal must revoke the exact grant in the relevant account UI. No Production MCP is
+permitted.

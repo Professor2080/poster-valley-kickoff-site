@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -135,6 +135,7 @@ export function repositoryFiles(root = repositoryRoot()) {
     .split('\0')
     .filter(Boolean)
     .map((file) => file.replaceAll('\\', '/'))
+    .filter((file) => existsSync(path.join(root, file)))
     .sort()
 }
 

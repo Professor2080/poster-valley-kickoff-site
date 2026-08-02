@@ -104,7 +104,7 @@ test('confirmation proof is actor/action/payload/state bound and expires', () =>
 })
 
 test('A3.2 SQL keeps confirmation, manager authorization, token grace, and RPC privileges server-side', async () => {
-  const sql = await readFile(new URL('../supabase/migrations/20260721151023_admin_invitation_delivery_confirmation.sql', import.meta.url), 'utf8')
+  const sql = await readFile(new URL('../supabase/migrations-archive/pre-baseline-v1/20260721151023_admin_invitation_delivery_confirmation.sql', import.meta.url), 'utf8')
   assert.match(sql, /security definer set search_path = public, pg_temp/gi)
   assert.match(sql, /role='manager'|role = 'manager'/)
   assert.match(sql, /p_confirmation_hash is distinct from p_request_hash/)

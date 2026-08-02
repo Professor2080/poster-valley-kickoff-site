@@ -22,8 +22,8 @@ npm run dev
 ```
 
 `npm run dev` is enough for visual frontend work. Local development is database-free by default.
-Remote API/provider validation is a separate, explicitly approved task and may target only the
-isolated Staging environment during normal development.
+Remote API/provider validation is a separate, explicitly approved task and may target only Clean
+Staging after that environment has been created and verified.
 
 ## Checks
 
@@ -39,6 +39,12 @@ build, Git whitespace checks, conflict-marker and trailing-whitespace scans, a t
 browser-prefix scan, the environment-key policy check, and the Vercel function-budget test. It does
 not contact a database or external provider.
 
+The required GitHub `quality-gate` additionally starts a fresh PostgreSQL 17 service and runs
+`npm run test:schema-baseline`. That loopback-only proof applies the canonical baseline twice from
+`template0`, verifies the permanent SQL contracts and exact fingerprints, exercises the concurrent
+payment claim/replay path, and removes both temporary databases. The command refuses to run without
+the explicit `POSTER_VALLEY_LOCAL_PG=1` opt-in and a `127.0.0.1` target.
+
 The required contract arguments and worktree roles are documented in the
 [worktree and branch policy](docs/worktree-and-branch-policy.md).
 
@@ -46,9 +52,24 @@ The required contract arguments and worktree roles are documented in the
 
 - [Development workflow](docs/development-workflow.md)
 - [Environment matrix](docs/environment-matrix.md)
+- [Database release process](docs/database-release-process.md)
+- [Clean Staging runbook](docs/clean-staging-runbook.md)
 - [Worktree and branch policy](docs/worktree-and-branch-policy.md)
 - [Release runbook and external-settings plan](docs/release-runbook.md)
 - [Skill governance and register](docs/skills/README.md)
+
+Changes follow one of three routes: fast for low-risk repository work, controlled for data,
+authorization, payments, operational email and other trust-boundary changes, and infrastructure for
+environment or platform work. Committed migrations on `main` are the sole database-history source.
+The existing Supabase project `cdmocdodehjmcgtxicaj` is inactive and frozen as Legacy Staging; it
+is not a valid migration baseline. Clean Staging `stbunwkgvxfwmbjivgos` exists in `eu-west-1` and is
+recorded as `ACTIVE_HEALTHY`. Its remote migration history contains
+`20260731113000_schema_baseline_v1` followed by
+`20260731193947_harden_default_privileges`; the resulting schema has 13 tables, 4 views, 2 enums,
+27 routines, 9 triggers and 2 policies. Version-controlled Clean Staging fixture tooling exists but
+has not been executed remotely. PR #20 remains Draft and unmerged, Production is unchanged and
+Legacy Staging remains inactive. The next gate is to seed and verify Clean Staging, then let Pascal
+review the frontend and Admin flows.
 
 ## First Drop Assets
 
@@ -115,10 +136,17 @@ business and legal review.
 
 ## Supabase Setup
 
-`supabase/schema.sql` and `supabase/migrations/` are version-controlled database source. Do not
-execute either during ordinary local development. Local stack setup, Staging validation and every
-remote migration are separate work blocks with explicit target verification and human approval.
-See the [environment matrix](docs/environment-matrix.md) and
+`supabase/migrations/20260731113000_schema_baseline_v1.sql` is the only active canonical migration.
+The six files used to construct it are preserved byte-for-byte under
+`supabase/migrations-archive/pre-baseline-v1/`, with immutable hashes in `manifest.json`; archived
+files are historical provenance and must never be executed by the Supabase CLI. `supabase/schema.sql`
+is retained as historical source material, not as active migration history. Committed migration
+files on `main` are the only authoritative migration history; an applied migration is never edited
+in place. Do not execute schema or migration files during ordinary local development. Local
+PostgreSQL proof, Clean Staging validation and every remote migration are separate work blocks with
+explicit target verification and human approval. See the
+[database release process](docs/database-release-process.md),
+[environment matrix](docs/environment-matrix.md) and
 [release runbook](docs/release-runbook.md).
 
 The tables have Row Level Security enabled. No public select policy is added; submissions should go
@@ -195,9 +223,10 @@ Mollie webhooks are received at:
 /api/mollie/webhook
 ```
 
-For local development, Mollie must be able to reach the webhook URL. Use a tunnel such as ngrok, or
-test on a Vercel preview deployment. The webhook is idempotent for customer/internal paid emails by
-checking sent timestamp columns on the order before sending.
+Provider-backed webhook testing belongs to the controlled path and may use only an explicitly
+approved Clean Staging/Preview setup; it must not use Production or Legacy Staging for feature
+verification. The webhook is idempotent for customer/internal paid emails by checking sent
+timestamp columns on the order before sending.
 
 ## Not Production-Ready Yet
 

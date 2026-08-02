@@ -1,0 +1,200 @@
+{
+  "fixture_set": "PV-CLEAN-STAGING-V1",
+  "version": 1,
+  "scenarios": [
+    {
+      "number": 1,
+      "key": "new_reservation",
+      "label": "New reservation",
+      "ids": { "reservation": "51000000-0000-4000-8000-000000000001" },
+      "reservation": { "reservation_status": "new", "status": "new" }
+    },
+    {
+      "number": 2,
+      "key": "contacted_reservation",
+      "label": "Contacted reservation",
+      "ids": { "reservation": "51000000-0000-4000-8000-000000000002" },
+      "reservation": { "reservation_status": "contacted", "status": "contacted" }
+    },
+    {
+      "number": 3,
+      "key": "invitation_draft",
+      "label": "Invitation draft",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000003",
+        "invitation": "52000000-0000-4000-8000-000000000003"
+      },
+      "reservation": { "reservation_status": "contacted", "status": "contacted" },
+      "invitation": { "status": "draft" }
+    },
+    {
+      "number": 4,
+      "key": "invitation_sent_suppressed",
+      "label": "Invitation sent; delivery suppressed",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000004",
+        "invitation": "52000000-0000-4000-8000-000000000004",
+        "email_attempt": "55000000-0000-4000-8000-000000000004",
+        "delivery_event": "56000000-0000-4000-8000-000000000004",
+        "audit_event": "57000000-0000-4000-8000-000000000004",
+        "entity_event": "58000000-0000-4000-8000-000000000004"
+      },
+      "reservation": { "reservation_status": "order_invited", "status": "payment_link_sent" },
+      "invitation": { "status": "sent" },
+      "email_attempt": { "template": "order_invitation", "delivery_status": "suppressed" },
+      "append_history": true
+    },
+    {
+      "number": 5,
+      "key": "awaiting_payment",
+      "label": "Awaiting-payment order",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000005",
+        "invitation": "52000000-0000-4000-8000-000000000005",
+        "order": "53000000-0000-4000-8000-000000000005"
+      },
+      "reservation": { "reservation_status": "order_invited", "status": "payment_link_sent" },
+      "invitation": { "status": "order_started" },
+      "order": { "status": "awaiting_payment", "payment_start_status": "claimed", "fulfilment_status": "unfulfilled", "fulfilment_version": 0, "shipping_email_status": "not_prepared" }
+    },
+    {
+      "number": 6,
+      "key": "open_test_payment",
+      "label": "Open test payment",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000006",
+        "invitation": "52000000-0000-4000-8000-000000000006",
+        "order": "53000000-0000-4000-8000-000000000006",
+        "payment": "54000000-0000-4000-8000-000000000006"
+      },
+      "reservation": { "reservation_status": "order_invited", "status": "payment_link_sent" },
+      "invitation": { "status": "payment_open" },
+      "order": { "status": "payment_open", "payment_start_status": "provider_created", "fulfilment_status": "unfulfilled", "fulfilment_version": 0, "shipping_email_status": "not_prepared" },
+      "payment": { "status": "open" }
+    },
+    {
+      "number": 7,
+      "key": "paid_test_payment",
+      "label": "Paid test payment",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000007",
+        "invitation": "52000000-0000-4000-8000-000000000007",
+        "order": "53000000-0000-4000-8000-000000000007",
+        "payment": "54000000-0000-4000-8000-000000000007"
+      },
+      "reservation": { "reservation_status": "converted", "status": "converted" },
+      "invitation": { "status": "paid" },
+      "order": { "status": "paid", "payment_start_status": "provider_created", "fulfilment_status": "unfulfilled", "fulfilment_version": 0, "shipping_email_status": "not_prepared" },
+      "payment": { "status": "paid" }
+    },
+    {
+      "number": 8,
+      "key": "ready_to_pack",
+      "label": "Ready to pack",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000008",
+        "invitation": "52000000-0000-4000-8000-000000000008",
+        "order": "53000000-0000-4000-8000-000000000008",
+        "payment": "54000000-0000-4000-8000-000000000008"
+      },
+      "reservation": { "reservation_status": "converted", "status": "converted" },
+      "invitation": { "status": "paid" },
+      "order": { "status": "paid", "payment_start_status": "provider_created", "fulfilment_status": "ready_to_pack", "fulfilment_version": 1, "shipping_email_status": "not_prepared" },
+      "payment": { "status": "paid" }
+    },
+    {
+      "number": 9,
+      "key": "packed",
+      "label": "Packed",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000009",
+        "invitation": "52000000-0000-4000-8000-000000000009",
+        "order": "53000000-0000-4000-8000-000000000009",
+        "payment": "54000000-0000-4000-8000-000000000009"
+      },
+      "reservation": { "reservation_status": "converted", "status": "converted" },
+      "invitation": { "status": "paid" },
+      "order": { "status": "paid", "payment_start_status": "provider_created", "fulfilment_status": "packed", "fulfilment_version": 2, "shipping_email_status": "not_prepared" },
+      "payment": { "status": "paid" }
+    },
+    {
+      "number": 10,
+      "key": "shipped",
+      "label": "Shipped; confirmation pending",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000010",
+        "invitation": "52000000-0000-4000-8000-000000000010",
+        "order": "53000000-0000-4000-8000-000000000010",
+        "payment": "54000000-0000-4000-8000-000000000010",
+        "email_attempt": "55000000-0000-4000-8000-000000000010"
+      },
+      "reservation": { "reservation_status": "converted", "status": "converted" },
+      "invitation": { "status": "paid" },
+      "order": { "status": "paid", "payment_start_status": "provider_created", "fulfilment_status": "shipped", "fulfilment_version": 3, "shipping_email_status": "pending" },
+      "payment": { "status": "paid" },
+      "email_attempt": { "template": "shipping_confirmation", "delivery_status": "pending" }
+    },
+    {
+      "number": 11,
+      "key": "shipping_suppressed",
+      "label": "Shipping confirmation suppressed",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000011",
+        "invitation": "52000000-0000-4000-8000-000000000011",
+        "order": "53000000-0000-4000-8000-000000000011",
+        "payment": "54000000-0000-4000-8000-000000000011",
+        "email_attempt": "55000000-0000-4000-8000-000000000011",
+        "delivery_event": "56000000-0000-4000-8000-000000000011",
+        "audit_event": "57000000-0000-4000-8000-000000000011",
+        "entity_event": "58000000-0000-4000-8000-000000000011"
+      },
+      "reservation": { "reservation_status": "converted", "status": "converted" },
+      "invitation": { "status": "paid" },
+      "order": { "status": "paid", "payment_start_status": "provider_created", "fulfilment_status": "shipped", "fulfilment_version": 3, "shipping_email_status": "suppressed" },
+      "payment": { "status": "paid" },
+      "email_attempt": { "template": "shipping_confirmation", "delivery_status": "suppressed" },
+      "append_history": true
+    },
+    {
+      "number": 12,
+      "key": "shipping_failed",
+      "label": "Shipping confirmation failed",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000012",
+        "invitation": "52000000-0000-4000-8000-000000000012",
+        "order": "53000000-0000-4000-8000-000000000012",
+        "payment": "54000000-0000-4000-8000-000000000012",
+        "email_attempt": "55000000-0000-4000-8000-000000000012",
+        "delivery_event": "56000000-0000-4000-8000-000000000012",
+        "audit_event": "57000000-0000-4000-8000-000000000012",
+        "entity_event": "58000000-0000-4000-8000-000000000012"
+      },
+      "reservation": { "reservation_status": "converted", "status": "converted" },
+      "invitation": { "status": "paid" },
+      "order": { "status": "paid", "payment_start_status": "provider_created", "fulfilment_status": "shipped", "fulfilment_version": 3, "shipping_email_status": "failed" },
+      "payment": { "status": "paid" },
+      "email_attempt": { "template": "shipping_confirmation", "delivery_status": "failed" },
+      "append_history": true
+    },
+    {
+      "number": 13,
+      "key": "reconciliation_pending",
+      "label": "Payment reconciliation required",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000013",
+        "invitation": "52000000-0000-4000-8000-000000000013",
+        "order": "53000000-0000-4000-8000-000000000013"
+      },
+      "reservation": { "reservation_status": "order_invited", "status": "payment_link_sent" },
+      "invitation": { "status": "order_started" },
+      "order": { "status": "awaiting_payment", "payment_start_status": "reconciliation_required", "fulfilment_status": "unfulfilled", "fulfilment_version": 0, "shipping_email_status": "not_prepared" }
+    },
+    {
+      "number": 14,
+      "key": "record_origin_review",
+      "label": "Record-origin review",
+      "ids": { "reservation": "51000000-0000-4000-8000-000000000014" },
+      "reservation": { "reservation_status": "new", "status": "new", "record_origin_needs_review": true }
+    }
+  ]
+}

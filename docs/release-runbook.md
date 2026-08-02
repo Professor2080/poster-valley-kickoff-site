@@ -1,90 +1,171 @@
 # Release runbook and external-settings plan
 
-This document is a review plan, not authorization. It performs no deployment, migration, email,
-payment or external settings change.
+This document defines release evidence and approval gates. It is not authorization to commit, push,
+open/update a PR, merge, deploy, migrate, change external settings, send email or create a payment.
+Choose the fast, controlled or infrastructure route in the
+[development workflow](development-workflow.md) before using this runbook.
 
-## Release gate
+## Recorded release-platform status
+
+As recorded on 2026-08-01:
+
+- `main` is `2027378daae5bb3f29354fcd449367ff1c648909`;
+- GitHub ruleset `Protect main` is active;
+- required checks are `quality-gate` and `production-dependency-audit`;
+- the existing GitHub integration builds Vercel Preview for feature branches and Vercel Production
+  from `main`;
+- Production Supabase is `epqpeoubkbftcvxjbqeo` and unchanged;
+- Legacy Staging `cdmocdodehjmcgtxicaj` is inactive, frozen and not a valid migration baseline;
+- Clean Staging `stbunwkgvxfwmbjivgos` is `ACTIVE_HEALTHY`; the canonical baseline and
+  default-privilege hardening are applied and verified. The `PV-CLEAN-STAGING-V1` fixtures remain
+  present and were reconfirmed read-only on 2026-08-02; no fixture write was performed in the PR
+  #20 Production-preparation task.
+
+Ruleset, CI, Vercel, Supabase or provider dashboard state must be rechecked read-only for the exact
+candidate when it becomes release evidence. A recorded status never authorizes a write.
+
+Schema Baseline v1 is locally proven but has not been applied remotely. Its six source migrations
+are byte-preserved in the historical archive and only the canonical baseline remains active. The
+payment-idempotency MEDIUM/P2 finding is repaired locally. The independent Codex Security review
+was content-complete, but final report/SARIF sealing failed because of a tooling lifecycle error;
+the accepted review limit therefore forbids starting another broad review without a new BLOCKER or
+HIGH finding.
+
+After this Draft PR's required checks and exact Vercel Preview are green, the next separately
+authorized gate is to seed and verify `PV-CLEAN-STAGING-V1`, perform Pascal's authenticated review,
+and then run limited cleanup or rebuild the disposable environment. Before Production, a read-only
+cardinality check and separately approved additive compatibility DDL remain mandatory. PR #18 stays
+unchanged until the baseline merges; it is then rebased with a later migration timestamp.
+
+## Universal release gate
 
 Before requesting merge:
 
-1. Verify repository/worktree identity and fetch refs.
-2. Run `npm run verify -- <exact active-worktree contract>` from a clean-install worktree.
-3. Confirm the complete diff contains no product behavior, API contract, schema, migration, data or
-   provider-config change unless that scope was explicitly approved.
-4. Confirm GitHub jobs `quality-gate` and `production-dependency-audit` pass. Treat
-   `development-advisory-report` as visible non-blocking debt; do not run `npm audit fix`.
-   Confirm CI reports Node `24.18.0`, npm `11.16.0`, and a real PR/push commit-range diff check.
-5. Review the Vercel Preview for the exact commit. Preview must use Staging-only values, suppressed
-   email and no live payment key.
-6. Resolve review conversations and obtain explicit merge approval.
-7. Merge through GitHub; let the connected Vercel project deploy `main`. Do not use a routine manual
-   `vercel --prod`.
-8. Any Production smoke test involving data, email or payment needs a separate bounded approval.
+1. Re-run repository preflight with the exact active-worktree contract and current remote lookup.
+2. Run the verification required by the selected route and review the complete diff.
+3. Confirm the diff classification: product behavior, API, schema/migration, data, authorization,
+   personal data and provider configuration must all be explicit.
+4. Confirm GitHub checks `quality-gate` and `production-dependency-audit` pass for the exact candidate
+   commit. Do not rename or bypass them and do not use `npm audit fix` as release repair.
+5. Review the exact Vercel Preview commit. Any database-backed/authenticated validation requires
+   separately approved Clean Staging; operational email stays suppressed and Mollie stays in test
+   mode.
+6. Resolve blocking review findings under the review limits in the
+   [development workflow](development-workflow.md).
+7. Obtain explicit merge approval. Merge through GitHub and let the existing integration deploy
+   `main`; do not use routine manual Production deployment.
+8. Treat every Production migration, settings change, data mutation, real-email/payment smoke test
+   and customer-record interaction as its own bounded approval gate.
 
-## GitHub plan
+## Definition of Done: fast path
 
-Read-only status on 2026-07-29: repository
-`Professor2080/poster-valley-kickoff-site` is public; default branch `main` points to
-`4542c441e63fdb5100ee4e5564f70b03be9a3926`; `main` is not protected; there are no repository
-rulesets and no Actions workflows on that commit.
+- [ ] Scope is confirmed as having no database, auth, payment, operational-email or provider impact.
+- [ ] Required local checks are green.
+- [ ] The complete diff is clean and contains only expected files.
+- [ ] Required CI checks are green for the exact candidate.
+- [ ] Vercel Preview is green for the exact candidate.
+- [ ] Merge is explicitly approved.
+- [ ] After deployment, the intended Production outcome is checked read-only.
 
-| Setting | Desired state | Exact future change | Risk/action/approval |
-| --- | --- | --- | --- |
-| `main` ruleset | active | create one branch ruleset targeting `main` | Dashboard/API write; owner approval required; a bad target can block all work |
-| Pull requests | required | require PR before merge | Dashboard/API write; owner approval |
-| Required checks | two stable gates | require `quality-gate` and `production-dependency-audit` after this workflow exists on the default branch | Dashboard/API write; names must first be observed on a PR |
-| Conversations | resolved | require conversation resolution | Dashboard/API write; owner approval |
-| Force-push/delete | blocked | disallow both for `main` | Dashboard/API write; owner approval |
-| Reviews | pragmatic solo-owner mode | do not require a second approving reviewer yet | Dashboard/API write; revisit when another maintainer joins |
+An ordinary documentation, styling or isolated UI change without safety impact has no independent
+broad security-review gate. At most one targeted review is used when its diff warrants it.
 
-Do not enable required checks before their exact contexts have run successfully, or merges can be
-deadlocked. No GitHub setting was changed in this task.
+## Definition of Done: controlled path without migration
 
-## Vercel plan
+- [ ] Exactly one independent broad review is complete.
+- [ ] At most one targeted repair round is complete, if needed.
+- [ ] Tests and applicable security checks are green.
+- [ ] Synthetic authenticated Preview validation is complete against Clean Staging when database or
+  Auth behavior is involved.
+- [ ] Providers outside Production are confirmed suppressed/test-mode.
+- [ ] Synthetic data is cleaned up with evidence.
+- [ ] Merge and Production release are each explicitly approved.
+- [ ] Production is checked read-only after deployment.
 
-Read-only status: team `Professor2080`, project `poster-valley`, Node `24.x`, domains
-`postervalley.nl`/`www.postervalley.nl`; deployment metadata identifies GitHub
-`Professor2080/poster-valley-kickoff-site`. Production deployments observed from `main`; feature
-branches receive Preview deployments. The current Production deployment for the baseline SHA is
-ready. The latest overall deployment at inventory time was a Preview, so “latest” must never be
-treated as “Production.”
+Do not start another broad review after a successful repair unless a new `BLOCKER` or `HIGH` is
+discovered.
 
-| Setting | Desired state | Exact future change | Risk/action/approval |
-| --- | --- | --- | --- |
-| Git repository | kickoff repository only | verify in Project Settings > Git; change nothing if it matches | Dashboard read; relinking is high-risk and needs explicit approval |
-| Production branch | `main` only | set/retain `main` in Git settings | Dashboard write if different; owner approval |
-| Feature branches | Preview | retain automatic Preview deployments | Dashboard write only if currently disabled; owner approval |
-| Environment separation | no Production values in Preview/Development | compare names and privately verify distinct values; remove/move only after a reviewed impact plan | Dashboard secret write; explicit approval and redeploy implications |
-| Preview integrations | Staging/suppressed only | verify Preview Supabase ref is Staging and Mollie key is test-mode; keep operational mail disabled | Human dashboard check; never reveal values |
-| Production deployment | Git merge only | avoid normal manual `--prod`; use connector read-only for status/logs | Deployment is an external write; explicit release approval |
+## Definition of Done: controlled path with migration
 
-## Supabase plan
+All controlled-without-migration items apply, plus:
 
-Read-only project metadata matches the documented identities:
+- [ ] Clean Staging migration history before the feature is exactly equal to committed history on
+  `main`.
+- [ ] The verified-target dry-run lists only the intended migration or approved set.
+- [ ] The migration is applied to Clean Staging under separate approval.
+- [ ] Schema, RLS, grants, function privileges and RPC contracts are checked.
+- [ ] Synthetic concurrency, idempotency and transaction tests are green.
+- [ ] The authenticated Vercel Preview flow is green against Clean Staging.
+- [ ] Synthetic records and accounts are cleaned up and cleanup status is recorded.
+- [ ] A rollback or forward-fix plan is recorded.
+- [ ] The Production migration is separately approved, re-gated and applied before the application
+  merge/deploy when backward-compatible.
+- [ ] The final report records baseline/candidate Git SHAs, target project ref, migration version,
+  tests, provider boundaries and cleanup status.
 
-- Staging: `cdmocdodehjmcgtxicaj`, active and healthy;
-- Production: `epqpeoubkbftcvxjbqeo`, active and healthy.
+The [database release process](database-release-process.md) is authoritative for migration entry,
+database-first release and `expand -> migrate -> contract`. If Clean Staging does not match `main`,
+this Definition of Done cannot pass.
 
-| Setting | Desired state | Exact future change | Risk/action/approval |
-| --- | --- | --- | --- |
-| Normal validation | Staging only | scope any approved remote validation to `cdmocdodehjmcgtxicaj` | Connector/CLI/database access; task-specific approval |
-| Production | outside standard agent reach | no default credentials, MCP or automated writes | Any access needs separate explicit Production approval |
-| GitHub deployment | no automatic Production database deploy | leave migration application outside CI | Dashboard/GitHub write if a conflicting integration exists; owner approval |
-| Branching | not adopted yet | no change; assess cost/workflow in a separate proposal | Dashboard/cost-bearing change; explicit approval |
-| Staging MCP | project-scoped, read-only, minimal tools | follow the disabled-config/OAuth steps in `environment-matrix.md` | Interactive OAuth and config write; Pascal approval |
-| Local stack | future isolated work block | pin Supabase CLI devDependency, add reviewed `config.toml`, Docker prerequisites and local-only tests | Dependency/config/runtime change; explicit approval |
+## Production release control
 
-The connector could list projects but its branch-list request failed before returning state. A human
-must confirm the Branching dashboard before relying on the current-status claim.
+- `main` is the sole Production source; feature work never happens directly on it.
+- Backward-compatible database work releases database-first under separate Production-migration
+  approval, followed by application merge/deploy and read-only verification.
+- Contract-breaking work spans releases so old and new callers can coexist.
+- Production is never used for feature development, experimental verification or synthetic
+  concurrency testing.
+- No automatic Production database migration is added to CI.
+- A successful Draft PR, CI run, Preview or Clean Staging migration grants no Production authority.
+
+### Explicit pre-launch route for PR #20
+
+PR #20 uses a one-off shortened route because there is not yet a public launch, real visitor flow
+or real order stream. Required CI must still be green and the database remains database-first.
+Only `BLOCKER` and `HIGH` findings automatically stop this specific release; no new broad review or
+further Preview login/fixture test is required. The bounded alignment SQL and metadata-only history
+plan live outside the active migration directory under
+`supabase/production-alignment-candidates/`. Neither file authorizes a Production write.
+
+After separately approved alignment and reconciliation, PR #20 still needs explicit merge
+approval. The GitHub integration then deploys `main`; Pascal reviews frontend and Admin directly on
+Production. The smoke must not create a payment or send operational email.
+
+## Infrastructure and environment gates
+
+| Area | Required state | Separate approval boundary |
+| --- | --- | --- |
+| GitHub | `Protect main` active; exact two required checks green | ruleset/check changes |
+| Vercel | GitHub-integrated Preview and `main`-only Production | environment variables, relinking, redeploy or manual deployment |
+| Clean Staging | `stbunwkgvxfwmbjivgos`; exact baseline-plus-hardening history; disposable `PV-CLEAN-STAGING-V1` data only | seeding, cleanup, linking, migration and stateful testing |
+| Legacy Staging | inactive and frozen; no access, feature migrations or release validation | later archival/removal decision |
+| Production Supabase | exact ref `epqpeoubkbftcvxjbqeo`; real data | every migration, Auth/role or data change |
+| Resend/Mollie | suppressed/test-mode outside Production | enabling real delivery/payment or any real smoke test |
+
+The current transition status and next steps are in the
+[Clean Staging runbook](clean-staging-runbook.md).
+
+### Disposable fixture release evidence
+
+Run the repository seed, verify and cleanup commands only with exact Clean Staging target checks
+and explicit acknowledgement. The seed sends no login or operational email and makes no provider
+call. Fixtures remain for Pascal's review; his actual login may send at most one Supabase Auth login
+email. Limited cleanup deletes only marked mutable rows and deliberately retains deterministic,
+marked append-only audit/entity/delivery history plus required delivery attempts. A full reset is a
+project rebuild from committed migrations, never trigger bypass or manual deletion of protected
+history.
 
 ## Stop conditions
 
 Stop before release or external action on:
 
-- repository, branch, commit, project-ref or deployment mismatch;
-- unexpected schema or migration-history difference;
-- uncertain credential target/mode;
+- repository, worktree role, branch, commit, project ref or deployment mismatch;
+- a Production target during Local, Preview or Staging work;
+- missing, extra or remote-only migration history;
+- an empty, ambiguous or over-broad migration dry-run;
 - Production values visible in Preview;
-- missing/renamed required check;
-- unreviewed product/API/migration/provider-config diff;
-- any possibility of real email, payment or customer-data impact outside the approved release plan.
+- missing/renamed required checks;
+- unexpected files or scope in the diff;
+- secrets or personal data in output, logs, URLs, events or errors;
+- unresolved `BLOCKER`/`HIGH`, or unaccepted `MEDIUM` findings;
+- any database/provider action outside the exact approval.

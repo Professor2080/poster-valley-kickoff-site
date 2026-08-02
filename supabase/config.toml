@@ -1,0 +1,2 @@
+# Project-local Supabase CLI identity. All other settings use documented local defaults.
+project_id = "poster-valley-kickoff-site"

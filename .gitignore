@@ -11,9 +11,15 @@ node_modules
 dist
 dist-ssr
 tmp
+.tmp/
 .vercel
 *.local
 .env.names
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+playwright/.cache/
 
 # Editor directories and files
 .vscode/*

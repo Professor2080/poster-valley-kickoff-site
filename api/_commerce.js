@@ -4,7 +4,7 @@ import { PublicRequestError, readEmail, readText } from './_supabase.js'
 import { regionRequiredCountryCodes, validCountryCodes } from './_countries.js'
 
 const finalInvitationStatuses = new Set(['paid', 'expired', 'cancelled'])
-const reusablePaymentStatuses = new Set(['payment_failed', 'payment_expired', 'cancelled'])
+const terminalPaymentStatuses = new Set(['paid', 'failed', 'expired', 'canceled', 'unknown'])
 const countryNameFormatter = new Intl.DisplayNames(['en'], { type: 'region' })
 
 export function hashInvitationToken(token) {
@@ -37,16 +37,66 @@ export function canUseInvitation(invitation) {
   return true
 }
 
-export function canStartPayment(invitation) {
+export function canStartPayment(invitation, latestOrder = null, latestPayment = null) {
   if (!canUseInvitation(invitation)) {
+    return false
+  }
+
+  if (latestOrder?.payment_start_status === 'reconciliation_required') {
+    return false
+  }
+
+  if (latestPayment && terminalPaymentStatuses.has(latestPayment.status)) {
     return false
   }
 
   return (
     !invitation.status ||
-    ['draft', 'sent', 'opened', 'order_started', 'payment_open'].includes(invitation.status) ||
-    reusablePaymentStatuses.has(invitation.status)
+    ['draft', 'sent', 'opened', 'order_started', 'payment_open'].includes(invitation.status)
   )
+}
+
+function normalizedFingerprintText(value, { lower = false, upper = false } = {}) {
+  const normalized = String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/\s+/gu, ' ')
+
+  if (lower) return normalized.toLowerCase()
+  if (upper) return normalized.toUpperCase()
+  return normalized
+}
+
+export function paymentStartRequestHash({ invitation, quote, address, acceptedTerms }) {
+  const fingerprint = {
+    version: 1,
+    invitationId: invitation.id,
+    quantity: Number(invitation.quantity),
+    currency: normalizedFingerprintText(quote.currency, { upper: true }),
+    unitPriceCents: toCents(quote.unitPrice),
+    subtotalCents: toCents(quote.subtotal),
+    shippingCents: toCents(quote.shipping),
+    totalCents: toCents(quote.total),
+    shippingCountryCode: normalizedFingerprintText(quote.countryCode, { upper: true }),
+    shippingProfileId: normalizedFingerprintText(quote.shippingProfileId),
+    manualQuoteId: quote.manualQuoteId ?? null,
+    acceptedTerms: acceptedTerms === true,
+    address: {
+      firstName: normalizedFingerprintText(address.firstName),
+      lastName: normalizedFingerprintText(address.lastName),
+      email: normalizedFingerprintText(address.email, { lower: true }),
+      shippingName: normalizedFingerprintText(address.shippingName),
+      company: normalizedFingerprintText(address.company),
+      addressLine1: normalizedFingerprintText(address.addressLine1),
+      addressLine2: normalizedFingerprintText(address.addressLine2),
+      postalCode: normalizedFingerprintText(address.postalCode, { upper: true }),
+      city: normalizedFingerprintText(address.city),
+      region: normalizedFingerprintText(address.region),
+      countryCode: normalizedFingerprintText(address.countryCode, { upper: true }),
+    },
+  }
+
+  return createHash('sha256').update(JSON.stringify(fingerprint)).digest('hex')
 }
 
 export function getCountryName(countryCode) {
@@ -270,7 +320,7 @@ export function publicOrderSummary(invitation, quote, latestOrder = null, latest
 
   return {
     status: isInvitationExpired(invitation) ? 'expired' : invitation.status,
-    canOrder: canStartPayment(invitation),
+    canOrder: canStartPayment(invitation, latestOrder, latestPayment),
     expiresAt: invitation.expires_at,
     drop: {
       id: drop.id,

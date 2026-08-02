@@ -2,16 +2,18 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const [foundation, runtimeFix, hardening] = await Promise.all([
-  readFile(new URL('../supabase/migrations/20260720110000_admin_operational_actions.sql', import.meta.url), 'utf8'),
-  readFile(new URL('../supabase/migrations/20260720165432_admin_operational_actions_runtime_fix.sql', import.meta.url), 'utf8'),
-  readFile(new URL('../supabase/migrations/20260729120000_shipping_confirmation_safety.sql', import.meta.url), 'utf8'),
+const [canonicalBaseline, hardening] = await Promise.all([
+  readFile(new URL('../supabase/migrations/20260731113000_schema_baseline_v1.sql', import.meta.url), 'utf8'),
+  readFile(new URL('../supabase/migrations/20260802130000_shipping_confirmation_safety.sql', import.meta.url), 'utf8'),
 ])
+const foundation = canonicalBaseline
+const runtimeFix = foundation
 
 function section(source, start, end) {
-  const startIndex = source.indexOf(start)
+  const searchable = source.toLowerCase()
+  const startIndex = searchable.indexOf(start.toLowerCase())
   assert.notEqual(startIndex, -1, `missing SQL section: ${start}`)
-  const endIndex = end ? source.indexOf(end, startIndex + start.length) : source.length
+  const endIndex = end ? searchable.indexOf(end.toLowerCase(), startIndex + start.length) : source.length
   assert.notEqual(endIndex, -1, `missing SQL terminator: ${end}`)
   return source.slice(startIndex, endIndex)
 }
@@ -22,8 +24,8 @@ const apply = section(hardening, 'create or replace function public.admin_a32_ap
 const claim = section(hardening, 'create or replace function public.admin_a32_claim_delivery', 'create or replace function public.admin_a32_delivery_payload')
 const payload = section(hardening, 'create or replace function public.admin_a32_delivery_payload', 'create or replace function public.admin_a32_complete_delivery')
 const completeWrapper = section(hardening, 'create or replace function public.admin_a32_complete_delivery', 'revoke all on function public.admin_a32_preview_action')
-const effectiveApply = section(runtimeFix, 'create or replace function public.admin_a3_apply_action', 'revoke all on function public.admin_a3_apply_action')
-const effectiveComplete = section(foundation, 'create or replace function public.admin_a3_complete_delivery', 'revoke all on function public.admin_a3_replay_action')
+const effectiveApply = section(runtimeFix, 'create or replace function public.admin_a3_apply_action', 'create or replace function public.admin_a3_claim_delivery')
+const effectiveComplete = section(foundation, 'create or replace function public.admin_a3_complete_delivery', 'create or replace function public.admin_a31_set_email_lineage')
 
 test('shipping transition and retry are manager-only in every server-side phase', () => {
   assert.match(guard, /role = 'manager' and revoked_at is null/)
@@ -92,7 +94,7 @@ test('delivery failure preserves shipped and finalizes append-only delivery hist
   assert.match(effectiveComplete, /insert into public\.email_delivery_events/)
   assert.match(effectiveComplete, /insert into public\.admin_audit_events/)
   assert.match(effectiveComplete, /insert into public\.entity_events/)
-  assert.match(foundation, /create trigger email_delivery_events_no_update before update or delete/)
+  assert.match(foundation, /create trigger email_delivery_events_no_update before (?:update or delete|delete or update)/i)
 })
 
 test('retry is separate, idempotent, and cannot repeat fulfilment', () => {

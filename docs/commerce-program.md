@@ -10,7 +10,12 @@ This package is a planning freeze, not an implementation or production-release a
 
 ADRs 001–006 are accepted: Supabase magic-link Auth; Pascal as initial sole manager; strict custom/Woo order-stock ownership; custom-only preorder; current server shipping authority during migration; Woo at `shop.postervalley.nl`; immutable lowercase kebab-case product codes (first: `eurofighter-typhoon-a2`); and staging-only dashboard development. V1 customer-facing operational mail is invitation, paid-order confirmation and shipping confirmation; `ready_to_pack` and `packed` are internal. A manual international quote requires manager approval and explicit expiry. These accepted architecture decisions still do **not** authorize implementation, production migrations, or release.
 
-Use a separate Poster Valley Kickoff Staging Supabase project as the required practical default. Vercel Preview must use staging variables, Production must retain Production variables, and Cloud routine development must never receive a Production service-role key. Staging uses removable/identifiable data and must not send real customer mail or create live Mollie payments. See ADR-006.
+Use Clean Staging as the required separate Poster Valley Kickoff Supabase environment. Vercel
+Preview must use Clean Staging variables, Production must retain Production variables, and routine
+development must never receive a Production service-role key. Clean Staging uses synthetic,
+removable data and must not send real customer mail or create live Mollie payments. Legacy Staging
+is frozen and is not a migration baseline. See ADR-006 and the
+[Clean Staging runbook](clean-staging-runbook.md).
 
 ## Current evidence
 
@@ -44,7 +49,12 @@ Use separate, human-started Codex Cloud tasks with one branch and draft PR per w
 
 ## Approval gates and Pascal actions
 
-Remaining decisions before A1: provision/assign the separate staging Supabase project and Preview-only non-production credentials; confirm the initial Pascal Auth identity/allowlist process; and confirm retention/audit policy with legal advice where needed. Woo hosting, staging domain, legal/tax/returns, carrier and customs choices remain later spike decisions. Hosting purchase, Woo staging creation, plugins, test payments and production launch remain manual approval gates.
+Remaining environment work follows the Clean Staging roadmap: separately confirm cost, create the
+project, build it from `main`, add synthetic seed/cleanup and link Preview-only non-production
+credentials. The initial Pascal Auth identity/allowlist process and retention/audit policy still
+need their own approvals. Woo hosting, staging domain, legal/tax/returns, carrier and customs choices
+remain later spike decisions. Hosting purchase, Woo staging creation, plugins, test payments and
+Production launch remain manual approval gates.
 
 **Start first:** `Admin Backend, Auth and Data Foundation`, only after the listed ADR decisions are explicitly approved. It establishes authorization, audit and status contracts that every operational UI depends on.
 
