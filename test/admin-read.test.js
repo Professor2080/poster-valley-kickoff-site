@@ -6,12 +6,14 @@ const savedUrl = process.env.SUPABASE_URL
 const savedKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 process.env.SUPABASE_URL = 'https://supabase.test'
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-test-key'
+let providerFetchCount = 0
 
 function response() { return { statusCode: 0, payload: null, headers: {}, status(c) { this.statusCode = c; return this }, setHeader(k, v) { this.headers[k] = v }, end(b) { this.payload = JSON.parse(b) } } }
 function request(body = {}, token = 'good') { return { method: 'POST', body, headers: token === null ? {} : { authorization: `Bearer ${token}` } } }
 
 before(() => {
   globalThis.fetch = async (url, options) => {
+    providerFetchCount += 1
     const parsed = new URL(url)
     if (parsed.pathname === '/auth/v1/user') {
       if (options.headers.Authorization === 'Bearer expired') return new Response('{}', { status: 401 })
@@ -45,6 +47,18 @@ after(() => { globalThis.fetch = savedFetch; if (savedUrl === undefined) delete 
 const { default: read } = await import('../api/admin/read.js')
 const { default: authorization } = await import('../api/admin/authorization.js')
 
+test('authorization rejects a malformed bearer token before provider fetch', async () => {
+  const fetchCountBefore = providerFetchCount
+  const res = response()
+  await authorization({ method: 'GET', headers: { authorization: 'Bearer malformed-token' } }, res)
+  assert.equal(res.statusCode, 401)
+  assert.deepEqual(res.payload, { error: { code: 'invalid_session', message: 'The admin session is invalid or expired.' } })
+  assert.equal(res.headers['Cache-Control'], 'private, no-store, max-age=0')
+  assert.equal(res.headers.Pragma, 'no-cache')
+  assert.equal(res.headers.Vary, 'Authorization')
+  assert.equal(providerFetchCount, fetchCountBefore)
+})
+
 test('admin reads reject missing, expired, and non-admin sessions', async () => {
   for (const [token, status, code] of [[null, 401, 'unauthenticated'], ['expired', 401, 'invalid_session'], ['nonadmin', 403, 'not_admin']]) {
     const res = response(); await read(request({ resource: 'reservations' }, token), res)
@@ -59,7 +73,7 @@ test('read API is paginated, allowlisted, and PII-minimized', async () => {
 })
 
 test('operator can use read contracts but cannot satisfy manager-only authorization checks', async () => {
-  const res = response(); await authorization({ method: 'GET', headers: { authorization: 'Bearer operator' } }, res); assert.equal(res.statusCode, 200); assert.equal(res.payload.role, 'operator')
+  const res = response(); await authorization({ method: 'GET', headers: { authorization: 'Bearer header.operator.signature' } }, res); assert.equal(res.statusCode, 200); assert.equal(res.payload.role, 'operator')
   const { requireAdmin, AdminRequestError } = await import('../api/_admin.js')
   await assert.rejects(() => requireAdmin(request({}, 'operator'), 'manager'), (error) => error instanceof AdminRequestError && error.code === 'insufficient_role')
 })
