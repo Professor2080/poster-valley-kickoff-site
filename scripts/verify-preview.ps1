@@ -22,7 +22,8 @@ param(
 
     # Test-only dependency injection. Refused unless PV_PREVIEW_TEST_MODE=1.
     [string]$FixtureDirectory = '',
-    [string]$VercelCommandName = 'vercel'
+    [string]$VercelCommandName = 'vercel',
+    [string]$CurlCommandName = 'curl'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -244,8 +245,8 @@ function Get-VercelSourceDeployment {
     )
 
     $result = Invoke-External $VercelPath @(
-        'list', $ExpectedVercelProject, '--meta', "githubCommitSha=$ExpectedSha", '--limit', '100',
-        '--format=json', '--no-color', '--non-interactive', '--cwd', $script:RepositoryRoot
+        'list', $ExpectedVercelProject, '--limit', '100', '--format=json', '--no-color',
+        '--non-interactive', '--cwd', $script:RepositoryRoot
     )
     $payload = ConvertFrom-CommandJson $result.Output
     $matches = @($payload.deployments | Where-Object {
@@ -253,17 +254,18 @@ function Get-VercelSourceDeployment {
         ((Normalize-HostName ([string]$_.url)) -eq (Normalize-HostName $DeploymentUrlValue))
     })
     if ($matches.Count -ne 1) {
-        throw 'The exact deployment was not found once in the SHA-filtered project metadata.'
+        throw 'The exact deployment was not found once in the project deployment metadata.'
     }
     return $matches[0]
 }
 
 function Invoke-RouteStatus {
-    param([string]$VercelPath, [string]$Route)
+    param([string]$CurlPath, [string]$Route)
 
-    $result = Invoke-External $VercelPath @(
-        'curl', $Route, '--deployment', $PreviewUrl, '--no-color', '--non-interactive', '--cwd', $script:RepositoryRoot,
-        '--', '--silent', '--show-error', '--output', 'NUL', '--write-out', '%{http_code}', '--request', 'GET', '--max-time', '30'
+    $targetUrl = $PreviewUrl.TrimEnd('/') + $Route
+    $result = Invoke-External $CurlPath @(
+        '--silent', '--show-error', '--output', 'NUL', '--write-out', '%{http_code}',
+        '--request', 'GET', '--max-time', '30', '--url', $targetUrl
     )
     $matches = [regex]::Matches($result.Output, '(?<!\d)([1-5]\d{2})(?!\d)')
     if ($matches.Count -eq 0) { throw "No HTTP status was returned for route '$Route'." }
@@ -271,7 +273,8 @@ function Invoke-RouteStatus {
 }
 
 try {
-    if ($env:PV_PREVIEW_TEST_MODE -ne '1' -and ($FixtureDirectory -or $VercelCommandName -ne 'vercel')) {
+    if ($env:PV_PREVIEW_TEST_MODE -ne '1' -and
+        ($FixtureDirectory -or $VercelCommandName -ne 'vercel' -or $CurlCommandName -ne 'curl')) {
         throw 'Test dependency injection is prohibited outside PV_PREVIEW_TEST_MODE.'
     }
     if ($ExpectedVercelProject -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$') {
@@ -291,8 +294,8 @@ try {
     if ($previewUri.Scheme -ne 'https' -or -not $previewUri.Host.EndsWith('.vercel.app')) {
         throw 'PreviewUrl must be an explicit HTTPS vercel.app URL.'
     }
-    if ($previewUri.Query -or $previewUri.Fragment -or $previewUri.UserInfo) {
-        throw 'PreviewUrl must not contain credentials, query parameters or a fragment.'
+    if ($previewUri.Query -or $previewUri.Fragment -or $previewUri.UserInfo -or $previewUri.AbsolutePath -ne '/') {
+        throw 'PreviewUrl must not contain a path, credentials, query parameters or a fragment.'
     }
     if ($BranchAlias) {
         $aliasCandidate = if ($BranchAlias -match '^https?://') { $BranchAlias } else { "https://$BranchAlias" }
@@ -334,6 +337,14 @@ try {
     Add-Gate FAIL 'Vercel CLI application shim' $_.Exception.Message
 }
 
+$curlPath = $null
+try {
+    $curlPath = Resolve-ApplicationShim $CurlCommandName
+    Add-Gate PASS 'HTTP application shim' ([IO.Path]::GetFileName($curlPath))
+} catch {
+    Add-Gate FAIL 'HTTP application shim' $_.Exception.Message
+}
+
 $deployment = $null
 if ($null -ne $vercelPath) {
     try {
@@ -356,7 +367,7 @@ if ($null -ne $deployment) {
     $sourceDeployment = $null
     try {
         $sourceDeployment = Get-VercelSourceDeployment $vercelPath $actualId $actualUrl
-        Add-Gate PASS 'deployment source metadata' 'exact ID and URL occur once in SHA-filtered project metadata'
+        Add-Gate PASS 'deployment source metadata' 'exact ID and URL occur once in project deployment metadata'
     } catch {
         Add-Gate FAIL 'deployment source metadata' $_.Exception.Message
     }
@@ -428,7 +439,8 @@ if ($null -ne $deployment) {
 
     foreach ($route in $script:RequiredPublicRoutes) {
         try {
-            $status = Invoke-RouteStatus $vercelPath $route
+            if ($null -eq $curlPath) { throw 'required HTTP application shim is not executable' }
+            $status = Invoke-RouteStatus $curlPath $route
             if ($status -ge 200 -and $status -lt 400) {
                 Add-Gate PASS "public route $route" "HTTP $status"
             } else { Add-Gate FAIL "public route $route" "HTTP $status" }
@@ -437,7 +449,8 @@ if ($null -ne $deployment) {
 
     foreach ($route in $script:RequiredAdminApiRoutes) {
         try {
-            $status = Invoke-RouteStatus $vercelPath $route
+            if ($null -eq $curlPath) { throw 'required HTTP application shim is not executable' }
+            $status = Invoke-RouteStatus $curlPath $route
             if ($status -in @(401, 403)) {
                 Add-Gate PASS "safe admin API $route" "unauthenticated GET rejected with HTTP $status"
             } else { Add-Gate FAIL "safe admin API $route" "expected safe 401/403 response, received HTTP $status" }

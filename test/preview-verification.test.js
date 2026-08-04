@@ -44,6 +44,19 @@ function baseScenario() {
         githubCommitRepo: 'poster-valley-kickoff-site',
       },
     },
+    otherDeployment: {
+      id: 'dpl_newer_but_wrong_fixture',
+      name: expectedProject,
+      url: 'poster-valley-newer-wrong.vercel.app',
+      target: null,
+      state: 'READY',
+      meta: {
+        githubCommitSha: 'b'.repeat(40),
+        githubCommitRef: 'codex/unrelated-branch',
+        githubCommitOrg: 'Professor2080',
+        githubCommitRepo: 'poster-valley-kickoff-site',
+      },
+    },
     aliasDeployment: {
       id: 'dpl_preview_fixture',
       name: expectedProject,
@@ -85,12 +98,13 @@ if (args[0] === 'inspect') {
 }
 
 if (args[0] === 'list') {
-  process.stdout.write(JSON.stringify({ deployments: [scenario.sourceDeployment], pagination: { count: 1 } }))
+  process.stdout.write(JSON.stringify({ deployments: [scenario.otherDeployment, scenario.sourceDeployment], pagination: { count: 2 } }))
   process.exit(0)
 }
 
 if (args[0] === 'curl') {
-  const route = args[1]
+  const urlIndex = args.indexOf('--url')
+  const route = urlIndex >= 0 ? new URL(args[urlIndex + 1]).pathname : args[1]
   const status = scenario.routes?.[route]
   if (status === undefined) {
     process.stderr.write('mock route missing')
@@ -123,6 +137,7 @@ async function runVerifier(mutate = () => {}, options = {}) {
   await writeFile(path.join(bin, 'vercel-mock.mjs'), mockDriver, 'utf8')
   await writeFile(path.join(bin, 'vercel.cmd'), '@echo off\r\nnode "%~dp0vercel-mock.mjs" %*\r\n', 'utf8')
   await writeFile(path.join(bin, 'vercel.ps1'), "throw 'the PowerShell wrapper must never execute'\r\n", 'utf8')
+  await writeFile(path.join(bin, 'curl.cmd'), '@echo off\r\nnode "%~dp0vercel-mock.mjs" curl %*\r\n', 'utf8')
 
   const args = [
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', verifier,
@@ -133,6 +148,7 @@ async function runVerifier(mutate = () => {}, options = {}) {
     '-ExpectedRepository', expectedRepository,
     '-FixtureDirectory', root,
     '-VercelCommandName', options.vercelCommandName ?? 'vercel',
+    '-CurlCommandName', 'curl',
   ]
   if (options.branchAlias !== false) args.push('-BranchAlias', branchAliasHost)
   if (options.deploymentId) args.push('-DeploymentId', options.deploymentId)

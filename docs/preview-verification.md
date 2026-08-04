@@ -24,6 +24,9 @@ runbooks.
 - Use the immutable deployment URL ending in `.vercel.app`, not a Production/custom-domain alias.
 - Have an existing authenticated Vercel CLI available. On Windows the resolver deliberately uses
   the application shim `vercel.cmd`; it never invokes `vercel.ps1`.
+- Have the Windows `curl.exe` application available for direct unauthenticated HTTPS `GET` route
+  checks. The verifier does not use `vercel curl`, because that command can request a local project
+  link before it runs.
 - Do not pass a token or protection-bypass secret on the command line. The script uses only the
   existing CLI authentication state and never prints or inspects it.
 
@@ -44,7 +47,7 @@ All candidate-defining inputs are explicit:
 | `DeploymentId` | no | Optional expected Vercel deployment ID. The gate is `SKIP` when omitted. |
 | `BranchAlias` | no | Optional Vercel branch alias. When supplied, it must resolve to the same deployment ID/URL. The gate is `SKIP` when omitted. |
 
-`FixtureDirectory` and `VercelCommandName` exist only for automated tests. Fixture injection is
+`FixtureDirectory`, `VercelCommandName` and `CurlCommandName` exist only for automated tests. Fixture injection is
 refused unless the child process explicitly sets `PV_PREVIEW_TEST_MODE=1`; it is not an operator
 verification route. The mocked runtime scenarios are Windows-only because they verify Windows
 PowerShell and `.cmd` resolution; Node's test runner marks them `SKIP` on non-Windows CI hosts. The
@@ -76,7 +79,8 @@ The script reports each executed gate as `PASS`, `FAIL` or `SKIP`:
 1. explicit non-Production branch, full SHA and immutable Preview URL;
 2. repository root, origin identity, clean worktree, local branch/HEAD and remote branch SHA;
 3. executable Vercel application shim (`.cmd`, `.exe` or `.com`, with `.cmd` preferred on Windows);
-4. deployment/build metadata for the explicit URL plus project metadata filtered by the exact SHA;
+4. deployment/build metadata for the explicit URL plus project metadata matched once by the same
+   deployment ID and immutable URL;
 5. Vercel project identity and optional deployment ID;
 6. deployment state exactly `READY`;
 7. target is Preview and is not Production;
@@ -84,7 +88,7 @@ The script reports each executed gate as `PASS`, `FAIL` or `SKIP`:
 9. input URL is the immutable deployment URL;
 10. deployed function metadata is auditable and contains at most 12 functions;
 11. optional branch alias resolves to that exact deployment;
-12. public `GET` routes `/`, `/privacy`, `/terms` and `/admin` return HTTP 2xx/3xx;
+12. direct unauthenticated `curl.exe` `GET` routes `/`, `/privacy`, `/terms` and `/admin` return HTTP 2xx/3xx;
 13. unauthenticated `GET` requests to `/api/admin/authorization` and
     `/api/admin/delivery-status` are safely rejected with HTTP 401/403.
 
@@ -138,8 +142,8 @@ credentials. Credential-shaped command failures and connection strings are redac
 
 ## Non-effects, rollback and Production prohibition
 
-The verifier performs only Git reads, `vercel inspect`, an exact-SHA-filtered `vercel list`, and
-allowlisted `vercel curl` GET requests. The list result is never used to choose `latest`: the script
+The verifier performs only Git reads, `vercel inspect`, a project-scoped `vercel list`, and
+allowlisted direct `curl.exe` GET requests. The list result is never used to choose `latest`: the script
 accepts only the single row with the already inspected deployment ID and immutable URL. It
 does not read or write `.env` files, Vercel environment variables, Supabase configuration, database
 state, deployment aliases or project links. It does not send email, create payments, release
