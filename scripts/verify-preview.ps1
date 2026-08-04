@@ -99,8 +99,16 @@ function Invoke-External {
         [switch]$AllowFailure
     )
 
-    $output = @(& $FilePath @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 wraps ordinary native stderr as NativeCommandError. Capture it and
+        # judge the native process only by its exit code; callers still parse stdout fail-closed.
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $FilePath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $text = ($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
     if ($exitCode -ne 0 -and -not $AllowFailure) {
         $safe = Protect-Text $text

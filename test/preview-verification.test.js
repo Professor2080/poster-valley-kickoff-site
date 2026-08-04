@@ -68,6 +68,8 @@ import { readFileSync } from 'node:fs'
 const scenario = JSON.parse(readFileSync(process.env.PV_PREVIEW_SCENARIO, 'utf8'))
 const args = process.argv.slice(2)
 
+process.stderr.write('Vercel CLI fixture status\n')
+
 if (scenario.cliError) {
   process.stderr.write(scenario.cliError)
   process.exit(1)
