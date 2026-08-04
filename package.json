@@ -23,6 +23,7 @@
     "supabase": "supabase",
     "preview": "vite preview",
     "preflight": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tooling/preflight.ps1",
+    "verify:preview": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-preview.ps1",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tooling/verify.ps1",
     "check:versions": "node scripts/tooling/tool-versions.mjs",
     "check:diff-local": "node scripts/tooling/git-diff-check.mjs --local",
