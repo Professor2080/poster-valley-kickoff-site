@@ -79,8 +79,8 @@ The script reports each executed gate as `PASS`, `FAIL` or `SKIP`:
 1. explicit non-Production branch, full SHA and immutable Preview URL;
 2. repository root, origin identity, clean worktree, local branch/HEAD and remote branch SHA;
 3. executable Vercel application shim (`.cmd`, `.exe` or `.com`, with `.cmd` preferred on Windows);
-4. deployment/build metadata for the explicit URL plus project metadata matched once by the same
-   deployment ID and immutable URL;
+4. deployment/build metadata for the explicit URL plus project metadata matched once by that
+   immutable URL; the optional deployment ID is independently checked against `vercel inspect`;
 5. Vercel project identity and optional deployment ID;
 6. deployment state exactly `READY`;
 7. target is Preview and is not Production;

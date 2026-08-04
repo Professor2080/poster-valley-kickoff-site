@@ -240,7 +240,6 @@ function Invoke-VercelJson {
 function Get-VercelSourceDeployment {
     param(
         [string]$VercelPath,
-        [string]$DeploymentIdValue,
         [string]$DeploymentUrlValue
     )
 
@@ -250,11 +249,11 @@ function Get-VercelSourceDeployment {
     )
     $payload = ConvertFrom-CommandJson $result.Output
     $matches = @($payload.deployments | Where-Object {
-        ([string]$_.id -eq $DeploymentIdValue) -and
-        ((Normalize-HostName ([string]$_.url)) -eq (Normalize-HostName $DeploymentUrlValue))
+        ((Normalize-HostName ([string]$_.url)) -eq (Normalize-HostName $DeploymentUrlValue)) -and
+        (-not $_.name -or [string]$_.name -eq $ExpectedVercelProject)
     })
     if ($matches.Count -ne 1) {
-        throw 'The exact deployment was not found once in the project deployment metadata.'
+        throw 'The immutable deployment URL was not found once in the project deployment metadata.'
     }
     return $matches[0]
 }
@@ -366,8 +365,8 @@ if ($null -ne $deployment) {
 
     $sourceDeployment = $null
     try {
-        $sourceDeployment = Get-VercelSourceDeployment $vercelPath $actualId $actualUrl
-        Add-Gate PASS 'deployment source metadata' 'exact ID and URL occur once in project deployment metadata'
+        $sourceDeployment = Get-VercelSourceDeployment $vercelPath $actualUrl
+        Add-Gate PASS 'deployment source metadata' 'immutable URL occurs once in project deployment metadata'
     } catch {
         Add-Gate FAIL 'deployment source metadata' $_.Exception.Message
     }

@@ -32,7 +32,6 @@ function baseScenario() {
   return {
     deployment,
     sourceDeployment: {
-      id: deployment.id,
       name: deployment.name,
       url: deployment.url,
       target: deployment.target,
@@ -45,7 +44,6 @@ function baseScenario() {
       },
     },
     otherDeployment: {
-      id: 'dpl_newer_but_wrong_fixture',
       name: expectedProject,
       url: 'poster-valley-newer-wrong.vercel.app',
       target: null,
