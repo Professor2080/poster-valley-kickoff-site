@@ -15,10 +15,19 @@ const hardeningName = '20260731193947_harden_default_privileges.sql'
 const hardeningSha = '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9'
 const shippingName = '20260802130000_shipping_confirmation_safety.sql'
 const shippingSha = '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf'
+const orderFlowName = '20260802192136_order_flow_board.sql'
+const orderFlowSha = '87dd0afc52f760317c1d2fa0dfbc95fd0fe8275e685e1fac7e1c165618f9b658'
+const thresholdName = '20260802210626_default_drop_production_threshold.sql'
+const thresholdSha = '76324138304c2c41c956c9ea1c0cd2438d65696666b8193c676d59b515d4c993'
+const invitationFlowName = '20260804103202_simplify_order_flow_invitation_thresholds.sql'
+const invitationFlowSha = '756f8155d3046840113d3c46ec3fa2598657a79d8923260bc82d725fe54c64d1'
 const activeMigrations = [
   [canonicalName, canonicalSha],
   [hardeningName, hardeningSha],
   [shippingName, shippingSha],
+  [orderFlowName, orderFlowSha],
+  [thresholdName, thresholdSha],
+  [invitationFlowName, invitationFlowSha],
 ]
 const archivePromotionCommit = '73fed0224056f040ce085fbedeb27461695d8c30'
 
@@ -57,7 +66,7 @@ function canonicalizeCheckoutBytes(bytes, fileName) {
   return Buffer.from(text.replace(/\r\n/gu, '\n'), 'utf8')
 }
 
-test('the canonical baseline, hardening, and shipping feature are the only active migrations', async () => {
+test('the canonical baseline and five additive feature migrations are the only active migrations', async () => {
   const activeFiles = (await readdir(activeDirectory)).sort()
   assert.deepEqual(activeFiles, activeMigrations.map(([fileName]) => fileName))
 

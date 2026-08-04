@@ -1,4 +1,4 @@
-import { AdminRequestError, adminError, adminPage, adminSelect, requireAdmin, setAdminNoStore } from '../_admin.js'
+import { AdminRequestError, adminError, adminPage, adminRpc, adminSelect, requireAdmin, setAdminNoStore } from '../_admin.js'
 import { ensurePost, PublicRequestError, readRequestBody, sendJson } from '../_supabase.js'
 
 const resources = {
@@ -10,7 +10,43 @@ const resources = {
   email_events: ['email_delivery_events', 'id,occurred_at,actor_user_id,entity_type,entity_id,template,template_version,delivery_status,correlation_id', ['entity_type', 'entity_id', 'template', 'delivery_status'], 'occurred_at.desc'],
   audit: ['admin_audit_events', 'id,occurred_at,actor_user_id,action,entity_type,entity_id,correlation_id,idempotency_key', ['entity_type', 'entity_id', 'action'], 'occurred_at.desc'],
   events: ['entity_events', 'id,occurred_at,actor_user_id,source,event_type,entity_type,entity_id,correlation_id', ['entity_type', 'entity_id', 'event_type'], 'occurred_at.desc'],
-  products: ['product_registry', 'product_code,title,lifecycle_mode,commerce_authority,woo_product_id,woo_product_url,created_at,updated_at', ['lifecycle_mode', 'commerce_authority']],
+  products: ['product_registry', 'product_code,drop_slug,title,lifecycle_mode,production_threshold,invitations_opened_at,commerce_authority,woo_product_id,woo_product_url,created_at,updated_at', ['lifecycle_mode', 'commerce_authority']],
+}
+
+const boardStages = new Set(['new', 'interest', 'awaiting_payment', 'paid_to_ship', 'shipped', 'closed'])
+
+function boardFilter(value, label, maxLength = 120) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || value.trim().length > maxLength) throw new AdminRequestError(400, 'invalid_filter', `${label} is invalid.`)
+  return value.trim()
+}
+
+async function orderFlowRead(admin, body) {
+  const requested = body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters) ? body.filters : {}
+  const search = boardFilter(requested.search, 'Search')
+  const dropSlug = boardFilter(requested.drop_slug, 'Drop')
+  const sourceType = boardFilter(requested.source_type, 'Card type')
+  const stage = boardFilter(requested.stage, 'Stage')
+  const attention = boardFilter(requested.needs_attention, 'Attention filter', 5)
+  const includeClosed = boardFilter(requested.include_closed, 'Archive filter', 5)
+  if (dropSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(dropSlug)) throw new AdminRequestError(400, 'invalid_filter', 'Drop is invalid.')
+  if (sourceType && !['drop', 'shop_order'].includes(sourceType)) throw new AdminRequestError(400, 'invalid_filter', 'Card type is invalid.')
+  if (stage && !boardStages.has(stage)) throw new AdminRequestError(400, 'invalid_filter', 'Stage is invalid.')
+  if (attention && attention !== 'true') throw new AdminRequestError(400, 'invalid_filter', 'Attention filter is invalid.')
+  if (includeClosed && includeClosed !== 'true') throw new AdminRequestError(400, 'invalid_filter', 'Archive filter is invalid.')
+  const page = adminPage(body)
+  const result = await adminRpc('admin_order_flow_read', {
+    p_actor: admin.userId,
+    p_search: search,
+    p_drop_slug: dropSlug,
+    p_source_type: sourceType,
+    p_stage: stage,
+    p_needs_attention: attention ? true : null,
+    p_include_closed: Boolean(includeClosed),
+    p_limit: page.limit,
+    p_offset: page.offset,
+  })
+  return { version: 'v1', resource: 'order_flow', ...result }
 }
 
 export default async function handler(req, res) {
@@ -21,8 +57,13 @@ export default async function handler(req, res) {
       if (error instanceof PublicRequestError) throw new AdminRequestError(error.status, 'invalid_request', error.message)
       throw error
     }
-    await requireAdmin(req)
+    const admin = await requireAdmin(req)
     const resource = typeof body.resource === 'string' ? body.resource : ''
+    if (resource === 'order_flow') {
+      setAdminNoStore(res)
+      sendJson(res, 200, await orderFlowRead(admin, body))
+      return
+    }
     const definition = resources[resource]
     if (!definition) throw new AdminRequestError(400, 'invalid_resource', 'Unknown read resource.')
     const [table, select, allowedFilters, order] = definition

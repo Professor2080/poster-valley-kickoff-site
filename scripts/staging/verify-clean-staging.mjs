@@ -1,11 +1,10 @@
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
-  assertAuthInventory,
+  assertDatabaseAuthInventory,
   assertExecutionContext,
   assertOwnerCapabilities,
-  createAuthAdmin,
-  listAllAuthUsers,
+  authInventorySql,
   loadFixtureDefinition,
   ownerCapabilitySql,
   parseFlags,
@@ -13,7 +12,6 @@ import {
   printScenarioMatrix,
   queryJson,
   readLedger,
-  resolveOwnerEnvironment,
   scenarioMatrix,
   snapshotSql,
   validateSnapshot,
@@ -21,38 +19,33 @@ import {
 
 export async function runVerify({
   argv = process.argv.slice(2),
-  authAdmin = null,
   env = process.env,
   output = console.log,
-  prompt,
-  psqlQuery = queryJson,
+  sqlQuery = queryJson,
   root = process.cwd(),
 } = {}) {
   const flags = parseFlags(argv)
   assertExecutionContext({ env, flags })
-  const ownerEnv = await resolveOwnerEnvironment({ env, prompt })
-  const capabilities = psqlQuery(ownerCapabilitySql(), { env: ownerEnv })
+  const capabilities = sqlQuery(ownerCapabilitySql(), { env, root })
   assertOwnerCapabilities(capabilities)
 
-  const admin = authAdmin ?? createAuthAdmin(env)
-  const users = await listAllAuthUsers(admin)
   const ledger = readLedger({ root })
   const allowedDeletedUserIds = (ledger?.records ?? [])
     .filter((record) => record.table === 'auth.users')
     .map((record) => record.id)
-  const { active } = assertAuthInventory(users, { allowedDeletedUserIds })
-  if (active.length !== 1) throw new Error('Exactly one active manager Auth user is required.')
+  const inventory = sqlQuery(authInventorySql(), { env, root })
+  const { active } = assertDatabaseAuthInventory(inventory, { allowedDeletedUserIds })
 
   const definition = loadFixtureDefinition()
-  const snapshot = psqlQuery(snapshotSql(), { env: ownerEnv })
+  const snapshot = sqlQuery(snapshotSql(), { env, root })
   const verified = validateSnapshot(snapshot, {
     definition,
-    managerUserId: active[0].id,
+    managerUserId: active.id,
   })
   output(`PASS ${definition.fixture_set} verified.`)
   printScenarioMatrix(scenarioMatrix(snapshot, definition), output)
   printCounts('Retained append-only synthetic history', verified.retained, output)
-  return { managerUserId: active[0].id, snapshot, verified }
+  return { managerUserId: active.id, snapshot, verified }
 }
 
 const isMain =

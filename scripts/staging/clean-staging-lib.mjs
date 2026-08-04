@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -16,6 +19,7 @@ export const PRODUCTION_REF = 'epqpeoubkbftcvxjbqeo'
 export const LEGACY_STAGING_REF = 'cdmocdodehjmcgtxicaj'
 export const FIXTURE_SET = 'PV-CLEAN-STAGING-V1'
 export const EXECUTION_FLAG = '--confirm-clean-staging'
+export const ORDER_FLOW_ACCEPTANCE_FLAG = '--expect-order-flow-acceptance'
 export const LEDGER_PATH = '.tmp/clean-staging-seed-ledger.json'
 
 const fixtureFile = fileURLToPath(
@@ -52,8 +56,8 @@ export function assertExecutionContext({ env = process.env, flags = parseFlags()
   if (!flags.has(EXECUTION_FLAG)) {
     fail(`Explicit execution permission ${EXECUTION_FLAG} is required.`)
   }
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    fail('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.')
+  if (!env.SUPABASE_URL) {
+    fail('SUPABASE_URL is required.')
   }
 
   let url
@@ -85,29 +89,6 @@ export function assertExecutionContext({ env = process.env, flags = parseFlags()
     fail('Production or Legacy Staging appeared in the requested target.')
   }
   return { projectRef: CLEAN_STAGING_REF, supabaseUrl: url.origin }
-}
-
-export function assertOwnerConnectionTarget(env = process.env) {
-  const host = String(env.PGHOST ?? '').toLowerCase()
-  const user = String(env.PGUSER ?? '')
-  const database = String(env.PGDATABASE ?? '')
-  const port = String(env.PGPORT ?? '5432')
-  const direct =
-    host === `db.${CLEAN_STAGING_REF}.supabase.co` && user === 'postgres'
-  const pooler =
-    host.endsWith('.pooler.supabase.com') &&
-    user === `postgres.${CLEAN_STAGING_REF}`
-
-  if (!direct && !pooler) {
-    fail('PGHOST and PGUSER do not identify the exact Clean Staging owner connection.')
-  }
-  if (database !== 'postgres' || port !== '5432') {
-    fail('Owner connection must use database postgres and session port 5432.')
-  }
-  if (env.PGSSLMODE && !['require', 'verify-ca', 'verify-full'].includes(env.PGSSLMODE)) {
-    fail('PGSSLMODE must require TLS.')
-  }
-  return { database, direct, host, pooler, port, user }
 }
 
 export async function hiddenPrompt(label, input = process.stdin, output = process.stdout) {
@@ -150,76 +131,115 @@ export async function hiddenPrompt(label, input = process.stdin, output = proces
   }
 }
 
-export async function resolveOwnerEnvironment({
-  env = process.env,
-  prompt = hiddenPrompt,
+export function assertLinkedCleanStagingProject({
+  readFile = readFileSync,
+  root = process.cwd(),
 } = {}) {
-  assertOwnerConnectionTarget(env)
-  const password = env.PGPASSWORD || (await prompt('Clean Staging database password: '))
-  if (!password) fail('An owner database credential is required.')
-  return {
-    ...env,
-    PGCONNECT_TIMEOUT: env.PGCONNECT_TIMEOUT || '10',
-    PGPASSWORD: password,
-    PGSSLMODE: env.PGSSLMODE || 'require',
+  const refFile = path.resolve(root, 'supabase/.temp/project-ref')
+  let raw
+  try {
+    raw = readFile(refFile, 'utf8')
+  } catch {
+    fail('The project-local Supabase CLI link is unavailable.')
   }
+  const ref = raw.endsWith('\r\n')
+    ? raw.slice(0, -2)
+    : raw.endsWith('\n')
+      ? raw.slice(0, -1)
+      : raw
+  if (ref !== CLEAN_STAGING_REF) {
+    fail('The project-local Supabase CLI link is not exact Clean Staging.')
+  }
+  return { projectRef: ref, refFile }
 }
 
-export function sanitizedPsqlEnvironment(env) {
+export function sanitizedSupabaseCliEnvironment(env = process.env) {
   const child = {}
   const systemNames = new Set([
+    'APPDATA',
     'ComSpec',
+    'HOME',
     'LANG',
     'LC_ALL',
+    'LOCALAPPDATA',
     'PATH',
     'PATHEXT',
+    'SystemDrive',
     'SystemRoot',
     'TEMP',
     'TMP',
+    'USERPROFILE',
   ])
   for (const [name, value] of Object.entries(env)) {
-    if (systemNames.has(name) || /^PG[A-Z0-9_]+$/.test(name)) child[name] = value
+    if (systemNames.has(name)) child[name] = value
   }
+  child.NO_COLOR = '1'
   return child
 }
 
-export function runPsql(
+export function runLinkedQuery(
   sql,
-  { env, spawn = spawnSync, psql = env.POSTGRES_PSQL || 'psql' } = {},
+  {
+    cliEntry,
+    env = process.env,
+    node = process.execPath,
+    root = process.cwd(),
+    spawn = spawnSync,
+    temporaryRoot = os.tmpdir(),
+  } = {},
 ) {
-  const result = spawn(
-    psql,
-    [
-      '-X',
-      '--no-psqlrc',
-      '--set=ON_ERROR_STOP=1',
-      '--quiet',
-      '--tuples-only',
-      '--no-align',
-      `--dbname=${env.PGDATABASE}`,
-    ],
-    {
-      encoding: 'utf8',
-      env: sanitizedPsqlEnvironment(env),
-      input: sql,
-      maxBuffer: 16 * 1024 * 1024,
-      shell: false,
-      windowsHide: true,
-    },
-  )
+  assertLinkedCleanStagingProject({ root })
+  const resolvedCliEntry =
+    cliEntry ?? path.resolve(root, 'node_modules/supabase/dist/supabase.js')
+  if (!existsSync(resolvedCliEntry)) {
+    fail('The project-local Supabase CLI is unavailable.')
+  }
+
+  const directory = mkdtempSync(path.join(temporaryRoot, 'pv-clean-staging-query-'))
+  const sqlFile = path.join(directory, 'query.sql')
+  writeFileSync(sqlFile, sql, { encoding: 'utf8', mode: 0o600 })
+  let result
+  try {
+    result = spawn(
+      node,
+      [
+        resolvedCliEntry,
+        'db',
+        'query',
+        '--linked',
+        '--file',
+        sqlFile,
+        '--output-format',
+        'json',
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: sanitizedSupabaseCliEnvironment(env),
+        maxBuffer: 16 * 1024 * 1024,
+        shell: false,
+        windowsHide: true,
+      },
+    )
+  } finally {
+    rmSync(directory, { force: true, recursive: true })
+  }
   if (result.error || result.status !== 0) {
-    const error = new Error('Owner database operation failed closed.')
-    error.cause = result.error
-    throw error
+    fail('Project-bound Clean Staging database operation failed closed.')
   }
   return String(result.stdout ?? '').trim()
 }
 
 export function queryJson(sql, options) {
-  const output = runPsql(sql, options)
+  const output = runLinkedQuery(sql, options)
   if (!output) fail('Owner database query returned no result.')
   try {
-    return JSON.parse(output.split(/\r?\n/).at(-1))
+    const envelope = JSON.parse(output)
+    const rows = Array.isArray(envelope) ? envelope : envelope?.rows
+    if (!Array.isArray(rows) || rows.length !== 1) throw new Error()
+    const values = Object.values(rows[0] ?? {})
+    if (values.length !== 1 || typeof values[0] !== 'string') throw new Error()
+    return JSON.parse(values[0])
   } catch {
     fail('Owner database query returned an invalid result.')
   }
@@ -227,9 +247,15 @@ export function queryJson(sql, options) {
 
 export function ownerCapabilitySql() {
   return `
+begin read only;
 select pg_catalog.json_build_object(
+  'database', pg_catalog.current_database(),
+  'current_user', current_user,
+  'session_user', session_user,
+  'transaction_read_only', pg_catalog.current_setting('transaction_read_only') = 'on',
   'owner_capable',
-    pg_catalog.has_table_privilege(current_user, 'public.admin_roles', 'select,insert,update,delete')
+    pg_catalog.has_table_privilege(current_user, 'auth.users', 'select')
+    and pg_catalog.has_table_privilege(current_user, 'public.admin_roles', 'select,insert,update,delete')
     and pg_catalog.has_table_privilege(current_user, 'public.drop_interest_requests', 'select,insert,update,delete')
     and pg_catalog.has_table_privilege(current_user, 'public.order_invitations', 'select,insert,update,delete')
     and pg_catalog.has_table_privilege(current_user, 'public.orders', 'select,insert,update,delete')
@@ -246,25 +272,85 @@ select pg_catalog.json_build_object(
   ),
   'migration_count', (
     select pg_catalog.count(*) from supabase_migrations.schema_migrations
-    where version in ('20260731113000','20260731193947')
+    where version in (
+      '20260731113000','20260731193947','20260802130000',
+      '20260802192136','20260802210626','20260804103202'
+    )
   ),
   'migration_total', (
     select pg_catalog.count(*) from supabase_migrations.schema_migrations
   )
 )::text;
+rollback;
 `
 }
 
 export function assertOwnerCapabilities(capabilities) {
   if (
+    capabilities?.database !== 'postgres' ||
+    capabilities?.current_user !== 'postgres' ||
+    capabilities?.session_user !== 'postgres' ||
+    capabilities?.transaction_read_only !== true ||
     capabilities?.owner_capable !== true ||
     capabilities?.protected_triggers_enabled !== true
   ) {
     fail('Owner privileges or append-only triggers do not match the approved contract.')
   }
-  if (capabilities.migration_count !== 2 || capabilities.migration_total !== 2) {
-    fail('Clean Staging migration history is not the exact baseline plus hardening pair.')
+  if (capabilities.migration_count !== 6 || capabilities.migration_total !== 6) {
+    fail('Clean Staging migration history is not the exact Order Flow Board migration set.')
   }
+}
+
+export function authInventorySql() {
+  return `
+begin read only;
+select pg_catalog.json_build_object(
+  'active_users', coalesce((
+    select pg_catalog.json_agg(
+      pg_catalog.json_build_object(
+        'id', u.id,
+        'confirmed', u.email_confirmed_at is not null,
+        'fixture_owned', u.raw_app_meta_data->>'fixture_set' = '${FIXTURE_SET}'
+      ) order by u.id
+    )
+    from auth.users u
+    where u.deleted_at is null
+  ), '[]'::json),
+  'deleted_user_ids', coalesce((
+    select pg_catalog.json_agg(u.id order by u.id)
+    from auth.users u
+    where u.deleted_at is not null
+  ), '[]'::json)
+)::text;
+rollback;
+`
+}
+
+export function assertDatabaseAuthInventory(
+  inventory,
+  { allowedDeletedUserIds = [] } = {},
+) {
+  if (!Array.isArray(inventory?.active_users) || inventory.active_users.length !== 1) {
+    fail('Exactly one active synthetic manager Auth identity is required.')
+  }
+  const [active] = inventory.active_users
+  if (
+    !uuidPattern.test(active?.id ?? '') ||
+    active.confirmed !== true ||
+    active.fixture_owned !== true
+  ) {
+    fail('The active manager Auth identity is not confirmed and fixture-owned.')
+  }
+  if (!Array.isArray(inventory.deleted_user_ids)) {
+    fail('Deleted Auth inventory is invalid.')
+  }
+  const allowed = new Set(allowedDeletedUserIds.map((id) => String(id).toLowerCase()))
+  for (const id of inventory.deleted_user_ids) {
+    if (!uuidPattern.test(id ?? '') || !allowed.has(String(id).toLowerCase())) {
+      fail('Unexpected deleted Auth identity found; Clean Staging stopped.')
+    }
+  }
+  return { active }
 }
 
 export function loadFixtureDefinition(file = fixtureFile) {
@@ -277,14 +363,14 @@ export function validateFixtureDefinition(definition) {
   if (definition?.fixture_set !== FIXTURE_SET || definition?.version !== 1) {
     fail('Fixture set identity is invalid.')
   }
-  if (!Array.isArray(definition.scenarios) || definition.scenarios.length !== 14) {
-    fail('Exactly fourteen fixture scenarios are required.')
+  if (!Array.isArray(definition.scenarios) || definition.scenarios.length !== 16) {
+    fail('Exactly sixteen fixture scenarios are required.')
   }
   const numbers = new Set()
   const keys = new Set()
   const ids = new Set()
   for (const scenario of definition.scenarios) {
-    if (!Number.isInteger(scenario.number) || scenario.number < 1 || scenario.number > 14) {
+    if (!Number.isInteger(scenario.number) || scenario.number < 1 || scenario.number > 16) {
       fail('Fixture scenario number is invalid.')
     }
     if (!/^[a-z][a-z0-9_]{2,60}$/.test(scenario.key)) {
@@ -325,6 +411,7 @@ export function materializeFixtures(definition, managerUserId) {
   const actor = requireManagerId(managerUserId)
   const rows = {
     admin_audit_events: [],
+    admin_order_flow_state: [],
     drop_interest_requests: [],
     email_delivery_events: [],
     entity_events: [],
@@ -338,10 +425,13 @@ export function materializeFixtures(definition, managerUserId) {
     const number = String(scenario.number).padStart(2, '0')
     const email = scenarioEmail(scenario.number)
     const metadata = marker(scenario)
+    const dropSlug = scenario.drop_slug ?? 'eurofighter-typhoon-a2'
+    const quantity = scenario.reservation.quantity ?? 1
+    const recordOrigin = scenario.reservation.record_origin ?? 'test'
     rows.drop_interest_requests.push({
       id: scenario.ids.reservation,
       drop_id: 'poster-valley-drop-01',
-      drop_slug: 'eurofighter-typhoon-a2',
+      drop_slug: dropSlug,
       drop_title: 'Eurofighter Typhoon / A2',
       first_name: 'Synthetic',
       last_name: `Scenario ${number}`,
@@ -351,7 +441,7 @@ export function materializeFixtures(definition, managerUserId) {
       country: 'Netherlands',
       country_code: 'NL',
       preferred_format: 'A2',
-      quantity: 1,
+      quantity,
       shipping_address: null,
       note: `Synthetic Clean Staging scenario ${number}`,
       source_path: '/clean-staging-fixtures',
@@ -361,7 +451,7 @@ export function materializeFixtures(definition, managerUserId) {
       reservation_status: scenario.reservation.reservation_status,
       status: scenario.reservation.status,
       metadata,
-      record_origin: 'test',
+      record_origin: recordOrigin,
       record_origin_needs_review:
         scenario.reservation.record_origin_needs_review === true,
       record_origin_version: 0,
@@ -372,16 +462,16 @@ export function materializeFixtures(definition, managerUserId) {
         id: scenario.ids.invitation,
         interest_request_id: scenario.ids.reservation,
         drop_id: 'poster-valley-drop-01',
-        drop_slug: 'eurofighter-typhoon-a2',
+        drop_slug: dropSlug,
         drop_title: 'Eurofighter Typhoon / A2',
         email,
         email_normalized: email,
         first_name: 'Synthetic',
         last_name: `Scenario ${number}`,
-        quantity: 1,
+        quantity,
         currency: 'EUR',
         unit_price: 65,
-        subtotal_amount: 65,
+        subtotal_amount: 65 * quantity,
         status: scenario.invitation.status,
         token_hash: digest(`${FIXTURE_SET}:${scenario.key}:invitation-token`),
         expires_at: '2099-12-31T23:59:59.000Z',
@@ -403,18 +493,18 @@ export function materializeFixtures(definition, managerUserId) {
         invitation_id: scenario.ids.invitation,
         interest_request_id: scenario.ids.reservation,
         drop_id: 'poster-valley-drop-01',
-        drop_slug: 'eurofighter-typhoon-a2',
+        drop_slug: dropSlug,
         drop_title: 'Eurofighter Typhoon / A2',
         status: scenario.order.status,
         email,
         first_name: 'Synthetic',
         last_name: `Scenario ${number}`,
-        quantity: 1,
+        quantity,
         currency: 'EUR',
         unit_price: 65,
-        subtotal_amount: 65,
+        subtotal_amount: 65 * quantity,
         shipping_amount: 9.95,
-        total_amount: 74.95,
+        total_amount: 65 * quantity + 9.95,
         shipping_profile_id: 'pv-test-nl-standard',
         shipping_country: 'Netherlands',
         shipping_country_code: 'NL',
@@ -548,6 +638,7 @@ select pg_catalog.json_build_object(
   'admin_roles', ${jsonRows('admin_roles', 'user_id')},
   'admin_operation_idempotency', ${jsonRows('admin_operation_idempotency', 'actor_user_id, action, idempotency_key')},
   'admin_audit_events', ${jsonRows('admin_audit_events')},
+  'admin_order_flow_state', ${jsonRows('admin_order_flow_state', 'drop_interest_request_id')},
   'drop_interest_requests', ${jsonRows('drop_interest_requests')},
   'email_delivery_events', ${jsonRows('email_delivery_events')},
   'entity_events', ${jsonRows('entity_events')},
@@ -697,6 +788,329 @@ function assertJsonMarker(rows, column, label) {
   }
 }
 
+function scenarioByNumber(definition, number) {
+  const scenario = definition.scenarios.find((candidate) => candidate.number === number)
+  if (!scenario) fail(`Acceptance cleanup scenario ${number} is unavailable.`)
+  return scenario
+}
+
+function extraRows(actual, expected) {
+  const expectedSet = new Set(expected.map((row) => row.id))
+  return actual.filter((row) => !expectedSet.has(row.id))
+}
+
+function exactObjectKeys(value, expected) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function assertAcceptanceIdempotencyKey(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^[A-Za-z0-9_.:-]{8,100}$/.test(value) ||
+    value.startsWith(fixturePrefix)
+  ) {
+    fail('Acceptance cleanup idempotency key is invalid or fixture-prefixed.')
+  }
+  return value
+}
+
+function requireSingleMatching(rows, predicate, label) {
+  const matches = rows.filter(predicate)
+  if (matches.length !== 1) fail(`Acceptance cleanup requires exactly one ${label}.`)
+  return matches[0]
+}
+
+function assertAcceptanceEventPair({
+  auditRows,
+  entityRows,
+  eventType,
+  entityType,
+  entityId,
+  idempotencyKey,
+  managerUserId,
+  correlationId = null,
+}) {
+  const audit = requireSingleMatching(
+    auditRows,
+    (row) => row.action === eventType,
+    `${eventType} audit event`,
+  )
+  const entity = requireSingleMatching(
+    entityRows,
+    (row) => row.event_type === eventType,
+    `${eventType} entity event`,
+  )
+  for (const row of [audit, entity]) {
+    if (
+      row.actor_user_id !== managerUserId ||
+      row.entity_type !== entityType ||
+      row.entity_id !== entityId ||
+      row.idempotency_key !== idempotencyKey ||
+      (row.correlation_id ?? null) !== correlationId
+    ) {
+      fail(`Acceptance cleanup ${eventType} evidence changed.`)
+    }
+  }
+  if (entity.source !== 'admin') fail(`Acceptance cleanup ${eventType} entity source changed.`)
+  return { audit, entity }
+}
+
+export function validateOrderFlowAcceptanceEvidence(
+  snapshot,
+  { definition, managerUserId, phase = 'before' } = {},
+) {
+  if (!['before', 'after'].includes(phase)) fail('Acceptance cleanup phase is invalid.')
+  const managerId = requireManagerId(managerUserId)
+  const fixtureRows = materializeFixtures(definition, managerId)
+  const scenario01 = scenarioByNumber(definition, 1)
+  const scenario10 = scenarioByNumber(definition, 10)
+  const scenario16 = scenarioByNumber(definition, 16)
+
+  for (const table of [
+    'admin_operation_idempotency',
+    'admin_order_flow_state',
+    'admin_audit_events',
+    'email_delivery_events',
+    'entity_events',
+    'operational_email_attempts',
+  ]) {
+    if (!Array.isArray(snapshot?.[table])) fail(`Snapshot lacks ${table}.`)
+  }
+
+  const attempts = extraRows(
+    snapshot.operational_email_attempts,
+    fixtureRows.operational_email_attempts,
+  )
+  if (attempts.length !== 1) {
+    fail('Acceptance cleanup requires exactly one additional delivery attempt.')
+  }
+  const [attempt] = attempts
+  const parentPresent = snapshot.drop_interest_requests.some(
+    (row) => row.id === scenario16.ids.reservation,
+  )
+  if (phase === 'before' && !parentPresent) {
+    fail('Acceptance cleanup scenario 16 parent fixture is missing.')
+  }
+  const expectedInterestId = parentPresent ? scenario16.ids.reservation : null
+  const invitationKey = assertAcceptanceIdempotencyKey(attempt.idempotency_key)
+  if (
+    attempt.actor_user_id !== managerId ||
+    attempt.action !== 'invitation.send' ||
+    attempt.template !== 'order_invitation' ||
+    attempt.template_version !== 'v1' ||
+    attempt.entity_type !== 'order_invitation' ||
+    attempt.entity_id !== scenario16.ids.invitation ||
+    (attempt.interest_request_id ?? null) !== expectedInterestId ||
+    attempt.delivery_status !== 'suppressed' ||
+    attempt.provider_id !== null ||
+    !attempt.dispatch_claim_id ||
+    !attempt.dispatch_started_at ||
+    attempt.dispatch_lease_expires_at !== null ||
+    !attempt.completed_at ||
+    !/^[a-f0-9]{64}$/.test(String(attempt.token_hash ?? ''))
+  ) {
+    fail('Acceptance cleanup delivery attempt does not match scenario 16 suppressed evidence.')
+  }
+
+  const deliveryEvents = extraRows(
+    snapshot.email_delivery_events,
+    fixtureRows.email_delivery_events,
+  )
+  if (deliveryEvents.length !== 1) {
+    fail('Acceptance cleanup requires exactly one additional delivery event.')
+  }
+  const [deliveryEvent] = deliveryEvents
+  if (
+    deliveryEvent.actor_user_id !== managerId ||
+    deliveryEvent.attempt_id !== attempt.id ||
+    deliveryEvent.entity_type !== 'order_invitation' ||
+    deliveryEvent.entity_id !== scenario16.ids.invitation ||
+    deliveryEvent.template !== 'order_invitation' ||
+    deliveryEvent.template_version !== 'v1' ||
+    deliveryEvent.delivery_status !== 'suppressed' ||
+    deliveryEvent.provider_id !== null ||
+    deliveryEvent.correlation_id !== attempt.id ||
+    !exactObjectKeys(deliveryEvent.details, ['truthful_outcome']) ||
+    deliveryEvent.details.truthful_outcome !== true
+  ) {
+    fail('Acceptance cleanup delivery event changed or contains provider evidence.')
+  }
+
+  const auditRows = extraRows(snapshot.admin_audit_events, fixtureRows.admin_audit_events)
+  const entityRows = extraRows(snapshot.entity_events, fixtureRows.entity_events)
+  if (auditRows.length !== 4 || entityRows.length !== 4) {
+    fail('Acceptance cleanup append-only action history count changed.')
+  }
+
+  let operationRows = snapshot.admin_operation_idempotency
+  let operationKeys
+  if (phase === 'before') {
+    if (operationRows.length !== 4) {
+      fail('Acceptance cleanup requires exactly four completed idempotency records.')
+    }
+    const byAction = new Map()
+    for (const row of operationRows) {
+      if (
+        row.actor_user_id !== managerId ||
+        byAction.has(row.action) ||
+        !/^[a-f0-9]{64}$/.test(String(row.request_hash ?? '')) ||
+        row.completed_at == null ||
+        row.result?.success !== true
+      ) {
+        fail('Acceptance cleanup idempotency record changed.')
+      }
+      byAction.set(row.action, row)
+    }
+    const process = byAction.get('board.process')
+    const delivery = byAction.get('delivery.confirm')
+    const close = byAction.get('board.close')
+    const invitation = byAction.get('invitation.send')
+    if (
+      byAction.size !== 4 ||
+      process?.result?.entityId !== scenario01.ids.reservation ||
+      process.result.boardStage !== 'interest' ||
+      Number(process.result.boardVersion) !== 1 ||
+      delivery?.result?.entityId !== scenario10.ids.order ||
+      delivery.result.deliveryConfirmed !== true ||
+      delivery.result.boardStage !== 'shipped' ||
+      Number(delivery.result.boardVersion) !== 1 ||
+      close?.result?.entityId !== scenario10.ids.order ||
+      close.result.boardStage !== 'closed' ||
+      Number(close.result.boardVersion) !== 2 ||
+      invitation?.result?.entityId !== scenario16.ids.invitation ||
+      invitation.result.emailAttemptId !== attempt.id ||
+      invitation.result.deliveryStatus !== 'suppressed'
+    ) {
+      fail('Acceptance cleanup idempotency result does not match the accepted scenarios.')
+    }
+    operationKeys = {
+      'board.process': assertAcceptanceIdempotencyKey(process.idempotency_key),
+      'delivery.confirm': assertAcceptanceIdempotencyKey(delivery.idempotency_key),
+      'board.close': assertAcceptanceIdempotencyKey(close.idempotency_key),
+      'invitation.send': assertAcceptanceIdempotencyKey(invitation.idempotency_key),
+    }
+    if (operationKeys['invitation.send'] !== invitationKey) {
+      fail('Acceptance cleanup invitation attempt is not linked to its idempotency record.')
+    }
+  } else {
+    if (operationRows.length !== 0) {
+      fail('Acceptance cleanup left mutable idempotency records.')
+    }
+    operationKeys = {
+      'board.process': requireSingleMatching(auditRows, (row) => row.action === 'order_flow.processed', 'process audit event').idempotency_key,
+      'delivery.confirm': requireSingleMatching(auditRows, (row) => row.action === 'delivery.confirmed', 'delivery audit event').idempotency_key,
+      'board.close': requireSingleMatching(auditRows, (row) => row.action === 'order_flow.closed', 'close audit event').idempotency_key,
+      'invitation.send': invitationKey,
+    }
+    for (const key of Object.values(operationKeys)) assertAcceptanceIdempotencyKey(key)
+  }
+
+  const processPair = assertAcceptanceEventPair({
+    auditRows,
+    entityRows,
+    eventType: 'order_flow.processed',
+    entityType: 'reservation',
+    entityId: scenario01.ids.reservation,
+    idempotencyKey: operationKeys['board.process'],
+    managerUserId: managerId,
+  })
+  const deliveryPair = assertAcceptanceEventPair({
+    auditRows,
+    entityRows,
+    eventType: 'delivery.confirmed',
+    entityType: 'order',
+    entityId: scenario10.ids.order,
+    idempotencyKey: operationKeys['delivery.confirm'],
+    managerUserId: managerId,
+  })
+  const closePair = assertAcceptanceEventPair({
+    auditRows,
+    entityRows,
+    eventType: 'order_flow.closed',
+    entityType: 'order',
+    entityId: scenario10.ids.order,
+    idempotencyKey: operationKeys['board.close'],
+    managerUserId: managerId,
+  })
+  const invitationPair = assertAcceptanceEventPair({
+    auditRows,
+    entityRows,
+    eventType: 'order_invitation.delivery.suppressed',
+    entityType: 'order_invitation',
+    entityId: scenario16.ids.invitation,
+    idempotencyKey: invitationKey,
+    managerUserId: managerId,
+    correlationId: attempt.id,
+  })
+  if (
+    invitationPair.audit.details?.delivery_status !== 'suppressed' ||
+    invitationPair.audit.details?.provider_confirmed !== false ||
+    invitationPair.entity.payload?.delivery_status !== 'suppressed' ||
+    processPair.audit.details?.source_type !== 'drop' ||
+    processPair.entity.payload?.source_type !== 'drop' ||
+    deliveryPair.audit.details?.fulfilment_status !== 'shipped' ||
+    deliveryPair.audit.details?.tracking_present !== true ||
+    deliveryPair.entity.payload?.fulfilment_status !== 'shipped' ||
+    closePair.audit.details?.order_status !== 'paid' ||
+    closePair.audit.details?.fulfilment_status !== 'shipped' ||
+    closePair.entity.payload?.order_status !== 'paid' ||
+    closePair.entity.payload?.fulfilment_status !== 'shipped'
+  ) {
+    fail('Acceptance cleanup audit or entity evidence changed.')
+  }
+
+  const states = snapshot.admin_order_flow_state
+  if (phase === 'before') {
+    if (states.length !== 2) fail('Acceptance cleanup requires exactly two board work records.')
+    const processState = requireSingleMatching(
+      states,
+      (row) => row.drop_interest_request_id === scenario01.ids.reservation,
+      'scenario 01 board work record',
+    )
+    const closedState = requireSingleMatching(
+      states,
+      (row) => row.drop_interest_request_id === scenario10.ids.reservation,
+      'scenario 10 board work record',
+    )
+    if (
+      !processState.processed_at ||
+      processState.processed_by !== managerId ||
+      processState.delivery_confirmed_at !== null ||
+      processState.closed_at !== null ||
+      Number(processState.version) !== 1 ||
+      processState.closed_order_status !== null ||
+      processState.closed_fulfilment_status !== null ||
+      closedState.processed_at !== null ||
+      !closedState.delivery_confirmed_at ||
+      closedState.delivery_confirmed_by !== managerId ||
+      !closedState.closed_at ||
+      closedState.closed_by !== managerId ||
+      closedState.closed_order_status !== 'paid' ||
+      closedState.closed_fulfilment_status !== 'shipped' ||
+      Number(closedState.version) !== 2
+    ) {
+      fail('Acceptance cleanup board work records changed.')
+    }
+  } else if (states.length !== 0) {
+    fail('Acceptance cleanup left mutable board work records.')
+  }
+
+  return {
+    allowedRows: {
+      admin_audit_events: auditRows,
+      email_delivery_events: [deliveryEvent],
+      entity_events: entityRows,
+      operational_email_attempts: [attempt],
+    },
+    attempt,
+    deliveryEvent,
+    operationRows,
+    stateRows: states,
+  }
+}
+
 function assertSafeEmails(snapshot) {
   for (const table of ['drop_interest_requests', 'order_invitations', 'orders']) {
     for (const row of snapshot[table]) {
@@ -722,7 +1136,9 @@ function assertScenarioContracts(snapshot, definition, { allowMissing = false } 
     const reservation = maps.drop_interest_requests.get(scenario.ids.reservation)
     if (reservation) {
       if (
-        reservation.record_origin !== 'test' ||
+        reservation.record_origin !== (scenario.reservation.record_origin ?? 'test') ||
+        reservation.drop_slug !== (scenario.drop_slug ?? 'eurofighter-typhoon-a2') ||
+        Number(reservation.quantity) !== (scenario.reservation.quantity ?? 1) ||
         reservation.reservation_status !== scenario.reservation.reservation_status ||
         reservation.status !== scenario.reservation.status ||
         reservation.record_origin_needs_review !==
@@ -819,29 +1235,50 @@ function assertScenarioContracts(snapshot, definition, { allowMissing = false } 
 
 export function validateSnapshot(
   snapshot,
-  { definition, managerUserId, allowMissing = false, requireManager = true } = {},
+  {
+    definition,
+    managerUserId,
+    allowMissing = false,
+    requireManager = true,
+    expectOrderFlowAcceptance = false,
+    acceptancePhase = 'before',
+  } = {},
 ) {
   const rows = materializeFixtures(definition, managerUserId)
+  const acceptance = expectOrderFlowAcceptance
+    ? validateOrderFlowAcceptanceEvidence(snapshot, {
+        definition,
+        managerUserId,
+        phase: acceptancePhase,
+      })
+    : null
   for (const table of mutableTables.concat(protectedTables)) {
     if (!Array.isArray(snapshot?.[table])) fail(`Snapshot lacks ${table}.`)
-    assertExactIdSet(snapshot[table], expectedIds(rows, table), table, { allowMissing })
+    const expected = expectedIds(rows, table)
+    for (const row of acceptance?.allowedRows?.[table] ?? []) expected.add(row.id)
+    assertExactIdSet(snapshot[table], expected, table, { allowMissing })
   }
 
-  assertJsonMarker(snapshot.drop_interest_requests, 'metadata', 'Reservation')
-  assertJsonMarker(snapshot.order_invitations, 'metadata', 'Invitation')
-  assertJsonMarker(snapshot.orders, 'metadata', 'Order')
-  assertJsonMarker(snapshot.payments, 'metadata', 'Payment')
-  assertJsonMarker(snapshot.admin_audit_events, 'details', 'Audit event')
-  assertJsonMarker(snapshot.email_delivery_events, 'details', 'Delivery event')
-  assertJsonMarker(snapshot.entity_events, 'payload', 'Entity event')
-  for (const attempt of snapshot.operational_email_attempts) {
+  const fixtureOnly = (table) => {
+    const ids = expectedIds(rows, table)
+    return snapshot[table].filter((row) => ids.has(row.id))
+  }
+  assertJsonMarker(fixtureOnly('drop_interest_requests'), 'metadata', 'Reservation')
+  assertJsonMarker(fixtureOnly('order_invitations'), 'metadata', 'Invitation')
+  assertJsonMarker(fixtureOnly('orders'), 'metadata', 'Order')
+  assertJsonMarker(fixtureOnly('payments'), 'metadata', 'Payment')
+  assertJsonMarker(fixtureOnly('admin_audit_events'), 'details', 'Audit event')
+  assertJsonMarker(fixtureOnly('email_delivery_events'), 'details', 'Delivery event')
+  assertJsonMarker(fixtureOnly('entity_events'), 'payload', 'Entity event')
+  for (const attempt of fixtureOnly('operational_email_attempts')) {
     if (!attempt.idempotency_key.startsWith(fixturePrefix)) {
       fail('Delivery attempt is not fixture-marked.')
     }
   }
 
   if (
-    snapshot.admin_operation_idempotency.length ||
+    (!expectOrderFlowAcceptance && snapshot.admin_operation_idempotency.length) ||
+    (!expectOrderFlowAcceptance && snapshot.admin_order_flow_state.length) ||
     snapshot.manual_shipping_quotes.length ||
     snapshot.newsletter_signups.length
   ) {
@@ -871,7 +1308,7 @@ export function validateSnapshot(
 
   assertSafeEmails(snapshot)
   assertScenarioContracts(snapshot, definition, { allowMissing })
-  return { rows, retained: retainedHistory(snapshot) }
+  return { acceptance, rows, retained: retainedHistory(snapshot) }
 }
 
 export function retainedHistory(snapshot) {
@@ -1008,16 +1445,111 @@ commit;
 `
 }
 
-export function cleanupSql(rows, managerUserId, { removeManagerRole = false } = {}) {
+function acceptanceCleanupGuardSql(rows, managerUserId, acceptance) {
+  if (!acceptance) return ''
+  const attempt = acceptance.attempt
+  const deliveryEvent = acceptance.deliveryEvent
+  const operationPredicates = acceptance.operationRows.map(
+    (row) =>
+      `(actor_user_id=${sqlLiteral(managerUserId)}::uuid and action=${sqlLiteral(row.action)} and idempotency_key=${sqlLiteral(row.idempotency_key)} and request_hash=${sqlLiteral(row.request_hash)} and completed_at is not null and result=${sqlLiteral(row.result)})`,
+  )
+  const statePredicates = acceptance.stateRows.map(
+    (row) =>
+      `(drop_interest_request_id=${sqlLiteral(row.drop_interest_request_id)}::uuid` +
+      ` and processed_at is not distinct from ${sqlLiteral(row.processed_at)}::timestamptz` +
+      ` and processed_by is not distinct from ${sqlLiteral(row.processed_by)}::uuid` +
+      ` and delivery_confirmed_at is not distinct from ${sqlLiteral(row.delivery_confirmed_at)}::timestamptz` +
+      ` and delivery_confirmed_by is not distinct from ${sqlLiteral(row.delivery_confirmed_by)}::uuid` +
+      ` and closed_at is not distinct from ${sqlLiteral(row.closed_at)}::timestamptz` +
+      ` and closed_by is not distinct from ${sqlLiteral(row.closed_by)}::uuid` +
+      ` and closed_order_status is not distinct from ${sqlLiteral(row.closed_order_status)}` +
+      ` and closed_fulfilment_status is not distinct from ${sqlLiteral(row.closed_fulfilment_status)}` +
+      ` and version=${sqlLiteral(Number(row.version))})`,
+  )
+  const stateIds = acceptance.stateRows.map((row) => ({ id: row.drop_interest_request_id }))
+  const allowed = {
+    admin_audit_events: [...rows.admin_audit_events, ...acceptance.allowedRows.admin_audit_events],
+    email_delivery_events: [...rows.email_delivery_events, deliveryEvent],
+    entity_events: [...rows.entity_events, ...acceptance.allowedRows.entity_events],
+    operational_email_attempts: [...rows.operational_email_attempts, attempt],
+  }
+  return `
+do $acceptance_cleanup_guard$
+begin
+  if exists (select 1 from public.drop_interest_requests where id not in (${idList(rows.drop_interest_requests)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
+     or exists (select 1 from public.order_invitations where id not in (${idList(rows.order_invitations)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
+     or exists (select 1 from public.orders where id not in (${idList(rows.orders)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
+     or exists (select 1 from public.payments where id not in (${idList(rows.payments)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
+     or exists (select 1 from public.operational_email_attempts where id not in (${idList(allowed.operational_email_attempts)}))
+     or exists (select 1 from public.email_delivery_events where id not in (${idList(allowed.email_delivery_events)}))
+     or exists (select 1 from public.admin_audit_events where id not in (${idList(allowed.admin_audit_events)}))
+     or exists (select 1 from public.entity_events where id not in (${idList(allowed.entity_events)}))
+     or (select count(*) from public.admin_order_flow_state) <> ${acceptance.stateRows.length}
+     or exists (select 1 from public.admin_order_flow_state where drop_interest_request_id not in (${idList(stateIds)}))
+     or exists (select 1 from public.admin_order_flow_state where not (${statePredicates.join(' or ')}))
+     or (select count(*) from public.admin_operation_idempotency) <> ${acceptance.operationRows.length}
+     or exists (select 1 from public.admin_operation_idempotency where not (${operationPredicates.join(' or ')})) then
+    raise exception 'acceptance_cleanup_scope_changed';
+  end if;
+  if not exists (
+    select 1 from public.operational_email_attempts a
+    where a.id=${sqlLiteral(attempt.id)}::uuid
+      and a.actor_user_id=${sqlLiteral(managerUserId)}::uuid
+      and a.action='invitation.send' and a.idempotency_key=${sqlLiteral(attempt.idempotency_key)}
+      and a.template='order_invitation' and a.template_version='v1'
+      and a.entity_type='order_invitation' and a.entity_id=${sqlLiteral(attempt.entity_id)}
+      and a.interest_request_id=${sqlLiteral(attempt.interest_request_id)}::uuid
+      and a.delivery_status='suppressed' and a.provider_id is null
+      and a.dispatch_claim_id is not null and a.dispatch_started_at is not null
+      and a.dispatch_lease_expires_at is null and a.completed_at is not null
+      and a.token_hash ~ '^[a-f0-9]{64}$'
+  ) or not exists (
+    select 1 from public.email_delivery_events e
+    where e.id=${sqlLiteral(deliveryEvent.id)}::uuid and e.attempt_id=${sqlLiteral(attempt.id)}::uuid
+      and e.actor_user_id=${sqlLiteral(managerUserId)}::uuid
+      and e.entity_type='order_invitation' and e.entity_id=${sqlLiteral(attempt.entity_id)}
+      and e.template='order_invitation' and e.template_version='v1'
+      and e.delivery_status='suppressed' and e.provider_id is null
+      and e.correlation_id=${sqlLiteral(attempt.id)}::uuid
+      and e.details=pg_catalog.jsonb_build_object('truthful_outcome',true)
+  ) then
+    raise exception 'acceptance_delivery_evidence_changed';
+  end if;
+end
+$acceptance_cleanup_guard$;
+`
+}
+
+export function cleanupSql(
+  rows,
+  managerUserId,
+  { removeManagerRole = false, acceptance = null } = {},
+) {
   const managerId = requireManagerId(managerUserId)
   const roleSql = removeManagerRole
     ? `delete from public.admin_roles where user_id=${sqlLiteral(managerId)}::uuid and role='manager';`
+    : ''
+  const acceptanceGuard = acceptanceCleanupGuardSql(rows, managerId, acceptance)
+  const acceptanceDeletes = acceptance
+    ? `delete from public.admin_operation_idempotency
+where ${acceptance.operationRows
+        .map(
+          (row) =>
+            `(actor_user_id=${sqlLiteral(managerId)}::uuid and action=${sqlLiteral(row.action)} and idempotency_key=${sqlLiteral(row.idempotency_key)})`,
+        )
+        .join(' or ')};
+delete from public.admin_order_flow_state
+where drop_interest_request_id in (${idList(
+        acceptance.stateRows.map((row) => ({ id: row.drop_interest_request_id })),
+      )});`
     : ''
   return `
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
-lock table public.admin_roles,public.drop_interest_requests,public.order_invitations,public.orders,public.payments,public.operational_email_attempts,public.email_delivery_events in share row exclusive mode;
+lock table public.admin_roles,public.admin_operation_idempotency,public.admin_order_flow_state,public.drop_interest_requests,public.order_invitations,public.orders,public.payments,public.operational_email_attempts,public.email_delivery_events,public.admin_audit_events,public.entity_events in share row exclusive mode;
+${acceptanceGuard}
+${acceptanceDeletes}
 delete from public.operational_email_attempts a
 where a.id in (${idList(rows.operational_email_attempts)})
   and a.idempotency_key like ${sqlLiteral(`${fixturePrefix}%`)}
@@ -1029,16 +1561,37 @@ where id in (${idList(rows.orders)}) and metadata->>'fixture_set'=${sqlLiteral(F
 delete from public.order_invitations
 where id in (${idList(rows.order_invitations)}) and metadata->>'fixture_set'=${sqlLiteral(FIXTURE_SET)};
 delete from public.drop_interest_requests
-where id in (${idList(rows.drop_interest_requests)}) and metadata->>'fixture_set'=${sqlLiteral(FIXTURE_SET)} and record_origin='test';
+where id in (${idList(rows.drop_interest_requests)}) and metadata->>'fixture_set'=${sqlLiteral(FIXTURE_SET)};
 ${roleSql}
+do $cleanup_result_guard$
+begin
+  if exists (select 1 from public.drop_interest_requests)
+     or exists (select 1 from public.order_invitations)
+     or exists (select 1 from public.orders)
+     or exists (select 1 from public.payments)
+     or exists (select 1 from public.admin_order_flow_state)
+     or exists (select 1 from public.admin_operation_idempotency)
+     or exists (
+       select 1 from public.operational_email_attempts a
+       where not exists (select 1 from public.email_delivery_events e where e.attempt_id=a.id)
+     ) then
+    raise exception 'limited_cleanup_incomplete';
+  end if;
+end
+$cleanup_result_guard$;
 commit;
 `
 }
 
-export function cleanupPlan(snapshot, { removeManagerRole = false, removeManagerUser = false } = {}) {
+export function cleanupPlan(
+  snapshot,
+  { removeManagerRole = false, removeManagerUser = false } = {},
+) {
   const retained = retainedHistory(snapshot)
   return {
     delete: {
+      admin_operation_idempotency: snapshot.admin_operation_idempotency.length,
+      admin_order_flow_state: snapshot.admin_order_flow_state.length,
       drop_interest_requests: snapshot.drop_interest_requests.length,
       operational_email_attempts: snapshot.operational_email_attempts.length - retained.operational_email_attempts,
       order_invitations: snapshot.order_invitations.length,
@@ -1053,16 +1606,26 @@ export function cleanupPlan(snapshot, { removeManagerRole = false, removeManager
 
 export function validateCleanupSnapshot(
   snapshot,
-  { definition, managerRoleExpected = true, managerUserId } = {},
+  {
+    definition,
+    managerRoleExpected = true,
+    managerUserId,
+    expectOrderFlowAcceptance = false,
+  } = {},
 ) {
   validateSnapshot(snapshot, {
+    acceptancePhase: 'after',
     allowMissing: true,
     definition,
+    expectOrderFlowAcceptance,
     managerUserId,
     requireManager: false,
   })
   for (const table of ['drop_interest_requests', 'order_invitations', 'orders', 'payments']) {
     if (snapshot[table].length) fail(`Limited cleanup left mutable ${table} fixtures.`)
+  }
+  if (snapshot.admin_operation_idempotency.length || snapshot.admin_order_flow_state.length) {
+    fail('Limited cleanup left acceptance-created mutable work records.')
   }
   const referencedAttempts = new Set(snapshot.email_delivery_events.map((event) => event.attempt_id))
   if (snapshot.operational_email_attempts.some((attempt) => !referencedAttempts.has(attempt.id))) {

@@ -136,8 +136,11 @@ business and legal review.
 
 ## Supabase Setup
 
-`supabase/migrations/20260731113000_schema_baseline_v1.sql` is the only active canonical migration.
-The six files used to construct it are preserved byte-for-byte under
+`supabase/migrations/` contains the canonical baseline followed by additive default-privilege,
+shipping-confirmation, Order Flow Board and production-threshold-default migrations. New drops use
+`production_threshold = 5` unless an authorized creation flow explicitly supplies another non-null
+value; Eurofighter A2 is explicitly configured as `5`, while other existing configured thresholds
+are not rewritten. The column remains nullable for historical compatibility. The six files used to construct the baseline are preserved byte-for-byte under
 `supabase/migrations-archive/pre-baseline-v1/`, with immutable hashes in `manifest.json`; archived
 files are historical provenance and must never be executed by the Supabase CLI. `supabase/schema.sql`
 is retained as historical source material, not as active migration history. Committed migration
@@ -202,7 +205,13 @@ must only happen for a confirmed customer order.
 
 ## Admin operational email delivery
 
-The authenticated `/admin` workspace provides contextual, manager-only invitation preview, send,
+The authenticated `/admin` workspace opens on the guided Order Flow Board. It maps the existing
+reservation, invitation, payment and fulfilment truth into six read-only-derived phases; only its
+explicit Process, Send, Ship, delivery-confirmation and Close controls can advance work. See the
+[Order Flow Board architecture](docs/architecture/order-flow-board.md) for the mapping, authority
+boundaries, backfill and rollout rules.
+
+The workspace also provides contextual, manager-only invitation preview, send,
 retry and deliberate resend actions. A manager can also move a provider-confirmed paid order from
 `packed` to `shipped` with validated carrier/tracking details and retry a failed or suppressed
 shipping confirmation without repeating the fulfilment transition. Every mutation requires a

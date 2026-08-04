@@ -15,12 +15,17 @@ canonical baseline has been applied under separate authorization, database-backe
 validation is blocked. It does not fall back to another remote database.
 
 The version-controlled staging tooling requires exact project-ref checks, an explicit
-`--confirm-clean-staging` acknowledgement, the server-only service-role key for Auth Admin, and a
-TLS owner-level `psql` session for the existing tables. It adds no permanent grants or staging RPC.
-Limited cleanup retains marked append-only synthetic history; a complete cleanup is a rebuild of
-the disposable project from committed migrations. Production and Legacy Staging are rejected
-targets. Fixtures remain present during review, operational email remains suppressed, and Pascal's
-actual Admin login may trigger at most one Supabase Auth login email.
+`--confirm-clean-staging` acknowledgement, `SUPABASE_URL` for exact Clean Staging, and a project-local
+authenticated Supabase CLI link pinned to `stbunwkgvxfwmbjivgos`. Database operations
+use the official linked Management API query route after a read-only `postgres` owner, transaction,
+trigger and six-migration gate. They do not use a database URL, password, Direct connection, Shared
+Session Pooler or Transaction Pooler, and add no permanent grants or staging RPC. The normal chain
+reuses exactly one confirmed fixture-owned Auth identity from a PII-minimized database inventory and
+needs no service-role key. That key is required only for the separately explicit Auth soft-delete
+option. Limited cleanup retains marked append-only synthetic history; a complete cleanup is a
+rebuild of the disposable project from committed migrations. Production and Legacy Staging are
+rejected targets. Fixtures remain present during review, operational email remains suppressed, and
+Pascal's actual Admin login may trigger at most one Supabase Auth login email.
 
 Never infer a target from a URL, alias or variable name. Verify the exact repository, project ref,
 deployment environment, branch/commit, migration history and credential mode before any remote

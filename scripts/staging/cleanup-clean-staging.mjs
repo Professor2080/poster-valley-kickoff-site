@@ -1,9 +1,12 @@
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
+  ORDER_FLOW_ACCEPTANCE_FLAG,
   assertAuthInventory,
+  assertDatabaseAuthInventory,
   assertExecutionContext,
   assertOwnerCapabilities,
+  authInventorySql,
   cleanupPlan,
   cleanupSql,
   createAuthAdmin,
@@ -15,8 +18,7 @@ import {
   printCounts,
   queryJson,
   readLedger,
-  resolveOwnerEnvironment,
-  runPsql,
+  runLinkedQuery,
   snapshotSql,
   softDeleteManagerUser,
   validateCleanupSnapshot,
@@ -28,9 +30,8 @@ export async function runCleanup({
   authAdmin = null,
   env = process.env,
   output = console.log,
-  prompt,
-  psqlQuery = queryJson,
-  psqlRun = runPsql,
+  sqlQuery = queryJson,
+  sqlRun = runLinkedQuery,
   root = process.cwd(),
 } = {}) {
   const flags = parseFlags(argv)
@@ -38,35 +39,45 @@ export async function runCleanup({
   const confirmed = flags.has('--confirm')
   const removeManagerRole = flags.has('--remove-manager-role')
   const removeManagerUser = flags.has('--remove-manager-user')
+  const expectOrderFlowAcceptance = flags.has(ORDER_FLOW_ACCEPTANCE_FLAG)
   if (removeManagerUser && !removeManagerRole) {
     throw new Error('--remove-manager-user also requires --remove-manager-role.')
   }
 
-  const ownerEnv = await resolveOwnerEnvironment({ env, prompt })
-  const capabilities = psqlQuery(ownerCapabilitySql(), { env: ownerEnv })
+  const capabilities = sqlQuery(ownerCapabilitySql(), { env, root })
   assertOwnerCapabilities(capabilities)
-  const admin = authAdmin ?? createAuthAdmin(env)
-  const users = await listAllAuthUsers(admin)
   const ledger = readLedger({ root })
   const allowedDeletedUserIds = (ledger?.records ?? [])
     .filter((record) => record.table === 'auth.users')
     .map((record) => record.id)
-  const { active } = assertAuthInventory(users, { allowedDeletedUserIds })
-  const managerUserId = active[0]?.id ?? ledger?.manager_user_id
-  if (!managerUserId) throw new Error('Manager user id is unavailable; cleanup stopped.')
-  if (
-    removeManagerUser &&
-    active[0]?.app_metadata?.fixture_set !== 'PV-CLEAN-STAGING-V1'
-  ) {
-    throw new Error('A reused non-fixture manager Auth user cannot be removed.')
+  const inventory = sqlQuery(authInventorySql(), { env, root })
+  const { active } = assertDatabaseAuthInventory(inventory, { allowedDeletedUserIds })
+  const managerUserId = active.id
+  let admin = null
+  let users = null
+  if (removeManagerUser) {
+    if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is required only for Auth user removal.')
+    }
+    admin = authAdmin ?? createAuthAdmin(env)
+    users = await listAllAuthUsers(admin)
+    const adminInventory = assertAuthInventory(users, { allowedDeletedUserIds })
+    if (
+      adminInventory.active.length !== 1 ||
+      adminInventory.active[0].id !== managerUserId ||
+      adminInventory.active[0]?.app_metadata?.fixture_set !== 'PV-CLEAN-STAGING-V1'
+    ) {
+      throw new Error('Only the exact fixture-owned manager Auth user can be removed.')
+    }
   }
 
   const definition = loadFixtureDefinition()
   const rows = materializeFixtures(definition, managerUserId)
-  const before = psqlQuery(snapshotSql(), { env: ownerEnv })
-  validateSnapshot(before, {
+  const before = sqlQuery(snapshotSql(), { env, root })
+  const validated = validateSnapshot(before, {
     allowMissing: true,
     definition,
+    expectOrderFlowAcceptance,
     managerUserId,
     requireManager: false,
   })
@@ -83,14 +94,21 @@ export async function runCleanup({
   output(`  Manager Auth user: ${plan.manager_user}`)
   if (!confirmed) return { dryRun: true, plan, snapshot: before }
 
-  psqlRun(cleanupSql(rows, managerUserId, { removeManagerRole }), { env: ownerEnv })
-  const after = psqlQuery(snapshotSql(), { env: ownerEnv })
+  sqlRun(
+    cleanupSql(rows, managerUserId, {
+      acceptance: validated.acceptance,
+      removeManagerRole,
+    }),
+    { env, root },
+  )
+  const after = sqlQuery(snapshotSql(), { env, root })
   const verified = validateCleanupSnapshot(after, {
     definition,
+    expectOrderFlowAcceptance,
     managerRoleExpected,
     managerUserId,
   })
-  if (removeManagerUser && active[0]) {
+  if (removeManagerUser) {
     await softDeleteManagerUser({
       authAdmin: admin,
       managerUserId,

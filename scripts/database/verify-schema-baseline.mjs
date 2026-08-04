@@ -10,12 +10,19 @@ const migrationDirectory = path.join(repositoryRoot, 'supabase', 'migrations')
 const baselineMigrationName = '20260731113000_schema_baseline_v1.sql'
 const hardeningMigrationName = '20260731193947_harden_default_privileges.sql'
 const shippingMigrationName = '20260802130000_shipping_confirmation_safety.sql'
-const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName]
+const orderFlowMigrationName = '20260802192136_order_flow_board.sql'
+const thresholdMigrationName = '20260802210626_default_drop_production_threshold.sql'
+const invitationFlowMigrationName = '20260804103202_simplify_order_flow_invitation_thresholds.sql'
+const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName, orderFlowMigrationName, thresholdMigrationName, invitationFlowMigrationName]
 const baselineMigrationPath = path.join(migrationDirectory, baselineMigrationName)
 const hardeningMigrationPath = path.join(migrationDirectory, hardeningMigrationName)
 const shippingMigrationPath = path.join(migrationDirectory, shippingMigrationName)
+const orderFlowMigrationPath = path.join(migrationDirectory, orderFlowMigrationName)
+const thresholdMigrationPath = path.join(migrationDirectory, thresholdMigrationName)
+const invitationFlowMigrationPath = path.join(migrationDirectory, invitationFlowMigrationName)
 const bootstrapPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-bootstrap.sql')
 const contractPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-contract.sql')
+const orderFlowContractPath = path.join(repositoryRoot, 'supabase', 'tests', 'order-flow-board-contract.sql')
 
 const expected = {
   baselineMigrationBytes: 98_654,
@@ -23,21 +30,24 @@ const expected = {
   baselineMigrationSha256: 'e4db9505f590ba934543e1ed33e25a8172e66c430596047afe4321d619d8f510',
   hardeningMigrationSha256: '8d72db969029fa97595993e01a6ca2018aeedfd55ed242965db66a55528846b9',
   shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
-  structuralFingerprint: '571fa982f68ea583d0330a3ecfd5c14133023a7ba676e01eb2aef446c1c94611',
-  fullFingerprint: '7820938e81044ff5a1448c3b5645f9fa932edf8e7b2a73593e0feb7886fc7167',
+  orderFlowMigrationSha256: '87dd0afc52f760317c1d2fa0dfbc95fd0fe8275e685e1fac7e1c165618f9b658',
+  thresholdMigrationSha256: '76324138304c2c41c956c9ea1c0cd2438d65696666b8193c676d59b515d4c993',
+  invitationFlowMigrationSha256: '756f8155d3046840113d3c46ec3fa2598657a79d8923260bc82d725fe54c64d1',
+  structuralFingerprint: '9a96ddf9ab77480a6e4cf4dcaa662534bbb7327a2a56e232bc15f6d9bc872526',
+  fullFingerprint: 'e460d586593dec9c9c2f2c0b1b25f0197f7118917f9aaf65b8753bc37427a214',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
   counts: {
-    tables: 13,
-    views: 4,
+    tables: 14,
+    views: 6,
     enums: 2,
-    routines: 28,
-    triggers: 9,
+    routines: 34,
+    triggers: 11,
     policies: 2,
-    indexes: 57,
-    constraints: 77,
-    checks: 40,
-    foreign_keys: 16,
-    primary_keys: 13,
+    indexes: 64,
+    constraints: 89,
+    checks: 46,
+    foreign_keys: 21,
+    primary_keys: 14,
     unique_constraints: 8,
   },
 }
@@ -125,7 +135,14 @@ function createDatabase(database) {
   run(createdb, [...connectionArguments, '-U', user, '-T', 'template0', database])
   sqlFile(database, bootstrapPath)
   for (const migrationName of allowedMigrationNames) {
+    if (migrationName === thresholdMigrationName) {
+      sql(database, "insert into public.product_registry(product_code,drop_slug,title,lifecycle_mode,production_threshold) values('preexisting-threshold-contract','preexisting-threshold-contract','Pre-existing threshold contract','interest',9)")
+    }
     sqlFile(database, path.join(migrationDirectory, migrationName))
+    if (migrationName === thresholdMigrationName) {
+      assertEqual(scalar(database, "select production_threshold from public.product_registry where product_code='preexisting-threshold-contract'"), '9', 'pre-existing explicit threshold preservation')
+      sql(database, "delete from public.product_registry where product_code='preexisting-threshold-contract'")
+    }
   }
 }
 
@@ -142,7 +159,7 @@ from pg_catalog.pg_attribute a join pg_catalog.pg_class c on c.oid=a.attrelid jo
 where n.nspname='public' and c.relkind in ('r','v') and a.attnum>0 and not a.attisdropped
 union all
 select 'constraint|'||n.nspname||'.'||c.conname||'|'||c.contype::text||'|'||pg_catalog.pg_get_constraintdef(c.oid,true)
-from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public'
+from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public' and c.contype <> 'n'
 union all
 select 'index|'||n.nspname||'.'||c.relname||'|'||pg_catalog.pg_get_indexdef(c.oid)
 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='i'
@@ -198,7 +215,7 @@ from (
 `)
   const tables = sql(database, "select quote_ident(c.relname) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' order by c.relname").split(/\r?\n/u).filter(Boolean)
   const manifest = tables.map((table) => `${table}=${scalar(database, `select count(*) from public.${table}`)}`)
-  manifest.push(`product_config=${scalar(database, "select coalesce(jsonb_agg(jsonb_build_object('product_code',product_code,'title',title,'lifecycle_mode',lifecycle_mode,'commerce_authority',commerce_authority) order by product_code)::text,'[]') from public.product_registry")}`)
+  manifest.push(`product_config=${scalar(database, "select coalesce(jsonb_agg(jsonb_build_object('product_code',product_code,'drop_slug',drop_slug,'title',title,'lifecycle_mode',lifecycle_mode,'commerce_authority',commerce_authority,'production_threshold',production_threshold) order by product_code)::text,'[]') from public.product_registry")}`)
   const counts = JSON.parse(scalar(database, String.raw`
 select jsonb_build_object(
 'tables',(select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r'),
@@ -208,7 +225,7 @@ select jsonb_build_object(
 'triggers',(select count(*) from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid=t.tgrelid join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal),
 'policies',(select count(*) from pg_catalog.pg_policy p join pg_catalog.pg_class c on c.oid=p.polrelid join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public'),
 'indexes',(select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='i'),
-'constraints',(select count(*) from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public'),
+'constraints',(select count(*) from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public' and c.contype <> 'n'),
 'checks',(select count(*) from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public' and c.contype='c'),
 'foreign_keys',(select count(*) from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public' and c.contype='f'),
 'primary_keys',(select count(*) from pg_catalog.pg_constraint c join pg_catalog.pg_namespace n on n.oid=c.connamespace where n.nspname='public' and c.contype='p'),
@@ -339,11 +356,17 @@ for (let index = 1; index < migrationVersions.length; index += 1) {
 const baselineMigrationBytes = canonicalMigrationBytes(baselineMigrationPath)
 const hardeningMigrationBytes = canonicalMigrationBytes(hardeningMigrationPath)
 const shippingMigrationBytes = canonicalMigrationBytes(shippingMigrationPath)
+const orderFlowMigrationBytes = canonicalMigrationBytes(orderFlowMigrationPath)
+const thresholdMigrationBytes = canonicalMigrationBytes(thresholdMigrationPath)
+const invitationFlowMigrationBytes = canonicalMigrationBytes(invitationFlowMigrationPath)
 assertEqual(baselineMigrationBytes.byteLength, expected.baselineMigrationBytes, 'canonical baseline migration size')
 assertEqual(lineCount(baselineMigrationBytes), expected.baselineMigrationLines, 'canonical baseline migration line count')
 assertEqual(sha256(baselineMigrationBytes), expected.baselineMigrationSha256, 'canonical baseline migration SHA-256')
 assertEqual(sha256(hardeningMigrationBytes), expected.hardeningMigrationSha256, 'default-privilege hardening migration SHA-256')
 assertEqual(sha256(shippingMigrationBytes), expected.shippingMigrationSha256, 'shipping-confirmation migration SHA-256')
+assertEqual(sha256(orderFlowMigrationBytes), expected.orderFlowMigrationSha256, 'order-flow migration SHA-256')
+assertEqual(sha256(thresholdMigrationBytes), expected.thresholdMigrationSha256, 'production-threshold migration SHA-256')
+assertEqual(sha256(invitationFlowMigrationBytes), expected.invitationFlowMigrationSha256, 'invitation-flow migration SHA-256')
 
 const serverVersion = Number(scalar(maintenanceDatabase, 'show server_version_num'))
 if (!Number.isInteger(serverVersion) || serverVersion < 170_000 || serverVersion >= 180_000) {
@@ -380,11 +403,13 @@ try {
   createDatabase(databases[0])
   runOne = evidence(databases[0])
   sqlFile(databases[0], contractPath)
+  sqlFile(databases[0], orderFlowContractPath)
   dropDatabase(databases[0])
 
   createDatabase(databases[1])
   runTwo = evidence(databases[1])
   sqlFile(databases[1], contractPath)
+  sqlFile(databases[1], orderFlowContractPath)
 
   assertEqual(runOne.structuralFingerprint, expected.structuralFingerprint, 'run 1 structural fingerprint')
   assertEqual(runTwo.structuralFingerprint, expected.structuralFingerprint, 'run 2 structural fingerprint')
@@ -398,6 +423,9 @@ try {
   assertEqual(sha256(canonicalMigrationBytes(baselineMigrationPath)), expected.baselineMigrationSha256, 'post-run canonical baseline migration SHA-256')
   assertEqual(sha256(canonicalMigrationBytes(hardeningMigrationPath)), expected.hardeningMigrationSha256, 'post-run hardening migration SHA-256')
   assertEqual(sha256(canonicalMigrationBytes(shippingMigrationPath)), expected.shippingMigrationSha256, 'post-run shipping-confirmation migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(orderFlowMigrationPath)), expected.orderFlowMigrationSha256, 'post-run order-flow migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(thresholdMigrationPath)), expected.thresholdMigrationSha256, 'post-run production-threshold migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(invitationFlowMigrationPath)), expected.invitationFlowMigrationSha256, 'post-run invitation-flow migration SHA-256')
 
   await paymentRuntime(databases[1])
 
@@ -407,6 +435,9 @@ try {
       { name: baselineMigrationName, bytes: baselineMigrationBytes.byteLength, lines: lineCount(baselineMigrationBytes), sha256: expected.baselineMigrationSha256 },
       { name: hardeningMigrationName, bytes: hardeningMigrationBytes.byteLength, lines: lineCount(hardeningMigrationBytes), sha256: expected.hardeningMigrationSha256 },
       { name: shippingMigrationName, bytes: shippingMigrationBytes.byteLength, lines: lineCount(shippingMigrationBytes), sha256: expected.shippingMigrationSha256 },
+      { name: orderFlowMigrationName, bytes: orderFlowMigrationBytes.byteLength, lines: lineCount(orderFlowMigrationBytes), sha256: expected.orderFlowMigrationSha256 },
+      { name: thresholdMigrationName, bytes: thresholdMigrationBytes.byteLength, lines: lineCount(thresholdMigrationBytes), sha256: expected.thresholdMigrationSha256 },
+      { name: invitationFlowMigrationName, bytes: invitationFlowMigrationBytes.byteLength, lines: lineCount(invitationFlowMigrationBytes), sha256: expected.invitationFlowMigrationSha256 },
     ],
     run1: { counts: runOne.counts, structuralFingerprint: runOne.structuralFingerprint, fullFingerprint: runOne.fullFingerprint, defaultAclFingerprint: runOne.defaultAclFingerprint },
     run2: { counts: runTwo.counts, structuralFingerprint: runTwo.structuralFingerprint, fullFingerprint: runTwo.fullFingerprint, defaultAclFingerprint: runTwo.defaultAclFingerprint },
