@@ -27,7 +27,7 @@ runbooks.
 - Do not pass a token or protection-bypass secret on the command line. The script uses only the
   existing CLI authentication state and never prints or inspects it.
 
-The expected Vercel project name is `poster-valley-kickoff-site`. Verify that value against the
+The expected Vercel project name is `poster-valley`. Verify that value against the
 Draft PR Preview before running the command; do not infer identity from a local folder name.
 
 ## Inputs
@@ -58,7 +58,7 @@ npm.cmd run verify:preview -- `
   -ExpectedBranch 'codex/example-branch' `
   -ExpectedSha '0123456789abcdef0123456789abcdef01234567' `
   -PreviewUrl 'https://poster-valley-kickoff-site-example.vercel.app' `
-  -ExpectedVercelProject 'poster-valley-kickoff-site' `
+  -ExpectedVercelProject 'poster-valley' `
   -DeploymentId 'dpl_example' `
   -BranchAlias 'poster-valley-kickoff-site-git-codex-example.vercel.app'
 ```
