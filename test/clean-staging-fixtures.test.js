@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -7,20 +14,24 @@ import {
   CLEAN_STAGING_REF,
   EXECUTION_FLAG,
   FIXTURE_SET,
+  assertDatabaseAuthInventory,
   assertExecutionContext,
+  assertLinkedCleanStagingProject,
   assertLedgerSafe,
   cleanupSql,
   ensureManagerUser,
   loadFixtureDefinition,
   materializeFixtures,
-  runPsql,
+  queryJson,
+  runLinkedQuery,
   seedSql,
-  sanitizedPsqlEnvironment,
+  sanitizedSupabaseCliEnvironment,
   validateCleanupSnapshot,
   validateSnapshot,
 } from '../scripts/staging/clean-staging-lib.mjs'
 import { runCleanup } from '../scripts/staging/cleanup-clean-staging.mjs'
 import { runSeed } from '../scripts/staging/seed-clean-staging.mjs'
+import { runVerify } from '../scripts/staging/verify-clean-staging.mjs'
 
 const managerId = '50000000-0000-4000-8000-000000000001'
 const managerEmail = 'manager@example.test'
@@ -37,7 +48,6 @@ function runtimeEnv(overrides = {}) {
     PGSSLMODE: 'require',
     PGUSER: 'postgres',
     POSTER_VALLEY_ENV: 'clean-staging',
-    SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-key',
     SUPABASE_URL: `https://${CLEAN_STAGING_REF}.supabase.co`,
     ...overrides,
   }
@@ -96,15 +106,40 @@ function emptySnapshot() {
 
 function capabilities() {
   return {
+    current_user: 'postgres',
+    database: 'postgres',
     migration_count: 6,
     migration_total: 6,
     owner_capable: true,
     protected_triggers_enabled: true,
+    session_user: 'postgres',
+    transaction_read_only: true,
   }
 }
 
+function databaseAuthInventory(managerUserId = managerId) {
+  return {
+    active_users: [
+      { confirmed: true, fixture_owned: true, id: managerUserId },
+    ],
+    deleted_user_ids: [],
+  }
+}
+
+function linkedCliRoot(t, projectRef = CLEAN_STAGING_REF) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pv-clean-staging-cli-root-'))
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'pv-clean-staging-cli-temp-'))
+  t.after(() => rmSync(root, { force: true, recursive: true }))
+  t.after(() => rmSync(temporaryRoot, { force: true, recursive: true }))
+  mkdirSync(path.join(root, 'supabase/.temp'), { recursive: true })
+  mkdirSync(path.join(root, 'node_modules/supabase/dist'), { recursive: true })
+  writeFileSync(path.join(root, 'supabase/.temp/project-ref'), projectRef)
+  writeFileSync(path.join(root, 'node_modules/supabase/dist/supabase.js'), '')
+  return { root, temporaryRoot }
+}
+
 function fakeAuth(initialUsers = []) {
-  const state = { createCalls: 0, deleteCalls: [], users: clone(initialUsers) }
+  const state = { createCalls: 0, deleteCalls: [], listCalls: 0, users: clone(initialUsers) }
   return {
     state,
     async createUser(attributes) {
@@ -126,6 +161,7 @@ function fakeAuth(initialUsers = []) {
       return { data: {}, error: null }
     },
     async listUsers() {
+      state.listCalls += 1
       return { data: { users: clone(state.users) }, error: null }
     },
     async updateUserById(id) {
@@ -137,7 +173,11 @@ function fakeAuth(initialUsers = []) {
 }
 
 function queryHarness(state) {
-  return (sql) => (sql.includes("'owner_capable'") ? capabilities() : clone(state.snapshot))
+  return (sql) => {
+    if (sql.includes("'owner_capable'")) return capabilities()
+    if (sql.includes("'active_users'")) return databaseAuthInventory()
+    return clone(state.snapshot)
+  }
 }
 
 function seedHarness(state, managerUserId = managerId) {
@@ -174,6 +214,9 @@ function cleanupHarness(state, { removeManagerRole = false } = {}) {
 }
 
 test('wrong project and missing environment variables are blocked', () => {
+  assert.doesNotThrow(
+    () => assertExecutionContext({ env: runtimeEnv(), flags: new Set([EXECUTION_FLAG]) }),
+  )
   assert.throws(
     () => assertExecutionContext({ env: runtimeEnv({ SUPABASE_URL: 'https://epqpeoubkbftcvxjbqeo.supabase.co' }), flags: new Set([EXECUTION_FLAG]) }),
     /exact Clean Staging|Production or Legacy/,
@@ -186,37 +229,108 @@ test('wrong project and missing environment variables are blocked', () => {
     () => assertExecutionContext({ env: runtimeEnv(), flags: new Set() }),
     /Explicit execution permission/,
   )
+  assert.throws(
+    () => assertExecutionContext({ env: runtimeEnv({ SUPABASE_URL: 'https://cdmocdodehjmcgtxicaj.supabase.co' }), flags: new Set([EXECUTION_FLAG]) }),
+    /exact Clean Staging|Production or Legacy/,
+  )
 })
 
-test('psql receives only connection and operating-system environment values', () => {
-  const child = sanitizedPsqlEnvironment({
+test('project-local CLI link must be present and exactly Clean Staging', (t) => {
+  const clean = linkedCliRoot(t)
+  assert.equal(assertLinkedCleanStagingProject({ root: clean.root }).projectRef, CLEAN_STAGING_REF)
+
+  const production = linkedCliRoot(t, 'epqpeoubkbftcvxjbqeo')
+  assert.throws(
+    () => assertLinkedCleanStagingProject({ root: production.root }),
+    /not exact Clean Staging/,
+  )
+
+  const missing = mkdtempSync(path.join(os.tmpdir(), 'pv-clean-staging-cli-missing-'))
+  t.after(() => rmSync(missing, { force: true, recursive: true }))
+  assert.throws(
+    () => assertLinkedCleanStagingProject({ root: missing }),
+    /link is unavailable/,
+  )
+})
+
+test('Supabase CLI receives only operating-system environment values', () => {
+  const child = sanitizedSupabaseCliEnvironment({
     ...runtimeEnv(),
     ADMIN_CONFIRMATION_SECRET: 'synthetic-placeholder',
     GH_TOKEN: 'synthetic-placeholder',
     RESEND_API_KEY: 'synthetic-placeholder',
+    SUPABASE_ACCESS_TOKEN: 'synthetic-placeholder',
+    SUPABASE_SERVICE_ROLE_KEY: 'synthetic-placeholder',
   })
-  assert.equal(child.PGPASSWORD, 'synthetic-placeholder')
-  assert.equal(child.PGHOST, `db.${CLEAN_STAGING_REF}.supabase.co`)
+  assert.equal(child.PGPASSWORD, undefined)
+  assert.equal(child.PGHOST, undefined)
+  assert.equal(child.SUPABASE_ACCESS_TOKEN, undefined)
   assert.equal(child.SUPABASE_SERVICE_ROLE_KEY, undefined)
   assert.equal(child.ADMIN_CONFIRMATION_SECRET, undefined)
   assert.equal(child.GH_TOKEN, undefined)
   assert.equal(child.RESEND_API_KEY, undefined)
 })
 
-test('owner SQL is sent on stdin and credentials never enter process arguments', () => {
+test('linked query is exact-project pinned, keeps secrets out of the child and removes its SQL file', (t) => {
+  const { root, temporaryRoot } = linkedCliRoot(t)
   let invocation
-  const output = runPsql('select 1;', {
-    env: runtimeEnv(),
-    psql: 'psql',
+  const output = runLinkedQuery('select 1;', {
+    env: runtimeEnv({ SUPABASE_SERVICE_ROLE_KEY: 'synthetic-placeholder' }),
+    root,
+    temporaryRoot,
     spawn(program, args, options) {
+      const sqlFile = args[args.indexOf('--file') + 1]
+      assert.equal(readFileSync(sqlFile, 'utf8'), 'select 1;')
       invocation = { args, options, program }
-      return { status: 0, stdout: '1\n' }
+      return { status: 0, stdout: '{"rows":[]}' }
     },
   })
-  assert.equal(output, '1')
-  assert.equal(invocation.options.input, 'select 1;')
+  assert.equal(output, '{"rows":[]}')
+  assert.equal(invocation.args.includes('--linked'), true)
   assert.equal(invocation.args.some((argument) => argument.includes('synthetic-placeholder')), false)
   assert.equal(invocation.options.env.SUPABASE_SERVICE_ROLE_KEY, undefined)
+  assert.equal(invocation.options.env.PGPASSWORD, undefined)
+  assert.deepEqual(readFileSync(path.join(root, 'supabase/.temp/project-ref'), 'utf8'), CLEAN_STAGING_REF)
+  assert.deepEqual(readFileSync(path.join(root, 'node_modules/supabase/dist/supabase.js'), 'utf8'), '')
+  assert.deepEqual(readdirSync(temporaryRoot), [])
+})
+
+test('missing CLI authentication fails closed without exposing provider output', (t) => {
+  const { root, temporaryRoot } = linkedCliRoot(t)
+  const credentialMarker = 'synthetic-placeholder'
+  assert.throws(
+    () => runLinkedQuery('select 1;', {
+      env: runtimeEnv({ SUPABASE_ACCESS_TOKEN: credentialMarker }),
+      root,
+      temporaryRoot,
+      spawn(program, args, options) {
+        assert.equal(args.some((argument) => argument.includes(credentialMarker)), false)
+        assert.equal(Object.values(options.env).includes(credentialMarker), false)
+        return { status: 1, stderr: `authentication failed: ${credentialMarker}` }
+      },
+    }),
+    (error) => {
+      assert.match(error.message, /failed closed/)
+      assert.doesNotMatch(error.message, new RegExp(credentialMarker))
+      return true
+    },
+  )
+  assert.deepEqual(readdirSync(temporaryRoot), [])
+})
+
+test('linked CLI file output is parsed as one credential-free JSON result', (t) => {
+  const { root, temporaryRoot } = linkedCliRoot(t)
+  const parsed = queryJson('select json_build_object();', {
+    root,
+    temporaryRoot,
+    spawn() {
+      return {
+        status: 0,
+        stdout: '[{"result_json":"{\\"database\\":\\"postgres\\",\\"owner_capable\\":true}"}]',
+      }
+    },
+  })
+  assert.deepEqual(parsed, { database: 'postgres', owner_capable: true })
 })
 
 test('all sixteen scenarios satisfy fixture, schema and lifecycle contracts', () => {
@@ -242,8 +356,8 @@ test('seed is idempotent and append-only rows do not grow on a second run', asyn
     env: runtimeEnv(),
     output: () => {},
     prompt: async () => managerEmail,
-    psqlQuery: queryHarness(state),
-    psqlRun: seedHarness(state),
+    sqlQuery: queryHarness(state),
+    sqlRun: seedHarness(state),
     root,
   }
   await runSeed(options)
@@ -255,11 +369,67 @@ test('seed is idempotent and append-only rows do not grow on a second run', asyn
     Object.keys(firstCounts).map((table) => [table, state.snapshot[table].length]),
   )
   assert.deepEqual(secondCounts, firstCounts)
-  assert.equal(auth.state.createCalls, 1)
+  assert.equal(auth.state.createCalls, 0)
   assert.equal(state.snapshot.admin_roles.length, 1)
   const ledgerText = readFileSync(path.join(root, '.tmp/clean-staging-seed-ledger.json'), 'utf8')
   assert.doesNotMatch(ledgerText, /@|manager@example|synthetic-placeholder|service-role-test-key/)
   assertLedgerSafe(JSON.parse(ledgerText))
+})
+
+test('database Auth inventory requires one confirmed fixture-owned identity', () => {
+  assert.equal(assertDatabaseAuthInventory(databaseAuthInventory()).active.id, managerId)
+  for (const inventory of [
+    { active_users: [], deleted_user_ids: [] },
+    { active_users: [{ confirmed: false, fixture_owned: true, id: managerId }], deleted_user_ids: [] },
+    { active_users: [{ confirmed: true, fixture_owned: false, id: managerId }], deleted_user_ids: [] },
+  ]) {
+    assert.throws(() => assertDatabaseAuthInventory(inventory), /Auth identity/)
+  }
+  assert.throws(
+    () => assertDatabaseAuthInventory({
+      ...databaseAuthInventory(),
+      deleted_user_ids: ['50000000-0000-4000-8000-000000000099'],
+    }),
+    /Unexpected deleted Auth identity/,
+  )
+})
+
+test('seed and verify stop before Auth or writes when the owner gate fails', async () => {
+  const auth = fakeAuth()
+  let promptCalls = 0
+  let writes = 0
+  const failGate = () => {
+    throw new Error('synthetic owner gate failure')
+  }
+  await assert.rejects(
+    runSeed({
+      argv: [EXECUTION_FLAG],
+      authAdmin: auth,
+      env: runtimeEnv(),
+      output: () => {},
+      prompt: async () => {
+        promptCalls += 1
+        return managerEmail
+      },
+      sqlQuery: failGate,
+      sqlRun: () => { writes += 1 },
+    }),
+    /owner gate failure/,
+  )
+  await assert.rejects(
+    runVerify({
+      argv: [EXECUTION_FLAG],
+      authAdmin: auth,
+      env: runtimeEnv(),
+      output: () => {},
+      sqlQuery: failGate,
+    }),
+    /owner gate failure/,
+  )
+  assert.equal(promptCalls, 0)
+  assert.equal(auth.state.listCalls, 0)
+  assert.equal(auth.state.createCalls, 0)
+  assert.equal(writes, 0)
 })
 
 test('cleanup dry-run changes nothing', async () => {
@@ -272,8 +442,8 @@ test('cleanup dry-run changes nothing', async () => {
     authAdmin: auth,
     env: runtimeEnv(),
     output: () => {},
-    psqlQuery: queryHarness(state),
-    psqlRun: () => { writes += 1 },
+    sqlQuery: queryHarness(state),
+    sqlRun: () => { writes += 1 },
   })
   assert.equal(result.dryRun, true)
   assert.equal(writes, 0)
@@ -288,8 +458,8 @@ test('limited cleanup removes only mutable fixtures and retains append-only hist
     authAdmin: auth,
     env: runtimeEnv(),
     output: () => {},
-    psqlQuery: queryHarness(state),
-    psqlRun: cleanupHarness(state),
+    sqlQuery: queryHarness(state),
+    sqlRun: cleanupHarness(state),
   })
   assert.equal(state.snapshot.drop_interest_requests.length, 0)
   assert.equal(state.snapshot.orders.length, 0)
@@ -315,8 +485,8 @@ test('non-marked or unexpected records are never cleaned', async () => {
       authAdmin: auth,
       env: runtimeEnv(),
       output: () => {},
-      psqlQuery: queryHarness(state),
-      psqlRun: () => { writes += 1 },
+      sqlQuery: queryHarness(state),
+      sqlRun: () => { writes += 1 },
     }),
     /Unexpected drop_interest_requests/,
   )
@@ -354,8 +524,8 @@ test('manager Auth soft-delete requires both explicit cleanup flags', async () =
       authAdmin: auth,
       env: runtimeEnv(),
       output: () => {},
-      psqlQuery: queryHarness(state),
-      psqlRun: cleanupHarness(state),
+      sqlQuery: queryHarness(state),
+      sqlRun: cleanupHarness(state),
     }),
     /also requires --remove-manager-role/,
   )
@@ -364,10 +534,10 @@ test('manager Auth soft-delete requires both explicit cleanup flags', async () =
   await runCleanup({
     argv: [EXECUTION_FLAG, '--confirm', '--remove-manager-role', '--remove-manager-user'],
     authAdmin: auth,
-    env: runtimeEnv(),
+    env: runtimeEnv({ SUPABASE_SERVICE_ROLE_KEY: 'synthetic-placeholder' }),
     output: () => {},
-    psqlQuery: queryHarness(state),
-    psqlRun: cleanupHarness(state, { removeManagerRole: true }),
+    sqlQuery: queryHarness(state),
+    sqlRun: cleanupHarness(state, { removeManagerRole: true }),
   })
   assert.deepEqual(auth.state.deleteCalls, [{ id: managerId, soft: true }])
 })

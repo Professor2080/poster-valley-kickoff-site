@@ -78,18 +78,33 @@ retryable in Interest. The tooling requires
 all of the following before it connects:
 
 - `POSTER_VALLEY_ENV=clean-staging`;
-- `SUPABASE_URL` for exact project `stbunwkgvxfwmbjivgos` and its server-only service-role key;
-- an owner-level `psql` session identified by `PGHOST`, `PGUSER`, `PGDATABASE=postgres`,
-  `PGPORT=5432` and TLS;
+- `SUPABASE_URL` for exact project `stbunwkgvxfwmbjivgos`;
+- an authenticated project-local Supabase CLI whose checked link in
+  `supabase/.temp/project-ref` is exactly `stbunwkgvxfwmbjivgos`;
 - explicit CLI acknowledgement `--confirm-clean-staging`.
 
-Keep the service-role and owner credentials in the process environment or enter the database
-password through the hidden prompt. Never put either value in a command argument, file or log. The
-manager email is also entered through a hidden interactive prompt and is not stored in Git or the
-ledger. The seed uses the Supabase Admin API to create or reuse one confirmed Auth user without
-sending mail, then uses the owner session to establish exactly one active manager role and the
-fixtures. During Pascal's later login, the existing login flow may send at most one Supabase Auth
-login email.
+The database path is the official `supabase db query --linked` Management API route. It does not
+use the Direct, Shared Session or Transaction Pooler and does not require a database password or
+connection URL. Before Auth access or a database write, a read-only transaction proves database
+`postgres`, both session and current user `postgres`, owner table privileges, enabled append-only
+triggers and exactly the six allowlisted migrations. The project link is checked again for every
+query. SQL is supplied through a unique operating-system temporary file outside the repository;
+that file never contains credentials and is removed in `finally`. The child process receives only
+the operating-system variables needed for the authenticated CLI profile. Service-role, provider,
+database and access-token variables are not forwarded and CLI failures expose no provider output.
+
+The seed and cleanup SQL retain their explicit `begin`/`commit`, lock timeouts, table locks and
+fail-closed fixture guards. The read-only owner gate itself runs as a multi-statement
+`begin read only`/`rollback` query, proving that the linked route preserves the transaction boundary
+used by those operations. Therefore port 5432 is not required for this acceptance chain, while
+port 6543 is neither used nor accepted as a fallback. The normal seed, verify and limited-cleanup
+path needs no service-role value: the owner gate reads only the UUID, confirmation flag and
+fixture-owned marker of Auth identities and requires exactly one active confirmed fixture user
+before continuing. It never reads or prints the Auth email and never creates an Auth identity.
+Create that fixture-owned login separately before the seed if it is absent. A service-role value is
+required only for the separately explicit `--remove-manager-user` soft-delete option and remains in
+the parent process; it is never forwarded to the database CLI. During Pascal's later login, the
+existing login flow may send at most one Supabase Auth login email.
 
 ```powershell
 npm run staging:seed -- --confirm-clean-staging
@@ -106,9 +121,10 @@ npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-ro
 ```
 
 Manager removal is independent and explicit. `--remove-manager-user` requires
-`--remove-manager-role` and performs only a Supabase soft-delete of a fixture-owned Auth user; a
-reused user is never deleted. The local ledger is `.tmp/clean-staging-seed-ledger.json` and contains
-only fixture/version identifiers, UUIDs, table names and timestamps.
+`--remove-manager-role` plus a process-scoped `SUPABASE_SERVICE_ROLE_KEY`, and performs only a
+Supabase soft-delete of the exact fixture-owned Auth user; a reused user is never deleted. The
+local ledger is `.tmp/clean-staging-seed-ledger.json` and contains only fixture/version identifiers,
+UUIDs, table names and timestamps.
 
 Limited cleanup removes marked mutable reservations, invitations, orders, payments and unreferenced
 delivery attempts. It never deletes `product_registry`, migration history or append-only audit,

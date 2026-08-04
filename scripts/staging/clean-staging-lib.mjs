@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -52,8 +55,8 @@ export function assertExecutionContext({ env = process.env, flags = parseFlags()
   if (!flags.has(EXECUTION_FLAG)) {
     fail(`Explicit execution permission ${EXECUTION_FLAG} is required.`)
   }
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    fail('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.')
+  if (!env.SUPABASE_URL) {
+    fail('SUPABASE_URL is required.')
   }
 
   let url
@@ -85,29 +88,6 @@ export function assertExecutionContext({ env = process.env, flags = parseFlags()
     fail('Production or Legacy Staging appeared in the requested target.')
   }
   return { projectRef: CLEAN_STAGING_REF, supabaseUrl: url.origin }
-}
-
-export function assertOwnerConnectionTarget(env = process.env) {
-  const host = String(env.PGHOST ?? '').toLowerCase()
-  const user = String(env.PGUSER ?? '')
-  const database = String(env.PGDATABASE ?? '')
-  const port = String(env.PGPORT ?? '5432')
-  const direct =
-    host === `db.${CLEAN_STAGING_REF}.supabase.co` && user === 'postgres'
-  const pooler =
-    host.endsWith('.pooler.supabase.com') &&
-    user === `postgres.${CLEAN_STAGING_REF}`
-
-  if (!direct && !pooler) {
-    fail('PGHOST and PGUSER do not identify the exact Clean Staging owner connection.')
-  }
-  if (database !== 'postgres' || port !== '5432') {
-    fail('Owner connection must use database postgres and session port 5432.')
-  }
-  if (env.PGSSLMODE && !['require', 'verify-ca', 'verify-full'].includes(env.PGSSLMODE)) {
-    fail('PGSSLMODE must require TLS.')
-  }
-  return { database, direct, host, pooler, port, user }
 }
 
 export async function hiddenPrompt(label, input = process.stdin, output = process.stdout) {
@@ -150,76 +130,115 @@ export async function hiddenPrompt(label, input = process.stdin, output = proces
   }
 }
 
-export async function resolveOwnerEnvironment({
-  env = process.env,
-  prompt = hiddenPrompt,
+export function assertLinkedCleanStagingProject({
+  readFile = readFileSync,
+  root = process.cwd(),
 } = {}) {
-  assertOwnerConnectionTarget(env)
-  const password = env.PGPASSWORD || (await prompt('Clean Staging database password: '))
-  if (!password) fail('An owner database credential is required.')
-  return {
-    ...env,
-    PGCONNECT_TIMEOUT: env.PGCONNECT_TIMEOUT || '10',
-    PGPASSWORD: password,
-    PGSSLMODE: env.PGSSLMODE || 'require',
+  const refFile = path.resolve(root, 'supabase/.temp/project-ref')
+  let raw
+  try {
+    raw = readFile(refFile, 'utf8')
+  } catch {
+    fail('The project-local Supabase CLI link is unavailable.')
   }
+  const ref = raw.endsWith('\r\n')
+    ? raw.slice(0, -2)
+    : raw.endsWith('\n')
+      ? raw.slice(0, -1)
+      : raw
+  if (ref !== CLEAN_STAGING_REF) {
+    fail('The project-local Supabase CLI link is not exact Clean Staging.')
+  }
+  return { projectRef: ref, refFile }
 }
 
-export function sanitizedPsqlEnvironment(env) {
+export function sanitizedSupabaseCliEnvironment(env = process.env) {
   const child = {}
   const systemNames = new Set([
+    'APPDATA',
     'ComSpec',
+    'HOME',
     'LANG',
     'LC_ALL',
+    'LOCALAPPDATA',
     'PATH',
     'PATHEXT',
+    'SystemDrive',
     'SystemRoot',
     'TEMP',
     'TMP',
+    'USERPROFILE',
   ])
   for (const [name, value] of Object.entries(env)) {
-    if (systemNames.has(name) || /^PG[A-Z0-9_]+$/.test(name)) child[name] = value
+    if (systemNames.has(name)) child[name] = value
   }
+  child.NO_COLOR = '1'
   return child
 }
 
-export function runPsql(
+export function runLinkedQuery(
   sql,
-  { env, spawn = spawnSync, psql = env.POSTGRES_PSQL || 'psql' } = {},
+  {
+    cliEntry,
+    env = process.env,
+    node = process.execPath,
+    root = process.cwd(),
+    spawn = spawnSync,
+    temporaryRoot = os.tmpdir(),
+  } = {},
 ) {
-  const result = spawn(
-    psql,
-    [
-      '-X',
-      '--no-psqlrc',
-      '--set=ON_ERROR_STOP=1',
-      '--quiet',
-      '--tuples-only',
-      '--no-align',
-      `--dbname=${env.PGDATABASE}`,
-    ],
-    {
-      encoding: 'utf8',
-      env: sanitizedPsqlEnvironment(env),
-      input: sql,
-      maxBuffer: 16 * 1024 * 1024,
-      shell: false,
-      windowsHide: true,
-    },
-  )
+  assertLinkedCleanStagingProject({ root })
+  const resolvedCliEntry =
+    cliEntry ?? path.resolve(root, 'node_modules/supabase/dist/supabase.js')
+  if (!existsSync(resolvedCliEntry)) {
+    fail('The project-local Supabase CLI is unavailable.')
+  }
+
+  const directory = mkdtempSync(path.join(temporaryRoot, 'pv-clean-staging-query-'))
+  const sqlFile = path.join(directory, 'query.sql')
+  writeFileSync(sqlFile, sql, { encoding: 'utf8', mode: 0o600 })
+  let result
+  try {
+    result = spawn(
+      node,
+      [
+        resolvedCliEntry,
+        'db',
+        'query',
+        '--linked',
+        '--file',
+        sqlFile,
+        '--output-format',
+        'json',
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: sanitizedSupabaseCliEnvironment(env),
+        maxBuffer: 16 * 1024 * 1024,
+        shell: false,
+        windowsHide: true,
+      },
+    )
+  } finally {
+    rmSync(directory, { force: true, recursive: true })
+  }
   if (result.error || result.status !== 0) {
-    const error = new Error('Owner database operation failed closed.')
-    error.cause = result.error
-    throw error
+    fail('Project-bound Clean Staging database operation failed closed.')
   }
   return String(result.stdout ?? '').trim()
 }
 
 export function queryJson(sql, options) {
-  const output = runPsql(sql, options)
+  const output = runLinkedQuery(sql, options)
   if (!output) fail('Owner database query returned no result.')
   try {
-    return JSON.parse(output.split(/\r?\n/).at(-1))
+    const envelope = JSON.parse(output)
+    const rows = Array.isArray(envelope) ? envelope : envelope?.rows
+    if (!Array.isArray(rows) || rows.length !== 1) throw new Error()
+    const values = Object.values(rows[0] ?? {})
+    if (values.length !== 1 || typeof values[0] !== 'string') throw new Error()
+    return JSON.parse(values[0])
   } catch {
     fail('Owner database query returned an invalid result.')
   }
@@ -227,9 +246,15 @@ export function queryJson(sql, options) {
 
 export function ownerCapabilitySql() {
   return `
+begin read only;
 select pg_catalog.json_build_object(
+  'database', pg_catalog.current_database(),
+  'current_user', current_user,
+  'session_user', session_user,
+  'transaction_read_only', pg_catalog.current_setting('transaction_read_only') = 'on',
   'owner_capable',
-    pg_catalog.has_table_privilege(current_user, 'public.admin_roles', 'select,insert,update,delete')
+    pg_catalog.has_table_privilege(current_user, 'auth.users', 'select')
+    and pg_catalog.has_table_privilege(current_user, 'public.admin_roles', 'select,insert,update,delete')
     and pg_catalog.has_table_privilege(current_user, 'public.drop_interest_requests', 'select,insert,update,delete')
     and pg_catalog.has_table_privilege(current_user, 'public.order_invitations', 'select,insert,update,delete')
     and pg_catalog.has_table_privilege(current_user, 'public.orders', 'select,insert,update,delete')
@@ -255,11 +280,16 @@ select pg_catalog.json_build_object(
     select pg_catalog.count(*) from supabase_migrations.schema_migrations
   )
 )::text;
+rollback;
 `
 }
 
 export function assertOwnerCapabilities(capabilities) {
   if (
+    capabilities?.database !== 'postgres' ||
+    capabilities?.current_user !== 'postgres' ||
+    capabilities?.session_user !== 'postgres' ||
+    capabilities?.transaction_read_only !== true ||
     capabilities?.owner_capable !== true ||
     capabilities?.protected_triggers_enabled !== true
   ) {
@@ -268,6 +298,58 @@ export function assertOwnerCapabilities(capabilities) {
   if (capabilities.migration_count !== 6 || capabilities.migration_total !== 6) {
     fail('Clean Staging migration history is not the exact Order Flow Board migration set.')
   }
+}
+
+export function authInventorySql() {
+  return `
+begin read only;
+select pg_catalog.json_build_object(
+  'active_users', coalesce((
+    select pg_catalog.json_agg(
+      pg_catalog.json_build_object(
+        'id', u.id,
+        'confirmed', u.email_confirmed_at is not null,
+        'fixture_owned', u.raw_app_meta_data->>'fixture_set' = '${FIXTURE_SET}'
+      ) order by u.id
+    )
+    from auth.users u
+    where u.deleted_at is null
+  ), '[]'::json),
+  'deleted_user_ids', coalesce((
+    select pg_catalog.json_agg(u.id order by u.id)
+    from auth.users u
+    where u.deleted_at is not null
+  ), '[]'::json)
+)::text;
+rollback;
+`
+}
+
+export function assertDatabaseAuthInventory(
+  inventory,
+  { allowedDeletedUserIds = [] } = {},
+) {
+  if (!Array.isArray(inventory?.active_users) || inventory.active_users.length !== 1) {
+    fail('Exactly one active synthetic manager Auth identity is required.')
+  }
+  const [active] = inventory.active_users
+  if (
+    !uuidPattern.test(active?.id ?? '') ||
+    active.confirmed !== true ||
+    active.fixture_owned !== true
+  ) {
+    fail('The active manager Auth identity is not confirmed and fixture-owned.')
+  }
+  if (!Array.isArray(inventory.deleted_user_ids)) {
+    fail('Deleted Auth inventory is invalid.')
+  }
+  const allowed = new Set(allowedDeletedUserIds.map((id) => String(id).toLowerCase()))
+  for (const id of inventory.deleted_user_ids) {
+    if (!uuidPattern.test(id ?? '') || !allowed.has(String(id).toLowerCase())) {
+      fail('Unexpected deleted Auth identity found; Clean Staging stopped.')
+    }
+  }
+  return { active }
 }
 
 export function loadFixtureDefinition(file = fixtureFile) {
