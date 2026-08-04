@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
+const windowsTest = process.platform === 'win32' ? test : test.skip
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const verifier = path.join(repositoryRoot, 'scripts', 'verify-preview.ps1')
 const powershell = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
@@ -148,7 +150,7 @@ async function runVerifier(mutate = () => {}, options = {}) {
   return { ...result, output: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
 
-test('Preview verification passes the complete mocked happy path', async () => {
+windowsTest('Preview verification passes the complete mocked happy path', async () => {
   const result = await runVerifier()
   assert.equal(result.status, 0, result.output)
   assert.match(result.output, /PREVIEW VERIFICATION PASS/)
@@ -163,37 +165,37 @@ test('npm exposes the PowerShell verifier as the single Preview entrypoint', asy
   )
 })
 
-test('Preview verification rejects a deployment from the wrong SHA', async () => {
+windowsTest('Preview verification rejects a deployment from the wrong SHA', async () => {
   const result = await runVerifier((scenario) => { scenario.sourceDeployment.meta.githubCommitSha = 'b'.repeat(40) })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] deployment SHA/)
 })
 
-test('Preview verification rejects a deployment from the wrong branch', async () => {
+windowsTest('Preview verification rejects a deployment from the wrong branch', async () => {
   const result = await runVerifier((scenario) => { scenario.sourceDeployment.meta.githubCommitRef = 'codex/another-branch' })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] deployment branch/)
 })
 
-test('Preview verification never accepts a Production deployment', async () => {
+windowsTest('Preview verification never accepts a Production deployment', async () => {
   const result = await runVerifier((scenario) => { scenario.deployment.target = 'production' })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] Preview environment - Production is never an accepted verification target/)
 })
 
-test('Preview verification rejects a deployment that is not READY', async () => {
+windowsTest('Preview verification rejects a deployment that is not READY', async () => {
   const result = await runVerifier((scenario) => { scenario.deployment.readyState = 'BUILDING' })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] deployment readiness/)
 })
 
-test('Preview verification rejects a branch alias that targets another deployment', async () => {
+windowsTest('Preview verification rejects a branch alias that targets another deployment', async () => {
   const result = await runVerifier((scenario) => { scenario.aliasDeployment.id = 'dpl_another_fixture'; scenario.aliasDeployment.url = 'another.vercel.app' })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] branch alias target/)
 })
 
-test('Preview verification rejects more than twelve deployed functions', async () => {
+windowsTest('Preview verification rejects more than twelve deployed functions', async () => {
   const result = await runVerifier((scenario) => {
     scenario.deployment.builds[0].output.push({ type: 'lambda', path: 'api/function-13.js' })
   })
@@ -201,27 +203,27 @@ test('Preview verification rejects more than twelve deployed functions', async (
   assert.match(result.output, /13 exceeds maximum 12/)
 })
 
-test('Preview verification rejects a missing required public route', async () => {
+windowsTest('Preview verification rejects a missing required public route', async () => {
   const result = await runVerifier((scenario) => { scenario.routes['/privacy'] = 404 })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] public route \/privacy - HTTP 404/)
 })
 
-test('Preview verification reports a missing Vercel CLI without exposing provider state', async () => {
+windowsTest('Preview verification reports a missing Vercel CLI without exposing provider state', async () => {
   const result = await runVerifier(() => {}, { vercelCommandName: 'vercel-missing-fixture' })
   assert.equal(result.status, 1)
   assert.match(result.output, /\[FAIL\] Vercel CLI application shim/)
   assert.doesNotMatch(result.output, /AppData|\.vercel\\auth|credentials/i)
 })
 
-test('Preview verification resolves vercel.cmd instead of a PowerShell wrapper', async () => {
+windowsTest('Preview verification resolves vercel.cmd instead of a PowerShell wrapper', async () => {
   const result = await runVerifier()
   assert.equal(result.status, 0, result.output)
   assert.match(result.output, /\[PASS\] Vercel CLI application shim - vercel\.cmd/)
   assert.doesNotMatch(result.output, /PowerShell wrapper must never execute/i)
 })
 
-test('Preview verification redacts credential-shaped CLI failures', async () => {
+windowsTest('Preview verification redacts credential-shaped CLI failures', async () => {
   const redactionCanary = 'vercel_abcdefghijkl'
   const connectionCanary = ['postgresql://', 'fixture:password', '@database.example.test/postgres'].join('')
   const result = await runVerifier((scenario) => {

@@ -46,7 +46,9 @@ All candidate-defining inputs are explicit:
 
 `FixtureDirectory` and `VercelCommandName` exist only for automated tests. Fixture injection is
 refused unless the child process explicitly sets `PV_PREVIEW_TEST_MODE=1`; it is not an operator
-verification route.
+verification route. The mocked runtime scenarios are Windows-only because they verify Windows
+PowerShell and `.cmd` resolution; Node's test runner marks them `SKIP` on non-Windows CI hosts. The
+platform-independent npm-entrypoint contract continues to run on every host.
 
 ## Command
 
