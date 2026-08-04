@@ -68,11 +68,11 @@ const previewForMutation = {
   'invitation.send': 'invitation.preview', 'invitation.resend': 'invitation.preview', 'quote.approve': 'quote.preview',
   'fulfilment.transition': 'fulfilment.preview', 'shipping.retry': 'shipping.preview',
   'shipping.reconciliation.resolve': 'shipping.reconciliation.preview', 'origin.change': 'origin.preview',
-  'board.process': 'board.process.preview', 'drop.open': 'drop.open.preview',
+  'board.process': 'board.process.preview', 'drop.threshold.set': 'drop.threshold.preview',
   'delivery.confirm': 'delivery.confirm.preview', 'board.close': 'board.close.preview',
 }
 
-const boardMutations = new Set(['board.process', 'drop.open', 'delivery.confirm', 'board.close'])
+const boardMutations = new Set(['board.process', 'delivery.confirm', 'board.close'])
 
 function sendReconciliationRequired(res, result) {
   const { replay: _replay, ...safeResult } = result ?? {}
@@ -142,6 +142,19 @@ export function createAdminActionsHandler({ deliver = operationalDeliveryAdapter
 
       if (boardMutations.has(action)) {
         const result = await adminRpc('admin_order_flow_apply_action', {
+          p_actor: admin.userId,
+          p_action: action,
+          p_idempotency_key: key,
+          p_request_hash: requestHash,
+          p_request: request,
+          p_confirmation_hash: requestHash,
+        })
+        sendJson(res, 200, result)
+        return
+      }
+
+      if (action === 'drop.threshold.set') {
+        const result = await adminRpc('admin_order_flow_set_threshold', {
           p_actor: admin.userId,
           p_action: action,
           p_idempotency_key: key,

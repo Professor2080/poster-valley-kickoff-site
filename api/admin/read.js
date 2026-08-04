@@ -13,7 +13,7 @@ const resources = {
   products: ['product_registry', 'product_code,drop_slug,title,lifecycle_mode,production_threshold,invitations_opened_at,commerce_authority,woo_product_id,woo_product_url,created_at,updated_at', ['lifecycle_mode', 'commerce_authority']],
 }
 
-const boardStages = new Set(['new', 'interest', 'ready_to_invite', 'awaiting_payment', 'paid_to_ship', 'shipped', 'closed'])
+const boardStages = new Set(['new', 'interest', 'awaiting_payment', 'paid_to_ship', 'shipped', 'closed'])
 
 function boardFilter(value, label, maxLength = 120) {
   if (value === undefined || value === null || value === '') return null

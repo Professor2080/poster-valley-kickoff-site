@@ -246,7 +246,10 @@ select pg_catalog.json_build_object(
   ),
   'migration_count', (
     select pg_catalog.count(*) from supabase_migrations.schema_migrations
-    where version in ('20260731113000','20260731193947')
+    where version in (
+      '20260731113000','20260731193947','20260802130000',
+      '20260802192136','20260802210626','20260804103202'
+    )
   ),
   'migration_total', (
     select pg_catalog.count(*) from supabase_migrations.schema_migrations
@@ -262,8 +265,8 @@ export function assertOwnerCapabilities(capabilities) {
   ) {
     fail('Owner privileges or append-only triggers do not match the approved contract.')
   }
-  if (capabilities.migration_count !== 2 || capabilities.migration_total !== 2) {
-    fail('Clean Staging migration history is not the exact baseline plus hardening pair.')
+  if (capabilities.migration_count !== 6 || capabilities.migration_total !== 6) {
+    fail('Clean Staging migration history is not the exact Order Flow Board migration set.')
   }
 }
 
@@ -277,14 +280,14 @@ export function validateFixtureDefinition(definition) {
   if (definition?.fixture_set !== FIXTURE_SET || definition?.version !== 1) {
     fail('Fixture set identity is invalid.')
   }
-  if (!Array.isArray(definition.scenarios) || definition.scenarios.length !== 14) {
-    fail('Exactly fourteen fixture scenarios are required.')
+  if (!Array.isArray(definition.scenarios) || definition.scenarios.length !== 16) {
+    fail('Exactly sixteen fixture scenarios are required.')
   }
   const numbers = new Set()
   const keys = new Set()
   const ids = new Set()
   for (const scenario of definition.scenarios) {
-    if (!Number.isInteger(scenario.number) || scenario.number < 1 || scenario.number > 14) {
+    if (!Number.isInteger(scenario.number) || scenario.number < 1 || scenario.number > 16) {
       fail('Fixture scenario number is invalid.')
     }
     if (!/^[a-z][a-z0-9_]{2,60}$/.test(scenario.key)) {
@@ -338,10 +341,13 @@ export function materializeFixtures(definition, managerUserId) {
     const number = String(scenario.number).padStart(2, '0')
     const email = scenarioEmail(scenario.number)
     const metadata = marker(scenario)
+    const dropSlug = scenario.drop_slug ?? 'eurofighter-typhoon-a2'
+    const quantity = scenario.reservation.quantity ?? 1
+    const recordOrigin = scenario.reservation.record_origin ?? 'test'
     rows.drop_interest_requests.push({
       id: scenario.ids.reservation,
       drop_id: 'poster-valley-drop-01',
-      drop_slug: 'eurofighter-typhoon-a2',
+      drop_slug: dropSlug,
       drop_title: 'Eurofighter Typhoon / A2',
       first_name: 'Synthetic',
       last_name: `Scenario ${number}`,
@@ -351,7 +357,7 @@ export function materializeFixtures(definition, managerUserId) {
       country: 'Netherlands',
       country_code: 'NL',
       preferred_format: 'A2',
-      quantity: 1,
+      quantity,
       shipping_address: null,
       note: `Synthetic Clean Staging scenario ${number}`,
       source_path: '/clean-staging-fixtures',
@@ -361,7 +367,7 @@ export function materializeFixtures(definition, managerUserId) {
       reservation_status: scenario.reservation.reservation_status,
       status: scenario.reservation.status,
       metadata,
-      record_origin: 'test',
+      record_origin: recordOrigin,
       record_origin_needs_review:
         scenario.reservation.record_origin_needs_review === true,
       record_origin_version: 0,
@@ -372,16 +378,16 @@ export function materializeFixtures(definition, managerUserId) {
         id: scenario.ids.invitation,
         interest_request_id: scenario.ids.reservation,
         drop_id: 'poster-valley-drop-01',
-        drop_slug: 'eurofighter-typhoon-a2',
+        drop_slug: dropSlug,
         drop_title: 'Eurofighter Typhoon / A2',
         email,
         email_normalized: email,
         first_name: 'Synthetic',
         last_name: `Scenario ${number}`,
-        quantity: 1,
+        quantity,
         currency: 'EUR',
         unit_price: 65,
-        subtotal_amount: 65,
+        subtotal_amount: 65 * quantity,
         status: scenario.invitation.status,
         token_hash: digest(`${FIXTURE_SET}:${scenario.key}:invitation-token`),
         expires_at: '2099-12-31T23:59:59.000Z',
@@ -403,18 +409,18 @@ export function materializeFixtures(definition, managerUserId) {
         invitation_id: scenario.ids.invitation,
         interest_request_id: scenario.ids.reservation,
         drop_id: 'poster-valley-drop-01',
-        drop_slug: 'eurofighter-typhoon-a2',
+        drop_slug: dropSlug,
         drop_title: 'Eurofighter Typhoon / A2',
         status: scenario.order.status,
         email,
         first_name: 'Synthetic',
         last_name: `Scenario ${number}`,
-        quantity: 1,
+        quantity,
         currency: 'EUR',
         unit_price: 65,
-        subtotal_amount: 65,
+        subtotal_amount: 65 * quantity,
         shipping_amount: 9.95,
-        total_amount: 74.95,
+        total_amount: 65 * quantity + 9.95,
         shipping_profile_id: 'pv-test-nl-standard',
         shipping_country: 'Netherlands',
         shipping_country_code: 'NL',
@@ -722,7 +728,9 @@ function assertScenarioContracts(snapshot, definition, { allowMissing = false } 
     const reservation = maps.drop_interest_requests.get(scenario.ids.reservation)
     if (reservation) {
       if (
-        reservation.record_origin !== 'test' ||
+        reservation.record_origin !== (scenario.reservation.record_origin ?? 'test') ||
+        reservation.drop_slug !== (scenario.drop_slug ?? 'eurofighter-typhoon-a2') ||
+        Number(reservation.quantity) !== (scenario.reservation.quantity ?? 1) ||
         reservation.reservation_status !== scenario.reservation.reservation_status ||
         reservation.status !== scenario.reservation.status ||
         reservation.record_origin_needs_review !==
@@ -1029,7 +1037,7 @@ where id in (${idList(rows.orders)}) and metadata->>'fixture_set'=${sqlLiteral(F
 delete from public.order_invitations
 where id in (${idList(rows.order_invitations)}) and metadata->>'fixture_set'=${sqlLiteral(FIXTURE_SET)};
 delete from public.drop_interest_requests
-where id in (${idList(rows.drop_interest_requests)}) and metadata->>'fixture_set'=${sqlLiteral(FIXTURE_SET)} and record_origin='test';
+where id in (${idList(rows.drop_interest_requests)}) and metadata->>'fixture_set'=${sqlLiteral(FIXTURE_SET)};
 ${roleSql}
 commit;
 `

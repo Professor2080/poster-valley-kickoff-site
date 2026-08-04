@@ -72,7 +72,9 @@ The migration authority and entry gate are defined in the
 ## Disposable synthetic fixture process
 
 Clean Staging is disposable and contains no authoritative business data. Fixture set
-`PV-CLEAN-STAGING-V1` supplies fourteen deterministic Admin-review scenarios. The tooling requires
+`PV-CLEAN-STAGING-V1` supplies sixteen deterministic Admin-review scenarios. The two Order Flow
+additions show a reached-threshold unsent Interest card and a failed invitation that remains
+retryable in Interest. The tooling requires
 all of the following before it connects:
 
 - `POSTER_VALLEY_ENV=clean-staging`;
@@ -115,7 +117,7 @@ Every retained row is deterministic and marked, so reseeding does not grow histo
 
 Fixtures remain available throughout Pascal's review. Operational email stays suppressed and
 Mollie is never called. A full reset is deliberately not automated: pause or replace Clean Staging,
-rebuild it from the two committed migrations, seed again, and relink the isolated Preview only if
+rebuild it from the six allowlisted Order Flow Board migrations, seed again, and relink the isolated Preview only if
 the project ref changed. Never disable triggers or manually delete append-only history.
 
 ## Synthetic data standard
@@ -131,8 +133,10 @@ The seed and cleanup implementation provides:
 - invented names and addresses only; never Production-derived or plausible customer fixtures;
 - no real payment-provider calls; Mollie remains in verified test mode;
 - Resend delivery suppressed by default;
-- recognizable constrained `record_origin` values such as `test` or `internal_pilot`, applied only
-  through trusted server/test paths;
+- recognizable constrained `record_origin` values applied only through trusted server/test paths;
+  the two threshold fixtures deliberately use synthetic `customer` origin so they exercise the
+  unchanged qualified-interest count, and remain bounded by exact fixture IDs, markers and
+  reserved invalid email addresses;
 - a repeatable, version-controlled seed process;
 - a repeatable cleanup process with before/after counts and failure reporting;
 - permission to rebuild Clean Staging completely from committed migrations and synthetic seed data.

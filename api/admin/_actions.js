@@ -17,8 +17,8 @@ export const actionRoles = {
   'origin.change': 'manager',
   'board.process.preview': 'operator',
   'board.process': 'operator',
-  'drop.open.preview': 'manager',
-  'drop.open': 'manager',
+  'drop.threshold.preview': 'manager',
+  'drop.threshold.set': 'manager',
   'delivery.confirm.preview': 'manager',
   'delivery.confirm': 'manager',
   'board.close.preview': 'manager',
@@ -34,7 +34,7 @@ const shippingReconciliationActions = new Set(['shipping.reconciliation.preview'
 const shippingReconciliationOutcomes = new Set(['provider_acceptance_confirmed', 'provider_non_acceptance_confirmed'])
 const originActions = new Set(['origin.preview', 'origin.change'])
 const boardProcessActions = new Set(['board.process.preview', 'board.process'])
-const dropOpenActions = new Set(['drop.open.preview', 'drop.open'])
+const dropThresholdActions = new Set(['drop.threshold.preview', 'drop.threshold.set'])
 const deliveryConfirmActions = new Set(['delivery.confirm.preview', 'delivery.confirm'])
 const boardCloseActions = new Set(['board.close.preview', 'board.close'])
 const fulfilmentStatuses = new Set(['unfulfilled', 'ready_to_pack', 'packed', 'shipped'])
@@ -163,12 +163,16 @@ export function normalizeActionRequest(action, body) {
     }
   }
 
-  if (dropOpenActions.has(action)) {
+  if (dropThresholdActions.has(action)) {
     const productCode = text(body.productCode, 'Product code', 100)
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(productCode)) invalid('Product code is invalid.')
     const expectedUpdatedAt = text(body.expectedUpdatedAt, 'Product version', 40)
     if (Number.isNaN(new Date(expectedUpdatedAt).valueOf())) invalid('Product version is invalid.')
-    return { productCode, expectedUpdatedAt }
+    const productionThreshold = Number(body.productionThreshold)
+    if (!Number.isSafeInteger(productionThreshold) || productionThreshold < 1 || productionThreshold > 100000) {
+      invalid('Production threshold must be a whole number between 1 and 100000.', 'invalid_threshold')
+    }
+    return { productCode, productionThreshold, expectedUpdatedAt }
   }
 
   if (deliveryConfirmActions.has(action) || boardCloseActions.has(action)) {
@@ -252,7 +256,7 @@ export function confirmationSummary(action, preview) {
     }
   }
   if (action === 'board.process') return { ...base, destination: preview.nextStage, externalEffect: 'Marks this item as reviewed in the Admin inbox only.', reversibility: 'The underlying reservation, order and payment records are unchanged.' }
-  if (action === 'drop.open') return { ...base, destination: 'Ready to invite', externalEffect: 'Opens this qualified drop for personal payment invitations.', reversibility: 'The lifecycle change is audited and is not reversed from this board.' }
+  if (action === 'drop.threshold.set') return { ...base, destination: `${preview.productionThreshold} interests`, externalEffect: 'Changes the production threshold for this drop only.', reversibility: 'A manager can review and change the threshold again; every change is audited.' }
   if (action === 'delivery.confirm') return { ...base, destination: 'Delivery confirmed', externalEffect: 'Records a manager-verified delivery confirmation. No carrier or customer message is sent.', reversibility: 'The audit record is permanent.' }
   if (action === 'board.close') return { ...base, destination: 'Closed archive', externalEffect: 'Removes the delivered item from the default board and preserves its lifecycle snapshot.', reversibility: 'The item remains searchable in the closed archive.' }
   return { ...base, destination: preview.newOrigin || preview.recordOrigin, externalEffect: 'Updates linked record classification and audit history.', reversibility: 'A later audited change can correct the classification.' }
@@ -315,7 +319,7 @@ export function mutationForPreview(action) {
     'shipping.reconciliation.preview': 'shipping.reconciliation.resolve',
     'origin.preview': 'origin.change',
     'board.process.preview': 'board.process',
-    'drop.open.preview': 'drop.open',
+    'drop.threshold.preview': 'drop.threshold.set',
     'delivery.confirm.preview': 'delivery.confirm',
     'board.close.preview': 'board.close',
   }[action] ?? null

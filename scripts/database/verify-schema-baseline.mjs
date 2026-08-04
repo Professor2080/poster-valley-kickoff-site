@@ -12,12 +12,14 @@ const hardeningMigrationName = '20260731193947_harden_default_privileges.sql'
 const shippingMigrationName = '20260802130000_shipping_confirmation_safety.sql'
 const orderFlowMigrationName = '20260802192136_order_flow_board.sql'
 const thresholdMigrationName = '20260802210626_default_drop_production_threshold.sql'
-const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName, orderFlowMigrationName, thresholdMigrationName]
+const invitationFlowMigrationName = '20260804103202_simplify_order_flow_invitation_thresholds.sql'
+const allowedMigrationNames = [baselineMigrationName, hardeningMigrationName, shippingMigrationName, orderFlowMigrationName, thresholdMigrationName, invitationFlowMigrationName]
 const baselineMigrationPath = path.join(migrationDirectory, baselineMigrationName)
 const hardeningMigrationPath = path.join(migrationDirectory, hardeningMigrationName)
 const shippingMigrationPath = path.join(migrationDirectory, shippingMigrationName)
 const orderFlowMigrationPath = path.join(migrationDirectory, orderFlowMigrationName)
 const thresholdMigrationPath = path.join(migrationDirectory, thresholdMigrationName)
+const invitationFlowMigrationPath = path.join(migrationDirectory, invitationFlowMigrationName)
 const bootstrapPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-bootstrap.sql')
 const contractPath = path.join(repositoryRoot, 'supabase', 'tests', 'schema-baseline-v1-contract.sql')
 const orderFlowContractPath = path.join(repositoryRoot, 'supabase', 'tests', 'order-flow-board-contract.sql')
@@ -30,14 +32,15 @@ const expected = {
   shippingMigrationSha256: '2ddf9459f72af2e35a75d19b8ffed44d631ba3aebfde01dc3418656d818cf8bf',
   orderFlowMigrationSha256: '87dd0afc52f760317c1d2fa0dfbc95fd0fe8275e685e1fac7e1c165618f9b658',
   thresholdMigrationSha256: '76324138304c2c41c956c9ea1c0cd2438d65696666b8193c676d59b515d4c993',
-  structuralFingerprint: '586d921e3b02378f5f194c7300328eedb5efd13cc470c19757c86d3a9d0df143',
-  fullFingerprint: 'fc3f1a6fdd7ace0ef086349fba37a67a2c61a3625bf0600098e0fec2568a2ce7',
+  invitationFlowMigrationSha256: '756f8155d3046840113d3c46ec3fa2598657a79d8923260bc82d725fe54c64d1',
+  structuralFingerprint: '9a96ddf9ab77480a6e4cf4dcaa662534bbb7327a2a56e232bc15f6d9bc872526',
+  fullFingerprint: 'e460d586593dec9c9c2f2c0b1b25f0197f7118917f9aaf65b8753bc37427a214',
   defaultAclFingerprint: 'b7e26ee6708235ee0209bad22f59074ac0c2b9d835b93bbb88efa6da07798135',
   counts: {
     tables: 14,
     views: 6,
     enums: 2,
-    routines: 33,
+    routines: 34,
     triggers: 11,
     policies: 2,
     indexes: 64,
@@ -355,6 +358,7 @@ const hardeningMigrationBytes = canonicalMigrationBytes(hardeningMigrationPath)
 const shippingMigrationBytes = canonicalMigrationBytes(shippingMigrationPath)
 const orderFlowMigrationBytes = canonicalMigrationBytes(orderFlowMigrationPath)
 const thresholdMigrationBytes = canonicalMigrationBytes(thresholdMigrationPath)
+const invitationFlowMigrationBytes = canonicalMigrationBytes(invitationFlowMigrationPath)
 assertEqual(baselineMigrationBytes.byteLength, expected.baselineMigrationBytes, 'canonical baseline migration size')
 assertEqual(lineCount(baselineMigrationBytes), expected.baselineMigrationLines, 'canonical baseline migration line count')
 assertEqual(sha256(baselineMigrationBytes), expected.baselineMigrationSha256, 'canonical baseline migration SHA-256')
@@ -362,6 +366,7 @@ assertEqual(sha256(hardeningMigrationBytes), expected.hardeningMigrationSha256, 
 assertEqual(sha256(shippingMigrationBytes), expected.shippingMigrationSha256, 'shipping-confirmation migration SHA-256')
 assertEqual(sha256(orderFlowMigrationBytes), expected.orderFlowMigrationSha256, 'order-flow migration SHA-256')
 assertEqual(sha256(thresholdMigrationBytes), expected.thresholdMigrationSha256, 'production-threshold migration SHA-256')
+assertEqual(sha256(invitationFlowMigrationBytes), expected.invitationFlowMigrationSha256, 'invitation-flow migration SHA-256')
 
 const serverVersion = Number(scalar(maintenanceDatabase, 'show server_version_num'))
 if (!Number.isInteger(serverVersion) || serverVersion < 170_000 || serverVersion >= 180_000) {
@@ -420,6 +425,7 @@ try {
   assertEqual(sha256(canonicalMigrationBytes(shippingMigrationPath)), expected.shippingMigrationSha256, 'post-run shipping-confirmation migration SHA-256')
   assertEqual(sha256(canonicalMigrationBytes(orderFlowMigrationPath)), expected.orderFlowMigrationSha256, 'post-run order-flow migration SHA-256')
   assertEqual(sha256(canonicalMigrationBytes(thresholdMigrationPath)), expected.thresholdMigrationSha256, 'post-run production-threshold migration SHA-256')
+  assertEqual(sha256(canonicalMigrationBytes(invitationFlowMigrationPath)), expected.invitationFlowMigrationSha256, 'post-run invitation-flow migration SHA-256')
 
   await paymentRuntime(databases[1])
 
@@ -431,6 +437,7 @@ try {
       { name: shippingMigrationName, bytes: shippingMigrationBytes.byteLength, lines: lineCount(shippingMigrationBytes), sha256: expected.shippingMigrationSha256 },
       { name: orderFlowMigrationName, bytes: orderFlowMigrationBytes.byteLength, lines: lineCount(orderFlowMigrationBytes), sha256: expected.orderFlowMigrationSha256 },
       { name: thresholdMigrationName, bytes: thresholdMigrationBytes.byteLength, lines: lineCount(thresholdMigrationBytes), sha256: expected.thresholdMigrationSha256 },
+      { name: invitationFlowMigrationName, bytes: invitationFlowMigrationBytes.byteLength, lines: lineCount(invitationFlowMigrationBytes), sha256: expected.invitationFlowMigrationSha256 },
     ],
     run1: { counts: runOne.counts, structuralFingerprint: runOne.structuralFingerprint, fullFingerprint: runOne.fullFingerprint, defaultAclFingerprint: runOne.defaultAclFingerprint },
     run2: { counts: runTwo.counts, structuralFingerprint: runTwo.structuralFingerprint, fullFingerprint: runTwo.fullFingerprint, defaultAclFingerprint: runTwo.defaultAclFingerprint },

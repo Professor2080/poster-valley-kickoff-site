@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { AlertTriangle, Archive, ArrowRight, CheckCircle, Clock, Eye, Hourglass, Lock, Mail, Package, Search, Truck } from 'lucide-react'
+import { AlertTriangle, Archive, ArrowRight, CheckCircle, Clock, Eye, Hourglass, Lock, Package, Pencil, Search, Truck } from 'lucide-react'
 import { getOrderFlow, runAdminAction, type AdminActionResult } from './api'
+import { actionResultMessage } from './actions'
 import { orderFlowStages, type AdminRole, type OrderFlowCard, type OrderFlowDrop, type OrderFlowStage } from './contracts'
-import { cardsByStage, cardStatusLine, orderFlowStageMeta, previewPayloadForCard, primaryAction, type BoardPrimaryAction } from './orderFlow'
+import { cardsByStage, cardStatusLine, orderFlowStageMeta, previewPayloadForCard, primaryAction, thresholdStatusLine, type BoardPrimaryAction } from './orderFlow'
 import { getDropBySlug } from '../data/drops'
 
 type BoardFilters = { search: string; drop_slug: string; source_type: string; stage: string; needs_attention: string; include_closed: string }
 type PendingAction = {
   card: OrderFlowCard | null
-  label: BoardPrimaryAction | 'Confirm delivery'
+  label: BoardPrimaryAction | 'Confirm delivery' | 'Set threshold' | 'Edit threshold'
   request: Record<string, unknown>
   preview: AdminActionResult
 }
+type ActionNotice = { message: string; tone: 'success' | 'warning' | 'error' }
 
 const emptyFilters: BoardFilters = { search: '', drop_slug: '', source_type: '', stage: '', needs_attention: '', include_closed: '' }
 const pageSize = 100
@@ -19,7 +21,6 @@ const pageSize = 100
 const stageIcons: Record<OrderFlowStage, typeof Clock> = {
   new: Clock,
   interest: Eye,
-  ready_to_invite: Mail,
   awaiting_payment: Hourglass,
   paid_to_ship: Package,
   shipped: Truck,
@@ -35,8 +36,10 @@ export function OrderFlowBoard({ token, role, onDetails, refreshSignal = 0 }: { 
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [pending, setPending] = useState<PendingAction | null>(null)
+  const [thresholdDrop, setThresholdDrop] = useState<OrderFlowDrop | null>(null)
   const [actionLoading, setActionLoading] = useState('')
   const [actionError, setActionError] = useState('')
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -64,7 +67,7 @@ export function OrderFlowBoard({ token, role, onDetails, refreshSignal = 0 }: { 
   const beginAction = async (card: OrderFlowCard, label: BoardPrimaryAction | 'Confirm delivery') => {
     const request = previewPayloadForCard(card, label)
     if (!request) { onDetails(card); return }
-    setActionLoading(card.source_id); setActionError('')
+    setActionLoading(card.source_id); setActionError(''); setActionNotice(null)
     try {
       const preview = await runAdminAction(token, request)
       setPending({ card, label, request, preview })
@@ -73,15 +76,11 @@ export function OrderFlowBoard({ token, role, onDetails, refreshSignal = 0 }: { 
     } finally { setActionLoading('') }
   }
 
-  const openDrop = async (drop: OrderFlowDrop) => {
-    setActionLoading(drop.product_code); setActionError('')
-    try {
-      const request = { action: 'drop.open.preview', productCode: drop.product_code, expectedUpdatedAt: drop.updated_at }
-      const preview = await runAdminAction(token, request)
-      setPending({ card: null, label: 'Send', request, preview })
-    } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : 'The drop preview could not be loaded.')
-    } finally { setActionLoading('') }
+  const completeAction = (result: AdminActionResult) => {
+    const tone = result.deliveryStatus === 'failed' ? 'error' : result.deliveryStatus === 'pending' || result.deliveryStatus === 'suppressed' ? 'warning' : 'success'
+    setActionNotice({ message: actionResultMessage(result), tone })
+    setPending(null)
+    refresh()
   }
 
   return <section className="order-flow" aria-labelledby="order-flow-title">
@@ -96,22 +95,47 @@ export function OrderFlowBoard({ token, role, onDetails, refreshSignal = 0 }: { 
       <button type="button" className={filters.include_closed ? 'is-active' : ''} aria-pressed={Boolean(filters.include_closed)} onClick={() => { updateFilter('include_closed', filters.include_closed ? '' : 'true'); updateFilter('stage', filters.include_closed ? '' : 'closed') }}><Archive aria-hidden="true" size={17} />Closed</button>
     </div>
 
-    {drops.length > 0 && <section className="drop-overview" aria-labelledby="drop-overview-title"><div className="drop-overview-title"><Hourglass aria-hidden="true" size={22} /><div><p className="admin-kicker">Production gates</p><h2 id="drop-overview-title">Drop overview</h2></div></div><div className="drop-overview-list">{drops.map((drop) => <DropSummary key={drop.product_code} drop={drop} role={role} busy={actionLoading === drop.product_code} onFilter={() => updateFilter('drop_slug', drop.drop_slug)} onOpen={() => void openDrop(drop)} />)}</div></section>}
+    {drops.length > 0 && <section className="drop-overview" aria-labelledby="drop-overview-title"><div className="drop-overview-title"><Hourglass aria-hidden="true" size={22} /><div><p className="admin-kicker">Production thresholds</p><h2 id="drop-overview-title">Drop overview</h2></div></div><div className="drop-overview-list">{drops.map((drop) => <DropSummary key={drop.product_code} drop={drop} role={role} busy={actionLoading === drop.product_code} onFilter={() => updateFilter('drop_slug', drop.drop_slug)} onThreshold={() => setThresholdDrop(drop)} />)}</div></section>}
 
+    {actionNotice && <p className={`admin-message admin-${actionNotice.tone}`} role="status">{actionNotice.message}</p>}
     {actionError && <p className="admin-message admin-error" role="alert">{actionError}</p>}
     {loading ? <p className="admin-state" role="status">Loading the controlled order flow…</p> : error ? <div><p className="admin-state admin-error" role="alert">{error}</p><button type="button" onClick={refresh}>Retry board</button></div> : filters.stage === 'closed' || filters.include_closed && archiveCards.length ? <ArchiveGrid cards={archiveCards} onDetails={onDetails} /> : <div className="order-flow-scroll" tabIndex={0} aria-label="Order flow columns"><div className="order-flow-board">{orderFlowStages.map((stage) => <BoardColumn key={stage} stage={stage} cards={columns[stage]} role={role} busyId={actionLoading} onAction={(card, action) => void beginAction(card, action)} onDetails={onDetails} />)}</div></div>}
 
     {!loading && !error && cards.length === 0 && <p className="order-flow-empty">No cards match these filters. Closed items remain available through the archive filter.</p>}
     {!loading && total > pageSize && <nav className="admin-pagination" aria-label="Order flow pages"><span>{offset + 1}–{Math.min(offset + pageSize, total)} of {total}</span><div><button type="button" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0}>Previous</button><button type="button" onClick={() => setOffset(offset + pageSize)} disabled={offset + pageSize >= total}>Next</button></div></nav>}
-    {pending && <ActionConfirmation pending={pending} token={token} onCancel={() => setPending(null)} onComplete={() => { setPending(null); refresh() }} />}
+    {thresholdDrop && <ThresholdEditor drop={thresholdDrop} token={token} onCancel={() => setThresholdDrop(null)} onPreview={(next) => { setThresholdDrop(null); setPending(next) }} />}
+    {pending && <ActionConfirmation pending={pending} token={token} onCancel={() => setPending(null)} onComplete={completeAction} />}
   </section>
 }
 
-function DropSummary({ drop, role, busy, onFilter, onOpen }: { drop: OrderFlowDrop; role: AdminRole; busy: boolean; onFilter: () => void; onOpen: () => void }) {
+function DropSummary({ drop, role, busy, onFilter, onThreshold }: { drop: OrderFlowDrop; role: AdminRole; busy: boolean; onFilter: () => void; onThreshold: () => void }) {
   const configured = drop.production_threshold !== null
   const ready = configured && drop.threshold_reached
-  const open = drop.lifecycle_mode === 'preorder'
-  return <article className={`drop-summary ${open || ready ? 'ready' : 'pending'}`}><button type="button" className="drop-summary-main" onClick={onFilter}><span className="drop-summary-icon">{open || ready ? <CheckCircle aria-hidden="true" /> : <Hourglass aria-hidden="true" />}</span><span><strong>{drop.drop_title}</strong><small>{open ? 'Invitations open' : ready ? 'Production threshold reached — ready to move forward' : configured ? `Pending drop · ${drop.units_needed} more needed` : 'Pending drop · threshold not configured'}</small></span><span className="drop-summary-progress">{configured ? <><strong>{drop.qualified_units} / {drop.production_threshold}</strong><small>qualified units</small></> : <><strong>{drop.qualified_units}</strong><small>qualified units</small></>}</span></button>{ready && !open && <button type="button" className="drop-open-button" onClick={onOpen} disabled={role !== 'manager' || busy}>{busy ? 'Reviewing…' : 'Open invitations'}</button>}</article>
+  return <article className={`drop-summary ${ready ? 'ready' : 'pending'}`}><button type="button" className="drop-summary-main" onClick={onFilter}><span className="drop-summary-icon">{ready ? <CheckCircle aria-hidden="true" /> : <Hourglass aria-hidden="true" />}</span><span><strong>{drop.drop_title}</strong><small>{ready ? 'Threshold reached' : configured ? `${drop.units_needed} more needed` : 'Threshold not configured'}</small></span><span className="drop-summary-progress">{configured ? <><strong>{drop.qualified_units} / {drop.production_threshold} interested</strong><small>{ready ? 'Threshold reached' : `${drop.units_needed} more needed`}</small></> : <><strong>Threshold not configured</strong><small>Set a threshold for production planning</small></>}</span></button><button type="button" className="drop-threshold-button" onClick={onThreshold} disabled={role !== 'manager' || busy}><Pencil aria-hidden="true" size={15} />{busy ? 'Reviewing…' : configured ? 'Edit threshold' : 'Set threshold'}</button></article>
+}
+
+function ThresholdEditor({ drop, token, onCancel, onPreview }: { drop: OrderFlowDrop; token: string; onCancel: () => void; onPreview: (pending: PendingAction) => void }) {
+  const dialog = useRef<HTMLElement>(null)
+  const [value, setValue] = useState(String(drop.production_threshold ?? 5))
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => { dialog.current?.querySelector<HTMLInputElement>('input')?.focus() }, [])
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const productionThreshold = Number(value)
+    if (!Number.isSafeInteger(productionThreshold) || productionThreshold < 1 || productionThreshold > 100000) {
+      setError('Enter a whole number between 1 and 100000.'); return
+    }
+    setSubmitting(true); setError('')
+    const request = { action: 'drop.threshold.preview', productCode: drop.product_code, productionThreshold, expectedUpdatedAt: drop.updated_at }
+    try {
+      const preview = await runAdminAction(token, request)
+      onPreview({ card: null, label: drop.production_threshold === null ? 'Set threshold' : 'Edit threshold', request, preview })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The threshold preview could not be loaded.'); setSubmitting(false)
+    }
+  }
+  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!submitting) onCancel() }}><section ref={dialog} className="admin-dialog order-flow-threshold-editor" role="dialog" aria-modal="true" aria-labelledby="threshold-editor-title" onMouseDown={(event) => event.stopPropagation()}><p className="admin-kicker">Manager configuration</p><h2 id="threshold-editor-title">{drop.production_threshold === null ? 'Set threshold' : 'Edit threshold'}</h2><p>{drop.drop_title}</p><form onSubmit={submit}><label htmlFor="production-threshold">Required interests<input id="production-threshold" type="number" min="1" max="100000" step="1" value={value} onChange={(event) => setValue(event.target.value)} disabled={submitting} /></label>{error && <p className="admin-message admin-error" role="alert">{error}</p>}<div className="admin-action-buttons"><button type="button" className="admin-secondary" onClick={onCancel} disabled={submitting}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? 'Reviewing…' : 'Review threshold'}</button></div></form></section></div>
 }
 
 function BoardColumn({ stage, cards, role, busyId, onAction, onDetails }: { stage: OrderFlowStage; cards: OrderFlowCard[]; role: AdminRole; busyId: string; onAction: (card: OrderFlowCard, action: BoardPrimaryAction) => void; onDetails: (card: OrderFlowCard) => void }) {
@@ -122,22 +146,24 @@ function BoardColumn({ stage, cards, role, busyId, onAction, onDetails }: { stag
 
 function OrderFlowCardView({ card, role, busy, onAction, onDetails }: { card: OrderFlowCard; role: AdminRole; busy: boolean; onAction: (card: OrderFlowCard, action: BoardPrimaryAction) => void; onDetails: (card: OrderFlowCard) => void }) {
   const action = primaryAction(card)
-  const restricted = action === 'Send' || action === 'Close' ? role !== 'manager' : false
+  const restricted = action === 'Send invite' || action === 'Close' ? role !== 'manager' : false
   const poster = getDropBySlug(card.drop_slug)
-  return <article className={`order-flow-card ${card.needs_attention ? 'needs-attention' : ''}`}><div className="order-flow-card-top"><div className="order-flow-thumb">{poster?.image ? <img src={poster.image} alt="" /> : <Package aria-hidden="true" />}</div><div><div className="order-flow-badges"><span>{card.source_type === 'drop' ? 'Drop' : 'Shop order'}</span>{card.record_origin !== 'customer' && <span className="is-origin">{card.record_origin.replaceAll('_', ' ')}</span>}{card.needs_attention && <span className="is-attention"><AlertTriangle aria-hidden="true" size={13} />Attention</span>}</div><h3>{card.customer_name}</h3><p>{card.drop_title} · {card.preferred_format} · ×{card.quantity}</p><small>{card.reference_number} · {card.country_code ?? 'Country pending'}</small></div></div><p className="order-flow-status">{cardStatusLine(card)}</p><div className="order-flow-card-actions">{action && <button type="button" className="order-flow-primary" onClick={() => action === 'Ship' ? onDetails(card) : onAction(card, action)} disabled={busy || restricted}>{busy ? 'Reviewing…' : action}<ArrowRight aria-hidden="true" size={17} /></button>}<button type="button" className="order-flow-details" onClick={() => onDetails(card)}>Details</button></div>{restricted && <p className="order-flow-role-note">Manager confirmation required.</p>}</article>
+  const threshold = thresholdStatusLine(card)
+  return <article className={`order-flow-card ${card.needs_attention ? 'needs-attention' : ''}`}><div className="order-flow-card-top"><div className="order-flow-thumb">{poster?.image ? <img src={poster.image} alt="" /> : <Package aria-hidden="true" />}</div><div><div className="order-flow-badges"><span>{card.source_type === 'drop' ? 'Drop' : 'Shop order'}</span>{card.record_origin !== 'customer' && <span className="is-origin">{card.record_origin.replaceAll('_', ' ')}</span>}{card.needs_attention && <span className="is-attention"><AlertTriangle aria-hidden="true" size={13} />Attention</span>}</div><h3>{card.customer_name}</h3><p>{card.drop_title} · {card.preferred_format} · ×{card.quantity}</p><small>{card.reference_number} · {card.country_code ?? 'Country pending'}</small></div></div><p className="order-flow-status">{cardStatusLine(card)}</p>{threshold && <p className={`order-flow-threshold-status ${card.threshold_reached ? 'is-reached' : ''}`}>{threshold}</p>}<div className="order-flow-card-actions">{action && <button type="button" className="order-flow-primary" onClick={() => action === 'Ship' ? onDetails(card) : onAction(card, action)} disabled={busy || restricted}>{busy ? 'Reviewing…' : action}<ArrowRight aria-hidden="true" size={17} /></button>}<button type="button" className="order-flow-details" onClick={() => onDetails(card)}>Details</button></div>{restricted && <p className="order-flow-role-note">Manager confirmation required.</p>}</article>
 }
 
 function ArchiveGrid({ cards, onDetails }: { cards: OrderFlowCard[]; onDetails: (card: OrderFlowCard) => void }) {
   return <section className="order-flow-archive" aria-labelledby="archive-title"><div><p className="admin-kicker">Searchable history</p><h2 id="archive-title">Closed orders</h2></div><div className="order-flow-archive-grid">{cards.map((card) => <article key={card.source_id}><Archive aria-hidden="true" /><div><h3>{card.customer_name}</h3><p>{card.drop_title} · {card.reference_number}</p><small>Closed · lifecycle snapshot preserved</small></div><button type="button" onClick={() => onDetails(card)}>Details</button></article>)}</div></section>
 }
 
-function ActionConfirmation({ pending, token, onCancel, onComplete }: { pending: PendingAction; token: string; onCancel: () => void; onComplete: () => void }) {
+function ActionConfirmation({ pending, token, onCancel, onComplete }: { pending: PendingAction; token: string; onCancel: () => void; onComplete: (result: AdminActionResult) => void }) {
   const dialog = useRef<HTMLElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const confirmation = pending.preview.confirmation
-  const isDropOpen = confirmation?.action === 'drop.open'
-  const title = pending.label === 'Send' && !isDropOpen ? 'Send payment invitation?' : isDropOpen ? 'Open invitations for this drop?' : pending.label === 'Process' ? 'Process this item?' : pending.label === 'Close' ? 'Close delivered order?' : 'Confirm delivery?'
+  const isInvitation = pending.label === 'Send invite'
+  const isThreshold = confirmation?.action === 'drop.threshold.set'
+  const title = isInvitation ? 'Send payment invitation?' : isThreshold ? `${pending.label}?` : pending.label === 'Process' ? 'Process this item?' : pending.label === 'Close' ? 'Close delivered order?' : 'Confirm delivery?'
   useEffect(() => { dialog.current?.querySelector<HTMLButtonElement>('button')?.focus() }, [])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -145,13 +171,16 @@ function ActionConfirmation({ pending, token, onCancel, onComplete }: { pending:
     setSubmitting(true); setError('')
     try {
       const { action: _previewAction, ...request } = pending.request
-      await runAdminAction(token, { ...request, action: confirmation.action, idempotencyKey: crypto.randomUUID(), confirmationProof: confirmation.proof })
-      onComplete()
+      const result = await runAdminAction(token, { ...request, action: confirmation.action, idempotencyKey: crypto.randomUUID(), confirmationProof: confirmation.proof })
+      onComplete(result)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'The confirmed action could not be completed.'); setSubmitting(false) }
   }
   const card = pending.card
   const preview = pending.preview.preview ?? {}
-  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!submitting) onCancel() }}><section ref={dialog} className="admin-dialog order-flow-confirm" role="dialog" aria-modal="true" aria-labelledby="order-flow-confirm-title" onMouseDown={(event) => event.stopPropagation()}><p className="admin-kicker">Explicit confirmation</p><h2 id="order-flow-confirm-title">{title}</h2><dl>{isDropOpen ? <><div><dt>Drop</dt><dd>{String(preview.dropTitle ?? preview.dropSlug ?? 'Selected drop')}</dd></div><div><dt>Threshold</dt><dd>{String(preview.qualifiedUnits ?? '—')} / {String(preview.productionThreshold ?? '—')} qualified units</dd></div></> : card ? <><div><dt>Customer</dt><dd>{card.customer_name} · {card.masked_email}</dd></div><div><dt>Poster / drop</dt><dd>{card.drop_title} · {card.preferred_format} · ×{card.quantity}</dd></div>{pending.label === 'Send' && <><div><dt>Poster amount</dt><dd>{card.subtotal_amount !== null ? `${card.currency ?? 'EUR'} ${Number(card.subtotal_amount).toFixed(2)}` : 'Calculated from the server-owned drop price'}</dd></div><div><dt>Shipping</dt><dd>{card.shipping_amount !== null ? `${card.currency ?? 'EUR'} ${Number(card.shipping_amount).toFixed(2)}` : 'Calculated securely from the customer destination before payment'}</dd></div><div><dt>Expires</dt><dd>{card.invitation_expires_at ? new Date(card.invitation_expires_at).toLocaleDateString('en-GB') : 'Seven days after sending'}</dd></div></>}</> : null}<div><dt>Effect</dt><dd>{String(confirmation?.summary.externalEffect ?? 'Updates the controlled Admin workflow.')}</dd></div><div><dt>Safety</dt><dd>{String(confirmation?.summary.reversibility ?? 'The action is recorded in audit history.')}</dd></div></dl>{error && <p className="admin-message admin-error" role="alert">{error}</p>}<form onSubmit={submit}><div className="admin-action-buttons"><button type="button" className="admin-secondary" onClick={onCancel} disabled={submitting}>Cancel</button><button type="submit" disabled={!confirmation || submitting}>{submitting ? 'Working…' : isDropOpen ? 'Open invitations' : pending.label === 'Confirm delivery' ? 'Confirm delivery' : pending.label}</button></div></form></section></div>
+  const productionThreshold = typeof preview.productionThreshold === 'number' ? preview.productionThreshold : null
+  const qualifiedUnits = typeof preview.qualifiedUnits === 'number' ? preview.qualifiedUnits : 0
+  const thresholdWarning = isInvitation && productionThreshold !== null && qualifiedUnits < productionThreshold
+  return <div className="admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!submitting) onCancel() }}><section ref={dialog} className="admin-dialog order-flow-confirm" role="dialog" aria-modal="true" aria-labelledby="order-flow-confirm-title" onMouseDown={(event) => event.stopPropagation()}><p className="admin-kicker">Explicit confirmation</p><h2 id="order-flow-confirm-title">{title}</h2>{thresholdWarning && <p className="admin-message admin-warning order-flow-threshold-warning" role="alert">Threshold not reached: {qualifiedUnits}/{productionThreshold} interests. Send invite anyway?</p>}{isInvitation && productionThreshold === null && <p className="admin-message admin-warning order-flow-threshold-warning">Threshold not configured. Send invite remains available.</p>}{isInvitation && productionThreshold !== null && !thresholdWarning && <p className="admin-message admin-success order-flow-threshold-warning">Threshold reached: {qualifiedUnits}/{productionThreshold} interests.</p>}<dl>{isThreshold ? <><div><dt>Drop</dt><dd>{String(preview.dropTitle ?? preview.dropSlug ?? 'Selected drop')}</dd></div><div><dt>Current threshold</dt><dd>{preview.currentProductionThreshold === null ? 'Not configured' : String(preview.currentProductionThreshold ?? '—')}</dd></div><div><dt>New threshold</dt><dd>{String(preview.productionThreshold ?? '—')} interests</dd></div><div><dt>Current interest</dt><dd>{String(preview.qualifiedUnits ?? 0)} accepted interests</dd></div></> : card ? <><div><dt>Customer</dt><dd>{card.customer_name} · {card.masked_email}</dd></div><div><dt>Poster / drop</dt><dd>{card.drop_title} · {card.preferred_format} · ×{card.quantity}</dd></div>{isInvitation && <><div><dt>Poster amount</dt><dd>{card.subtotal_amount !== null ? `${card.currency ?? 'EUR'} ${Number(card.subtotal_amount).toFixed(2)}` : 'Calculated from the server-owned drop price'}</dd></div><div><dt>Shipping</dt><dd>{card.shipping_amount !== null ? `${card.currency ?? 'EUR'} ${Number(card.shipping_amount).toFixed(2)}` : 'Calculated securely from the customer destination before payment'}</dd></div><div><dt>Expires</dt><dd>{card.invitation_expires_at ? new Date(card.invitation_expires_at).toLocaleDateString('en-GB') : 'Seven days after sending'}</dd></div></>}</> : null}<div><dt>Effect</dt><dd>{String(confirmation?.summary.externalEffect ?? 'Updates the controlled Admin workflow.')}</dd></div><div><dt>Safety</dt><dd>{String(confirmation?.summary.reversibility ?? 'The action is recorded in audit history.')}</dd></div></dl>{error && <p className="admin-message admin-error" role="alert">{error}</p>}<form onSubmit={submit}><div className="admin-action-buttons"><button type="button" className="admin-secondary" onClick={onCancel} disabled={submitting}>Cancel</button><button type="submit" disabled={!confirmation || submitting}>{submitting ? 'Working…' : pending.label === 'Confirm delivery' ? 'Confirm delivery' : pending.label}</button></div></form></section></div>
 }
 
 export function OrderFlowDetailActions({ card, token, role, onChanged }: { card: OrderFlowCard; token: string; role: AdminRole; onChanged: () => void }) {

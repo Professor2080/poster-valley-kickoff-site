@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const migration = await readFile(new URL('../supabase/migrations/20260802210626_default_drop_production_threshold.sql', import.meta.url), 'utf8')
 const board = await readFile(new URL('../src/admin/OrderFlowBoard.tsx', import.meta.url), 'utf8')
+const flow = await readFile(new URL('../src/admin/orderFlow.ts', import.meta.url), 'utf8')
 
 test('new drops default omitted and explicit null thresholds to five', () => {
   assert.match(migration, /alter column production_threshold set default 5/i)
@@ -20,6 +21,7 @@ test('explicit threshold overrides and nullable historical compatibility remain 
 
 test('the board renders progress and remaining units from the stored drop projection', () => {
   assert.match(board, /drop\.qualified_units}\s*\/\s*{drop\.production_threshold}/)
-  assert.match(board, /`Pending drop [^`]*\$\{drop\.units_needed} more needed`/)
+  assert.match(board, /`\$\{drop\.units_needed} more needed`/)
+  assert.match(flow, /`\$\{interested} \/ \$\{threshold} interested · \$\{needed} more needed`/)
   assert.doesNotMatch(board, /eurofighter[^\n]{0,200}(?:\/\s*5|more needed)/i)
 })

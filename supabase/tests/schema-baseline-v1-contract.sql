@@ -24,8 +24,8 @@ select pg_temp.assert_true(
   '2 public enums'
 );
 select pg_temp.assert_true(
-  (select count(*) = 33 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
-  '33 public routines'
+  (select count(*) = 34 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
+  '34 public routines'
 );
 select pg_temp.assert_true(
   (select count(*) = 11 from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid = t.tgrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal),
@@ -167,6 +167,7 @@ select pg_temp.assert_true(
         ('admin_order_flow_apply_action'),
         ('admin_order_flow_preview_action'),
         ('admin_order_flow_read'),
+        ('admin_order_flow_set_threshold'),
         ('admin_a31_assert_shipping_ready'),
         ('admin_a31_change_origin'),
         ('admin_a31_preview_origin_change'),
@@ -189,16 +190,16 @@ select pg_temp.assert_true(
     )
     select not exists ((select * from actual except select * from expected) union all (select * from expected except select * from actual))
   ),
-  'service_role has exactly 22 approved RPC execute grants'
+  'service_role has exactly 23 approved RPC execute grants'
 );
 
 select pg_temp.assert_true(
-  (select count(*) = 24 and bool_and(p.prosecdef) and bool_and(
+  (select count(*) = 25 and bool_and(p.prosecdef) and bool_and(
     p.proconfig is not null
     and exists (select 1 from unnest(p.proconfig) setting where setting like 'search_path=%')
     and not exists (select 1 from unnest(p.proconfig) setting where setting ~ '(^|,)extensions(,|$)')
   ) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef),
-  'all 24 SECURITY DEFINER routines have a fixed restricted search_path'
+  'all 25 SECURITY DEFINER routines have a fixed restricted search_path'
 );
 select pg_temp.assert_true(
   (select count(*) = 9 and bool_and(

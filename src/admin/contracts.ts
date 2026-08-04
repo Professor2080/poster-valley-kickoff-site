@@ -16,7 +16,7 @@ export const resourceFilters: Record<AdminResource, string[]> = {
 
 export type AdminPage = { limit: number; offset: number; total: number }
 export type AdminReadResponse = { version: 'v1'; resource: AdminResource; items: Record<string, unknown>[]; page: AdminPage }
-export const orderFlowStages = ['new', 'interest', 'ready_to_invite', 'awaiting_payment', 'paid_to_ship', 'shipped'] as const
+export const orderFlowStages = ['new', 'interest', 'awaiting_payment', 'paid_to_ship', 'shipped'] as const
 export type OrderFlowStage = (typeof orderFlowStages)[number]
 export type OrderFlowSource = 'drop' | 'shop_order'
 export type OrderFlowCard = Record<string, unknown> & {
@@ -40,6 +40,9 @@ export type OrderFlowCard = Record<string, unknown> & {
   record_origin: 'customer' | 'test' | 'internal_pilot'
   product_code: string | null
   production_threshold: number | null
+  qualified_units: number
+  units_needed: number | null
+  threshold_reached: boolean
   invitation_id: string | null
   invitation_status: string | null
   invitation_sent_at: string | null

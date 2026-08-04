@@ -36,6 +36,15 @@ insert into public.drop_interest_requests(
   'Netherlands', 'NL', 'A2', 2, 'customer'
 );
 
+insert into public.drop_interest_requests(
+  id, drop_slug, drop_title, full_name, email, email_normalized, country, country_code,
+  preferred_format, quantity, record_origin
+) values (
+  '92000000-0000-4000-8000-000000000004', 'threshold-null-contract', 'Threshold null contract',
+  'Missing Threshold', 'missing-threshold@example.test', 'missing-threshold@example.test',
+  'Netherlands', 'NL', 'A2', 1, 'customer'
+);
+
 do $contract$
 begin
   if (select production_threshold from public.product_registry where product_code = 'threshold-default-contract') <> 5 then
@@ -60,6 +69,13 @@ begin
 end
 $contract$;
 
+-- Historical rows may still have no configured threshold. The insert trigger
+-- deliberately normalizes new rows only; an explicit later configuration can
+-- remain null for compatibility and must not block invitation preview/send.
+update public.product_registry
+set production_threshold = null
+where product_code = 'threshold-null-contract';
+
 update public.product_registry
 set lifecycle_mode = 'interest', invitations_opened_at = null,
     invitations_opened_by = null, updated_at = '2026-08-02T12:00:00Z'
@@ -74,26 +90,48 @@ insert into public.drop_interest_requests(
   'Netherlands', 'NL', 'A2', 5, 'customer'
 );
 
+insert into public.drop_interest_requests(
+  id, drop_slug, drop_title, full_name, email, email_normalized, country, country_code,
+  preferred_format, quantity, record_origin, record_origin_needs_review
+) values (
+  '92000000-0000-4000-8000-000000000003', 'eurofighter-typhoon', 'Eurofighter Typhoon',
+  'Successful Invite', 'successful-invite@example.test', 'successful-invite@example.test',
+  'Netherlands', 'NL', 'A2', 1, 'test', false
+);
+
 do $contract$
 declare
   v_result jsonb;
   v_updated_at timestamptz;
+  v_attempt_id uuid;
+  v_claim_id uuid;
+  v_attention jsonb;
+  v_source_id uuid;
+  v_index integer := 0;
 begin
   if (select stage from public.admin_order_flow_v1 where source_id = '92000000-0000-4000-8000-000000000001') <> 'new' then
     raise exception 'fresh interest must remain new until Process';
   end if;
 
-  v_result := public.admin_order_flow_preview_action(
-    '91000000-0000-4000-8000-000000000001', 'board.process.preview',
-    jsonb_build_object('sourceType', 'drop', 'sourceId', '92000000-0000-4000-8000-000000000001', 'expectedVersion', 0)
-  );
-  if v_result #>> '{preview,nextStage}' <> 'interest' then raise exception 'server-owned Process destination mismatch'; end if;
+  foreach v_source_id in array array[
+    '92000000-0000-4000-8000-000000000001'::uuid,
+    '92000000-0000-4000-8000-000000000002'::uuid,
+    '92000000-0000-4000-8000-000000000003'::uuid,
+    '92000000-0000-4000-8000-000000000004'::uuid
+  ] loop
+    v_index := v_index + 1;
+    v_result := public.admin_order_flow_preview_action(
+      '91000000-0000-4000-8000-000000000001', 'board.process.preview',
+      jsonb_build_object('sourceType', 'drop', 'sourceId', v_source_id, 'expectedVersion', 0)
+    );
+    if v_result #>> '{preview,nextStage}' <> 'interest' then raise exception 'server-owned Process destination mismatch'; end if;
+    v_result := public.admin_order_flow_apply_action(
+      '91000000-0000-4000-8000-000000000001', 'board.process', 'board-contract-process-' || v_index,
+      repeat('a', 64), jsonb_build_object('sourceType', 'drop', 'sourceId', v_source_id, 'expectedVersion', 0), repeat('a', 64)
+    );
+    if v_result->>'boardStage' <> 'interest' or v_result->>'replay' <> 'false' then raise exception 'Process apply mismatch'; end if;
+  end loop;
 
-  v_result := public.admin_order_flow_apply_action(
-    '91000000-0000-4000-8000-000000000001', 'board.process', 'board-contract-process',
-    repeat('a', 64), jsonb_build_object('sourceType', 'drop', 'sourceId', '92000000-0000-4000-8000-000000000001', 'expectedVersion', 0), repeat('a', 64)
-  );
-  if v_result->>'boardStage' <> 'interest' or v_result->>'replay' <> 'false' then raise exception 'Process apply mismatch'; end if;
   if (select stage from public.admin_order_flow_v1 where source_id = '92000000-0000-4000-8000-000000000001') <> 'interest' then
     raise exception 'processed interest must enter Interest';
   end if;
@@ -111,27 +149,165 @@ begin
     raise exception 'Eurofighter board progress must use its stored threshold of five';
   end if;
 
+  -- Manager authorization is preserved for invitations even though threshold
+  -- state no longer gates their availability.
   begin
-    perform public.admin_order_flow_preview_action(
-      '91000000-0000-4000-8000-000000000002', 'drop.open.preview',
-      jsonb_build_object('productCode', 'eurofighter-typhoon-a2', 'expectedUpdatedAt', '2026-08-02T12:00:00Z')
+    perform public.admin_a32_preview_action(
+      '91000000-0000-4000-8000-000000000002', 'invitation.preview',
+      jsonb_build_object('reservationId', '92000000-0000-4000-8000-000000000002')
     );
-    raise exception 'operator unexpectedly opened drop preview';
+    raise exception 'operator unexpectedly previewed an invitation';
   exception when sqlstate 'P0001' then
     if sqlerrm <> 'insufficient_role' then raise; end if;
   end;
 
-  select updated_at into v_updated_at from public.product_registry where product_code = 'eurofighter-typhoon-a2';
+  -- A valid under-threshold Interest item can be previewed and sent. The
+  -- existing confirmation proof, idempotency and delivery pipeline remain the
+  -- authority; a failed provider outcome must not advance the card.
+  v_result := public.admin_a32_preview_action(
+    '91000000-0000-4000-8000-000000000001', 'invitation.preview',
+    jsonb_build_object('reservationId', '92000000-0000-4000-8000-000000000002')
+  );
+  if v_result #>> '{preview,suggestedAction}' <> 'invitation.send'
+     or (v_result #>> '{preview,productionThreshold}')::integer <> 7
+     or (v_result #>> '{preview,qualifiedUnits}')::integer <> 2
+     or (v_result #>> '{preview,thresholdReached}')::boolean then
+    raise exception 'under-threshold invitation preview mismatch';
+  end if;
+  v_result := public.admin_a32_apply_action(
+    '91000000-0000-4000-8000-000000000001', 'invitation.send', 'board-contract-invite-failed',
+    repeat('b', 64), jsonb_build_object('reservationId', '92000000-0000-4000-8000-000000000002'),
+    jsonb_build_object('tokenHash', repeat('1', 64), 'expiresAt', now() + interval '7 days',
+      'dropId', 'drop_threshold_contract', 'dropTitle', 'Threshold override contract',
+      'unitPrice', 17.75, 'currency', 'EUR'), repeat('b', 64)
+  );
+  v_attempt_id := (v_result->>'emailAttemptId')::uuid;
+  v_claim_id := '96000000-0000-4000-8000-000000000001';
+  perform public.admin_a32_claim_delivery('91000000-0000-4000-8000-000000000001', v_attempt_id, v_claim_id);
+  perform public.admin_a32_complete_delivery(
+    '91000000-0000-4000-8000-000000000001', 'invitation.send', 'board-contract-invite-failed',
+    repeat('b', 64), v_attempt_id, v_claim_id, 'failed', null
+  );
+  if not exists (
+    select 1 from public.admin_order_flow_v1
+    where source_id = '92000000-0000-4000-8000-000000000002'
+      and stage = 'interest' and needs_attention is true and invitation_delivery_status = 'failed'
+  ) then raise exception 'failed invitation must remain in Interest with Attention'; end if;
+
+  -- A reached-threshold Interest item uses the same pipeline. Only an accepted
+  -- provider send advances that one card and removes its derived Attention.
+  v_result := public.admin_a32_preview_action(
+    '91000000-0000-4000-8000-000000000001', 'invitation.preview',
+    jsonb_build_object('reservationId', '92000000-0000-4000-8000-000000000003')
+  );
+  if v_result #>> '{preview,suggestedAction}' <> 'invitation.send'
+     or (v_result #>> '{preview,productionThreshold}')::integer <> 5
+     or (v_result #>> '{preview,thresholdReached}')::boolean is not true then
+    raise exception 'reached-threshold invitation preview mismatch';
+  end if;
+  v_result := public.admin_a32_apply_action(
+    '91000000-0000-4000-8000-000000000001', 'invitation.send', 'board-contract-invite-sent',
+    repeat('c', 64), jsonb_build_object('reservationId', '92000000-0000-4000-8000-000000000003'),
+    jsonb_build_object('tokenHash', repeat('2', 64), 'expiresAt', now() + interval '7 days',
+      'dropId', 'drop_eurofighter_typhoon', 'dropTitle', 'Eurofighter Typhoon',
+      'unitPrice', 17.75, 'currency', 'EUR'), repeat('c', 64)
+  );
+  v_attempt_id := (v_result->>'emailAttemptId')::uuid;
+  v_claim_id := '96000000-0000-4000-8000-000000000002';
+  perform public.admin_a32_claim_delivery('91000000-0000-4000-8000-000000000001', v_attempt_id, v_claim_id);
+  perform public.admin_a32_complete_delivery(
+    '91000000-0000-4000-8000-000000000001', 'invitation.send', 'board-contract-invite-sent',
+    repeat('c', 64), v_attempt_id, v_claim_id, 'sent', 'provider_contract_invite'
+  );
+  if (select stage from public.admin_order_flow_v1
+      where source_id = '92000000-0000-4000-8000-000000000003') <> 'awaiting_payment' then
+    raise exception 'successful invitation must move its card to Awaiting payment';
+  end if;
+  if (select needs_attention from public.admin_order_flow_v1
+      where source_id = '92000000-0000-4000-8000-000000000003') is not false then
+    raise exception 'successful invitation must clear derived Attention: %', (
+      select jsonb_build_object(
+        'stage', stage, 'originReview', record_origin_needs_review,
+        'invitationCount', invitation_count, 'invitationStatus', invitation_status,
+        'deliveryStatus', invitation_delivery_status, 'paymentStatus', payment_status,
+        'shippingStatus', shipping_email_status, 'reconciliation', shipping_reconciliation_required,
+        'thresholdReached', threshold_reached
+      ) from public.admin_order_flow_v1
+      where source_id = '92000000-0000-4000-8000-000000000003'
+    );
+  end if;
+  if (select invitation_sent_at from public.admin_order_flow_v1
+      where source_id = '92000000-0000-4000-8000-000000000003') is null then
+    raise exception 'successful invitation must retain provider-accepted sent evidence';
+  end if;
+  if (select count(*) from public.admin_order_flow_v1 where stage = 'awaiting_payment') <> 1 then
+    raise exception 'successful invitation must move exactly one card';
+  end if;
+
+  -- The current-state Attention filter includes reached unsent and failed
+  -- Interest rows, but excludes the successfully sent row.
+  v_attention := public.admin_order_flow_read(
+    '91000000-0000-4000-8000-000000000001', null, null, null, 'interest', true, false, 100, 0
+  );
+  if not exists (
+    select 1 from jsonb_array_elements(v_attention->'items') item
+    where item->>'source_id' = '92000000-0000-4000-8000-000000000001'
+  ) then raise exception 'reached unsent Interest card missing from Attention filter'; end if;
+  if not exists (
+    select 1 from jsonb_array_elements(v_attention->'items') item
+    where item->>'source_id' = '92000000-0000-4000-8000-000000000002'
+  ) then raise exception 'failed Interest card missing from Attention filter'; end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_attention->'items') item
+    where item->>'source_id' = '92000000-0000-4000-8000-000000000003'
+  ) then raise exception 'sent card retained stale Attention'; end if;
+
+  -- A historical missing threshold remains visible but never blocks Send invite.
+  v_result := public.admin_a32_preview_action(
+    '91000000-0000-4000-8000-000000000001', 'invitation.preview',
+    jsonb_build_object('reservationId', '92000000-0000-4000-8000-000000000004')
+  );
+  if v_result #>> '{preview,suggestedAction}' <> 'invitation.send'
+     or v_result #> '{preview,productionThreshold}' <> 'null'::jsonb then
+    raise exception 'missing threshold must not block invitation preview';
+  end if;
+
+  -- Threshold administration retains manager authorization, versioning,
+  -- confirmation, idempotency and audit guarantees.
+  select updated_at into v_updated_at from public.product_registry where product_code = 'threshold-override-contract';
+  begin
+    perform public.admin_order_flow_set_threshold(
+      '91000000-0000-4000-8000-000000000002', 'drop.threshold.set', 'threshold-operator-denied',
+      repeat('d', 64), jsonb_build_object('productCode', 'threshold-override-contract',
+        'productionThreshold', 9, 'expectedUpdatedAt', v_updated_at), repeat('d', 64)
+    );
+    raise exception 'operator unexpectedly changed threshold';
+  exception when sqlstate 'P0001' then
+    if sqlerrm <> 'insufficient_role' then raise; end if;
+  end;
   perform public.admin_order_flow_preview_action(
-    '91000000-0000-4000-8000-000000000001', 'drop.open.preview',
-    jsonb_build_object('productCode', 'eurofighter-typhoon-a2', 'expectedUpdatedAt', v_updated_at)
+    '91000000-0000-4000-8000-000000000001', 'drop.threshold.preview',
+    jsonb_build_object('productCode', 'threshold-override-contract',
+      'productionThreshold', 9, 'expectedUpdatedAt', v_updated_at)
   );
-  perform public.admin_order_flow_apply_action(
-    '91000000-0000-4000-8000-000000000001', 'drop.open', 'board-contract-drop-open',
-    repeat('b', 64), jsonb_build_object('productCode', 'eurofighter-typhoon-a2', 'expectedUpdatedAt', v_updated_at), repeat('b', 64)
+  v_result := public.admin_order_flow_set_threshold(
+    '91000000-0000-4000-8000-000000000001', 'drop.threshold.set', 'threshold-manager-change',
+    repeat('e', 64), jsonb_build_object('productCode', 'threshold-override-contract',
+      'productionThreshold', 9, 'expectedUpdatedAt', v_updated_at), repeat('e', 64)
   );
-  if (select stage from public.admin_order_flow_v1 where source_id = '92000000-0000-4000-8000-000000000001') <> 'ready_to_invite' then
-    raise exception 'qualified opened drop must enter Ready to invite';
+  if v_result->>'replay' <> 'false' or v_result->>'productionThreshold' <> '9' then
+    raise exception 'threshold mutation mismatch';
+  end if;
+  v_result := public.admin_order_flow_set_threshold(
+    '91000000-0000-4000-8000-000000000001', 'drop.threshold.set', 'threshold-manager-change',
+    repeat('e', 64), jsonb_build_object('productCode', 'threshold-override-contract',
+      'productionThreshold', 9, 'expectedUpdatedAt', v_updated_at), repeat('e', 64)
+  );
+  if v_result->>'replay' <> 'true' then raise exception 'threshold idempotency replay mismatch'; end if;
+  if (select production_threshold from public.product_registry where product_code = 'threshold-override-contract') <> 9
+     or (select count(*) from public.admin_audit_events where action = 'drop.production_threshold_changed'
+       and entity_id = 'threshold-override-contract') <> 1 then
+    raise exception 'threshold change must be stored and audited exactly once';
   end if;
 end
 $contract$;

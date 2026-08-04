@@ -96,8 +96,8 @@ function emptySnapshot() {
 
 function capabilities() {
   return {
-    migration_count: 2,
-    migration_total: 2,
+    migration_count: 6,
+    migration_total: 6,
     owner_capable: true,
     protected_triggers_enabled: true,
   }
@@ -219,15 +219,15 @@ test('owner SQL is sent on stdin and credentials never enter process arguments',
   assert.equal(invocation.options.env.SUPABASE_SERVICE_ROLE_KEY, undefined)
 })
 
-test('all fourteen scenarios satisfy fixture, schema and lifecycle contracts', () => {
+test('all sixteen scenarios satisfy fixture, schema and lifecycle contracts', () => {
   const snapshot = baselineSnapshot()
   const result = validateSnapshot(snapshot, { definition, managerUserId: managerId })
-  assert.equal(definition.scenarios.length, 14)
+  assert.equal(definition.scenarios.length, 16)
   assert.deepEqual(result.retained, {
-    admin_audit_events: 3,
-    email_delivery_events: 3,
-    entity_events: 3,
-    operational_email_attempts: 3,
+    admin_audit_events: 4,
+    email_delivery_events: 4,
+    entity_events: 4,
+    operational_email_attempts: 4,
   })
 })
 
@@ -293,10 +293,10 @@ test('limited cleanup removes only mutable fixtures and retains append-only hist
   })
   assert.equal(state.snapshot.drop_interest_requests.length, 0)
   assert.equal(state.snapshot.orders.length, 0)
-  assert.equal(state.snapshot.operational_email_attempts.length, 3)
-  assert.equal(state.snapshot.admin_audit_events.length, 3)
-  assert.equal(state.snapshot.email_delivery_events.length, 3)
-  assert.equal(state.snapshot.entity_events.length, 3)
+  assert.equal(state.snapshot.operational_email_attempts.length, 4)
+  assert.equal(state.snapshot.admin_audit_events.length, 4)
+  assert.equal(state.snapshot.email_delivery_events.length, 4)
+  assert.equal(state.snapshot.entity_events.length, 4)
   validateCleanupSnapshot(state.snapshot, { definition, managerUserId: managerId })
 })
 

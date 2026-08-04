@@ -3,19 +3,23 @@ import type { OrderFlowCard, OrderFlowStage } from './contracts'
 export const orderFlowStageMeta: Record<OrderFlowStage, { index: string; label: string; tone: string }> = {
   new: { index: '01', label: 'New', tone: 'blue' },
   interest: { index: '02', label: 'Interest', tone: 'coral' },
-  ready_to_invite: { index: '03', label: 'Ready to invite', tone: 'amber' },
-  awaiting_payment: { index: '04', label: 'Awaiting payment', tone: 'violet' },
-  paid_to_ship: { index: '05', label: 'Paid · to ship', tone: 'green' },
-  shipped: { index: '06', label: 'Shipped', tone: 'teal' },
+  awaiting_payment: { index: '03', label: 'Awaiting payment', tone: 'violet' },
+  paid_to_ship: { index: '04', label: 'Paid · to ship', tone: 'green' },
+  shipped: { index: '05', label: 'Shipped', tone: 'teal' },
 }
 
-export type BoardPrimaryAction = 'Process' | 'Send' | 'Ship' | 'Close'
+export type BoardPrimaryAction = 'Process' | 'Send invite' | 'Ship' | 'Close'
+
+export function activeBoardStage(stage: string): OrderFlowStage | 'closed' {
+  return stage === 'ready_to_invite' ? 'interest' : stage as OrderFlowStage | 'closed'
+}
 
 export function primaryAction(card: OrderFlowCard): BoardPrimaryAction | null {
-  if (card.stage === 'new') return 'Process'
-  if (card.stage === 'ready_to_invite') return 'Send'
-  if (card.stage === 'paid_to_ship') return 'Ship'
-  if (card.stage === 'shipped' && card.delivery_confirmed_at) return 'Close'
+  const stage = activeBoardStage(String(card.stage))
+  if (stage === 'new') return 'Process'
+  if (stage === 'interest') return 'Send invite'
+  if (stage === 'paid_to_ship') return 'Ship'
+  if (stage === 'shipped' && card.delivery_confirmed_at) return 'Close'
   return null
 }
 
@@ -39,22 +43,22 @@ export function shortDate(value: string | null) {
 }
 
 export function cardStatusLine(card: OrderFlowCard, now = Date.now()) {
-  if (card.stage === 'new') return relativeTime(card.created_at, now)
-  if (card.stage === 'interest') return card.production_threshold
-    ? 'Interest registered · pending drop'
-    : 'Pending drop · threshold not configured'
-  if (card.stage === 'ready_to_invite') {
-    if (card.invitation_delivery_status === 'failed') return 'Invitation failed · review required'
-    if (card.invitation_status === 'expired') return 'Invitation expired · resend available'
-    return 'Drop open · invitation ready'
+  const stage = activeBoardStage(String(card.stage))
+  if (stage === 'new') return relativeTime(card.created_at, now)
+  if (stage === 'interest') {
+    if (card.invitation_delivery_status === 'failed') return 'Invitation failed · retry safely'
+    if (card.invitation_delivery_status === 'suppressed') return 'Invitation suppressed · retry when delivery is available'
+    if (card.invitation_delivery_status === 'pending') return 'Invitation delivery pending · refresh before retry'
+    if (card.invitation_status === 'expired') return 'Invitation expired · send a new invitation'
+    return 'Interest registered'
   }
-  if (card.stage === 'awaiting_payment') {
+  if (stage === 'awaiting_payment') {
     const expiry = shortDate(card.invitation_expires_at)
     if (card.payment_status && ['failed', 'expired', 'canceled', 'unknown'].includes(card.payment_status)) return `Payment ${card.payment_status} · needs attention`
     return expiry ? `Invitation sent · expires ${expiry}` : `Payment ${card.payment_status ?? 'pending'} · updates automatically`
   }
-  if (card.stage === 'paid_to_ship') return `Paid · ${card.fulfilment_status?.replaceAll('_', ' ') ?? 'address confirmed'}`
-  if (card.stage === 'shipped') {
+  if (stage === 'paid_to_ship') return `Paid · ${card.fulfilment_status?.replaceAll('_', ' ') ?? 'address confirmed'}`
+  if (stage === 'shipped') {
     if (card.delivery_confirmed_at) return 'Delivery confirmed · ready to close'
     if (card.tracking_number) return 'Shipped · tracking available'
     return 'Shipped · awaiting delivery confirmation'
@@ -62,14 +66,24 @@ export function cardStatusLine(card: OrderFlowCard, now = Date.now()) {
   return 'Closed · archived'
 }
 
+export function thresholdStatusLine(card: OrderFlowCard) {
+  if (activeBoardStage(String(card.stage)) !== 'interest') return null
+  if (card.production_threshold === null) return 'Threshold not configured'
+  const interested = Number(card.qualified_units ?? 0)
+  const threshold = card.production_threshold
+  if (card.threshold_reached) return `${interested} / ${threshold} interested · Threshold reached`
+  const needed = Number(card.units_needed ?? Math.max(threshold - interested, 0))
+  return `${interested} / ${threshold} interested · ${needed} more needed`
+}
+
 export function previewPayloadForCard(card: OrderFlowCard, action: BoardPrimaryAction | 'Confirm delivery') {
   if (action === 'Process') return { action: 'board.process.preview', sourceType: card.source_type, sourceId: card.source_id, expectedVersion: card.board_version }
-  if (action === 'Send') return { action: 'invitation.preview', reservationId: card.source_id }
+  if (action === 'Send invite') return { action: 'invitation.preview', reservationId: card.source_id }
   if (action === 'Confirm delivery') return { action: 'delivery.confirm.preview', sourceId: card.source_id, orderId: card.order_id, expectedVersion: card.board_version }
   if (action === 'Close') return { action: 'board.close.preview', sourceId: card.source_id, orderId: card.order_id, expectedVersion: card.board_version }
   return null
 }
 
 export function cardsByStage(cards: OrderFlowCard[]) {
-  return Object.fromEntries(Object.keys(orderFlowStageMeta).map((stage) => [stage, cards.filter((card) => card.stage === stage)])) as Record<OrderFlowStage, OrderFlowCard[]>
+  return Object.fromEntries(Object.keys(orderFlowStageMeta).map((stage) => [stage, cards.filter((card) => activeBoardStage(String(card.stage)) === stage)])) as Record<OrderFlowStage, OrderFlowCard[]>
 }

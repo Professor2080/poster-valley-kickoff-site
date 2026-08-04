@@ -22,27 +22,31 @@ The server derives one phase, in this precedence order:
 | Board phase | Server-owned evidence |
 | --- | --- |
 | New | No Process work marker and no historical downstream lifecycle evidence. A fresh interest stays here until `Process`. |
-| Interest | Processed, while the product lifecycle remains `interest`. |
-| Ready to invite | The drop lifecycle is `preorder` and no invitation/payment state has taken precedence. |
+| Interest | Processed and no invitation has been demonstrably sent. This remains the active phase whether or not the drop threshold has been reached. |
 | Awaiting payment | An invitation has been sent/opened/started or an order is in a non-paid payment lifecycle. Mollie/webhook updates move this automatically. |
 | Paid · to ship | Order status is `paid` and a Mollie payment has status `paid`, provider ID, webhook timestamp, paid timestamp, exact order total and currency. |
 | Shipped | The same paid evidence exists and fulfilment is `shipped`. |
 | Closed | A manager confirmed delivery and then explicitly closed the item. Closed cards are excluded by default and remain searchable. |
 
 Cancelled, expired, failed, duplicate-invitation, origin-review, shipping-email and reconciliation
-conditions remain visible through `Needs attention`; they are not silently hidden or repaired.
+conditions remain visible through `Needs attention`; they are not silently hidden or repaired. An
+unsent Interest card also derives Attention when its drop threshold is reached. That status is
+computed from current threshold, count and delivery evidence rather than stored permanently, so it
+disappears as soon as that card's invitation is successfully sent. A failed or suppressed delivery
+continues to receive Attention and remains in Interest for a safe retry.
 
 ## Actions and authority
 
 - `Process` is operator-safe and writes only `admin_order_flow_state`. The server derives the next
   phase; the browser cannot submit a target phase.
-- `Open invitations` is manager-only and available only when a configured production threshold is
-  reached by customer-origin, non-cancelled, reviewed units. It changes the product lifecycle from
-  `interest` to `preorder`; it sends no email. The mutation locks the drop's reservation rows
-  before recounting so a concurrent manager origin correction cannot invalidate the threshold
-  snapshot.
-- `Send` reuses the existing invitation preview/confirm/send action, including server-owned price,
-  shipping, expiry, idempotency, role and delivery safeguards.
+- `Send invite` is always available to a manager on an eligible Interest card. It reuses the
+  existing invitation preview/confirm/send action, including server-owned price, shipping, expiry,
+  idempotency, role and delivery safeguards. Below threshold, the confirmation explicitly shows
+  `Threshold not reached: X/Y interests. Send invite anyway?`; a missing threshold is disclosed but
+  does not block the action. Only a provider-accepted delivery moves the card to Awaiting payment.
+- `Set threshold` and `Edit threshold` live in the drop overview. The manager-only mutation is
+  confirmation-bound, version-checked, idempotent and audited; it changes only the selected
+  product's stored threshold.
 - `Ship` opens the existing order detail and fulfilment controls. The existing paid-only check,
   carrier/tracking validation and shipping-confirmation path remain authoritative.
 - `Confirm delivery` and `Close` are manager-only, version-bound, separately confirmed and audited.
@@ -82,10 +86,18 @@ except Eurofighter A2. If historical invitations already exist when the board mi
 their earliest timestamp still proves that invitations were already open and the product lifecycle
 is preserved as `preorder`.
 
-The drop overview and `drop.open` preview both consume the stored threshold returned by
-`admin_order_flow_drop_v1`. For Eurofighter this yields `qualified units / 5` and the corresponding
-`... more needed` value without a frontend-specific threshold constant. The qualified-unit filter
-is unchanged: only customer-origin, reviewed, non-cancelled reservation quantities count.
+The drop overview, cards and invitation preview all consume the stored threshold returned by
+`admin_order_flow_drop_v1`. For Eurofighter this yields `X / 5 interested`, the corresponding
+`Z more needed`, or `Threshold reached`, without a frontend-specific threshold constant. A
+historical missing value is shown as `Threshold not configured` with a reachable Set threshold
+action. The qualified-unit filter is unchanged: only customer-origin, reviewed, non-cancelled
+reservation quantities count. Counts and thresholds remain isolated by the canonical drop mapping.
+
+The removed `Ready to invite` phase is retained only as database-level compatibility for older
+clients and already-published lifecycle actions. The current read RPC rejects it as an active stage,
+the current projection folds any legacy `preorder` item into Interest until invitation evidence is
+present, and the browser defensively folds a stale legacy response into Interest during a
+database-first rollout.
 
 The board derives historical Process evidence from existing downstream states so already handled
 records do not regress into New. A newly submitted interest has no such evidence and requires the
@@ -93,9 +105,10 @@ explicit Process action.
 
 ## Verification and release
 
-`supabase/tests/order-flow-board-contract.sql` proves New-until-Process, server-derived progression,
-threshold and manager gates, exact paid evidence, provider event creation, Shipped, delivery
-confirmation and Closed archive behavior inside a rolled-back local fixture. The baseline runner
+`supabase/tests/order-flow-board-contract.sql` proves New-until-Process, under-threshold and
+reached-threshold invitations, failed-versus-successful delivery progression, derived Attention,
+missing-threshold compatibility, threshold administration, exact paid evidence, provider event
+creation, Shipped, delivery confirmation and Closed archive behavior inside a rolled-back local fixture. The baseline runner
 applies every active migration twice from `template0`, validates catalog/ACL fingerprints and runs
 the permanent contracts.
 

@@ -195,6 +195,32 @@
       "label": "Record-origin review",
       "ids": { "reservation": "51000000-0000-4000-8000-000000000014" },
       "reservation": { "reservation_status": "new", "status": "new", "record_origin_needs_review": true }
+    },
+    {
+      "number": 15,
+      "key": "threshold_reached_interest",
+      "label": "Threshold reached; invitation not sent",
+      "drop_slug": "eurofighter-typhoon",
+      "ids": { "reservation": "51000000-0000-4000-8000-000000000015" },
+      "reservation": { "reservation_status": "contacted", "status": "contacted", "record_origin": "customer", "quantity": 5 }
+    },
+    {
+      "number": 16,
+      "key": "invitation_failed_interest",
+      "label": "Invitation failed; retry available",
+      "drop_slug": "eurofighter-typhoon",
+      "ids": {
+        "reservation": "51000000-0000-4000-8000-000000000016",
+        "invitation": "52000000-0000-4000-8000-000000000016",
+        "email_attempt": "55000000-0000-4000-8000-000000000016",
+        "delivery_event": "56000000-0000-4000-8000-000000000016",
+        "audit_event": "57000000-0000-4000-8000-000000000016",
+        "entity_event": "58000000-0000-4000-8000-000000000016"
+      },
+      "reservation": { "reservation_status": "contacted", "status": "contacted", "record_origin": "customer", "quantity": 1 },
+      "invitation": { "status": "draft" },
+      "email_attempt": { "template": "order_invitation", "delivery_status": "failed" },
+      "append_history": true
     }
   ]
 }
