@@ -120,6 +120,23 @@ npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-ro
 npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-role --remove-manager-user
 ```
 
+An authenticated Order Flow acceptance run uses a separate fail-closed acknowledgement. Use it
+only after the documented matrix has produced exactly the expected scenario 01 Process work,
+scenario 10 delivery/close work and one scenario 16 suppressed invitation attempt:
+
+```powershell
+npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance
+npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance --confirm
+```
+
+That acknowledgement is not a general allowance for suppressed email. Before any delete, the
+tooling requires the exact four completed action/idempotency records, two Board work records and
+their exact scenario relationships. It also requires exactly one additional scenario 16
+`order_invitation` attempt and one correlated delivery event, both `suppressed`, with no provider
+ID or sent evidence. Zero, two or more candidates, another scenario/invitation, another template or
+status, changed delivery evidence, or any unrelated record blocks the run. Random runtime IDs are
+accepted only through those semantic relationships; they are never added to the fixture allowlist.
+
 Manager removal is independent and explicit. `--remove-manager-user` requires
 `--remove-manager-role` plus a process-scoped `SUPABASE_SERVICE_ROLE_KEY`, and performs only a
 Supabase soft-delete of the exact fixture-owned Auth user; a reused user is never deleted. The
@@ -127,9 +144,16 @@ local ledger is `.tmp/clean-staging-seed-ledger.json` and contains only fixture/
 UUIDs, table names and timestamps.
 
 Limited cleanup removes marked mutable reservations, invitations, orders, payments and unreferenced
-delivery attempts. It never deletes `product_registry`, migration history or append-only audit,
-entity and delivery events. Delivery attempts referenced by retained delivery events also remain.
-Every retained row is deterministic and marked, so reseeding does not grow history without bound.
+delivery attempts. For an explicitly acknowledged Order Flow acceptance run it also removes only
+the exact acceptance-created Board work and completed idempotency rows, before removing their
+synthetic parents. It never deletes `product_registry`, migration history or append-only audit,
+entity and delivery events. Delivery attempts referenced by retained delivery events also remain;
+therefore the scenario 16 suppressed attempt and its delivery proof remain after their
+`interest_request_id` is cleared by the existing `ON DELETE SET NULL` foreign key. The delivery
+event keeps its `ON DELETE RESTRICT` reference to that attempt. Append-only triggers stay enabled.
+The dry-run reports mutable deletes separately from retained history, and the confirmed transaction
+rechecks the exact selection under locks before deleting. A complete reset remains the disposable
+rebuild route.
 
 Fixtures remain available throughout Pascal's review. Operational email stays suppressed and
 Mollie is never called. A full reset is deliberately not automated: pause or replace Clean Staging,

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
+  ORDER_FLOW_ACCEPTANCE_FLAG,
   assertAuthInventory,
   assertDatabaseAuthInventory,
   assertExecutionContext,
@@ -38,6 +39,7 @@ export async function runCleanup({
   const confirmed = flags.has('--confirm')
   const removeManagerRole = flags.has('--remove-manager-role')
   const removeManagerUser = flags.has('--remove-manager-user')
+  const expectOrderFlowAcceptance = flags.has(ORDER_FLOW_ACCEPTANCE_FLAG)
   if (removeManagerUser && !removeManagerRole) {
     throw new Error('--remove-manager-user also requires --remove-manager-role.')
   }
@@ -72,9 +74,10 @@ export async function runCleanup({
   const definition = loadFixtureDefinition()
   const rows = materializeFixtures(definition, managerUserId)
   const before = sqlQuery(snapshotSql(), { env, root })
-  validateSnapshot(before, {
+  const validated = validateSnapshot(before, {
     allowMissing: true,
     definition,
+    expectOrderFlowAcceptance,
     managerUserId,
     requireManager: false,
   })
@@ -91,10 +94,17 @@ export async function runCleanup({
   output(`  Manager Auth user: ${plan.manager_user}`)
   if (!confirmed) return { dryRun: true, plan, snapshot: before }
 
-  sqlRun(cleanupSql(rows, managerUserId, { removeManagerRole }), { env, root })
+  sqlRun(
+    cleanupSql(rows, managerUserId, {
+      acceptance: validated.acceptance,
+      removeManagerRole,
+    }),
+    { env, root },
+  )
   const after = sqlQuery(snapshotSql(), { env, root })
   const verified = validateCleanupSnapshot(after, {
     definition,
+    expectOrderFlowAcceptance,
     managerRoleExpected,
     managerUserId,
   })

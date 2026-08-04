@@ -117,6 +117,14 @@ authorized PostgreSQL 17 local proof, exact Clean Staging history/dry-run/apply,
 synthetic acceptance and later a separately authorized Production migration. The application must
 not be promoted ahead of the backward-compatible database migration.
 
+The Clean Staging acceptance cleanup is explicitly run-aware. Its normal mode still rejects every
+runtime-created record. The separate `--expect-order-flow-acceptance` mode accepts only the exact
+scenario 01 Process, scenario 10 delivery/close and scenario 16 suppressed-invitation evidence
+contract. It deletes the two mutable Board work rows and four completed idempotency rows with the
+synthetic parents, but retains the correlated operational attempt plus all delivery, audit and
+entity events. This uses the existing `SET NULL` parent relation and `RESTRICT` delivery-evidence
+relation; no trigger, constraint or append-only record is changed or removed.
+
 Rollback before any remote apply is an ordinary PR revert. After an environment applies the
 migration, do not edit or delete the migration and do not drop the work table ad hoc: ship a new
 reviewed forward migration. Preserve `admin_order_flow_state`, audit events and entity events as
