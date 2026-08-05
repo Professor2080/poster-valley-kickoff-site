@@ -34,6 +34,28 @@ Every task starts with the same repository preflight and then uses exactly one o
 Database or environment drift changes the route; it is never an incidental repair inside a feature
 task. Definitions of Done and release gates are in the [release runbook](release-runbook.md).
 
+### Proportional control level
+
+The change route determines the delivery process; the control level determines the evidence needed
+for the actual diff. Choose the lowest level that covers every real effect of the change. Move to a
+higher level only when the changed code, data flow or external action requires it.
+
+| Level | Applies to | Proportional evidence |
+| --- | --- | --- |
+| **1 — text, documentation and simple UI** | Changes without API, authentication, data, payment or email impact. | Run only relevant lint, type or focused tests. Visually check the affected route when UI changes. Do not perform database, Staging or Production verification, and do not start a full security or infrastructure analysis. |
+| **2 — normal functional development** | Functionality without schema changes, real provider actions or sensitive-data handling. | Run relevant tests and a Production build when executable code changes. Use the exact Preview and targeted browser checks for only the affected routes and user flows. Do not repeat previously proven baselines that the change cannot affect. |
+| **3 — database, authentication, email or payments** | Schema, auth, payment, email, inventory, order or fulfilment changes. | Add separately authorized Clean Staging verification plus targeted migration, authorization and integration tests. Use synthetic data, suppressed email and provider test modes only. Check Production identity or credentials only when a separately authorized Production release actually includes a Production action. |
+| **4 — Production or destructive actions** | Production data mutations, destructive migrations, real payments, real email, refunds or provider configuration. | Require explicit authorization for the exact action, complete the relevant release and rollback checks, verify identity and credentials fail-closed, and prefer transactional or otherwise recoverable execution. |
+
+Already proven facts and baselines may be reused while the underlying relevant code and
+infrastructure remain unchanged. Stop a task only for a concrete problem that materially prevents
+safety, data integrity or correct delivery. Record non-critical observations as follow-up notes;
+they do not block the task.
+
+Do not expand a bounded task into a general audit, upgrade or cleanup. Do not run every conceivable
+check when a smaller relevant set provides sufficient evidence. Final reports stay compact:
+result, changed files, relevant checks, PR link and concrete attention points only.
+
 ### Fast path
 
 Use this only when the diff has no database, authentication/authorization, payment, operational
@@ -122,6 +144,11 @@ open/update a PR, merge or deploy.
 
 ## Local verification
 
+Select local checks from the proportional control level above. A documentation-only Level 1 change
+does not require an install, full application test, Production build, browser run, Preview or
+database access unless the changed document has a focused repository check. Required CI may still
+run after publication, but it does not make unrelated local verification necessary.
+
 `npm run verify -- <contract>` is PowerShell-friendly and runs:
 
 - repository preflight;
@@ -174,6 +201,17 @@ The Vercel budget treats non-underscore `.js`, `.mjs`, `.cjs`, `.ts`, `.mts` and
 `api/` as deployable entrypoints, including nested routes. Underscore-prefixed modules and TypeScript
 declaration files are helpers. Any other file form under `api/` fails closed until explicitly
 classified.
+
+### Vercel Function budget
+
+Production currently uses 12 of 12 Vercel Functions. Before adding a backend endpoint, determine
+whether it creates another deployable function. Extend an existing grouped handler when that is
+logical and maintainable; never add a thirteenth function silently. A larger handler architecture
+change or Vercel subscription change requires a separate decision.
+
+Run `npm run check:function-budget` when API entrypoints, Vercel routing or related function
+classification changes. Documentation-only and purely frontend work does not require a fresh full
+function-budget investigation.
 
 Local and CI whitespace checks use different evidence. Local verification checks staged and
 unstaged worktree changes; the repository text scan covers untracked text. CI fetches full history
