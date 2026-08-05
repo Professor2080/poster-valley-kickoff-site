@@ -4,6 +4,11 @@ This runbook records the Clean Staging operating model and transition plan. Clea
 that fact does not authorize linking, database access, migration, Vercel configuration, provider
 calls or deployment.
 
+For safe Supabase Clean Staging access from Codex, follow only the
+[central DeveloperToolchain workflow](https://github.com/Professor2080/DeveloperToolchain/blob/main/docs/supabase-session-pooler-codex.md)
+via `scripts/start-codex-with-supabase.ps1`; this runbook does not duplicate that procedure or its
+safety contract.
+
 ## Recorded status on 2026-08-01
 
 Repository and release facts recorded for this operating-model task:
