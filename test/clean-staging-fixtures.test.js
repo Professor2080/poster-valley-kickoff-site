@@ -14,6 +14,7 @@ import {
   CLEAN_STAGING_REF,
   EXECUTION_FLAG,
   FIXTURE_SET,
+  ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG,
   ORDER_FLOW_ACCEPTANCE_FLAG,
   assertDatabaseAuthInventory,
   assertExecutionContext,
@@ -358,6 +359,13 @@ function acceptanceSnapshot() {
   return snapshot
 }
 
+function postCleanupAcceptanceSnapshot({ reseed = false } = {}) {
+  const state = { snapshot: acceptanceSnapshot() }
+  cleanupHarness(state)()
+  if (reseed) seedHarness(state)()
+  return state.snapshot
+}
+
 test('wrong project and missing environment variables are blocked', () => {
   assert.doesNotThrow(
     () => assertExecutionContext({ env: runtimeEnv(), flags: new Set([EXECUTION_FLAG]) }),
@@ -594,6 +602,215 @@ test('any unrelated non-synthetic attempt remains a fail-closed blocker', () => 
   )
 })
 
+test('post-cleanup phase validates the exact retained chain with mutable parents absent', () => {
+  const snapshot = postCleanupAcceptanceSnapshot()
+  const result = validateSnapshot(snapshot, {
+    acceptancePhase: 'after_cleanup',
+    allowMissing: true,
+    definition,
+    expectOrderFlowAcceptance: true,
+    managerUserId: managerId,
+  })
+  assert.equal(result.acceptance.phase, 'after_cleanup')
+  assert.equal(result.acceptance.attempt.interest_request_id, null)
+  assert.equal(snapshot.drop_interest_requests.length, 0)
+  assert.equal(snapshot.order_invitations.length, 0)
+  assert.equal(snapshot.orders.length, 0)
+  assert.equal(snapshot.payments.length, 0)
+  assert.equal(snapshot.admin_operation_idempotency.length, 0)
+  assert.equal(snapshot.admin_order_flow_state.length, 0)
+  assert.deepEqual(result.retained, {
+    admin_audit_events: 8,
+    email_delivery_events: 5,
+    entity_events: 8,
+    operational_email_attempts: 5,
+  })
+})
+
+test('post-cleanup attempt must exist exactly once and keep its complete semantics', () => {
+  const missing = postCleanupAcceptanceSnapshot()
+  missing.operational_email_attempts.pop()
+  assert.throws(
+    () => validateOrderFlowAcceptanceEvidence(missing, {
+      definition,
+      managerUserId: managerId,
+      phase: 'after_cleanup',
+    }),
+    /exactly one additional delivery attempt/,
+  )
+
+  for (const [field, value] of [
+    ['action', 'invitation.retry'],
+    ['template_version', 'v2'],
+    ['entity_type', 'order'],
+    ['delivery_status', 'failed'],
+    ['expires_at', null],
+    ['interest_request_id', definition.scenarios[15].ids.reservation],
+  ]) {
+    const changed = postCleanupAcceptanceSnapshot()
+    changed.operational_email_attempts.at(-1)[field] = value
+    assert.throws(
+      () => validateOrderFlowAcceptanceEvidence(changed, {
+        definition,
+        managerUserId: managerId,
+        phase: 'after_cleanup',
+      }),
+      /scenario 16 suppressed evidence/,
+    )
+  }
+})
+
+test('post-cleanup chain rejects a wrong actor or provider evidence', () => {
+  for (const mutate of [
+    (snapshot) => { snapshot.operational_email_attempts.at(-1).actor_user_id = '50000000-0000-4000-8000-000000000099' },
+    (snapshot) => { snapshot.admin_audit_events.at(-1).actor_user_id = '50000000-0000-4000-8000-000000000099' },
+    (snapshot) => { snapshot.operational_email_attempts.at(-1).provider_id = 'provider-evidence' },
+    (snapshot) => { snapshot.email_delivery_events.at(-1).provider_id = 'provider-evidence' },
+  ]) {
+    const snapshot = postCleanupAcceptanceSnapshot()
+    mutate(snapshot)
+    assert.throws(
+      () => validateOrderFlowAcceptanceEvidence(snapshot, {
+        definition,
+        managerUserId: managerId,
+        phase: 'after_cleanup',
+      }),
+      /suppressed evidence|evidence changed|provider evidence/,
+    )
+  }
+
+  const inactiveManager = postCleanupAcceptanceSnapshot()
+  inactiveManager.admin_roles = []
+  assert.throws(
+    () => validateSnapshot(inactiveManager, {
+      acceptancePhase: 'after_cleanup',
+      allowMissing: true,
+      definition,
+      expectOrderFlowAcceptance: true,
+      managerUserId: managerId,
+    }),
+    /Exactly one expected active manager/,
+  )
+})
+
+test('post-cleanup chain rejects missing or extra delivery, audit and entity evidence', () => {
+  for (const mutate of [
+    (snapshot) => { snapshot.email_delivery_events.pop() },
+    (snapshot) => { snapshot.email_delivery_events.push({ ...clone(snapshot.email_delivery_events.at(-1)), id: '56000000-0000-4000-8000-000000000099' }) },
+    (snapshot) => { snapshot.admin_audit_events.pop() },
+    (snapshot) => { snapshot.admin_audit_events.push({ ...clone(snapshot.admin_audit_events.at(-1)), id: '57000000-0000-4000-8000-000000000099' }) },
+    (snapshot) => { snapshot.entity_events.pop() },
+    (snapshot) => { snapshot.entity_events.push({ ...clone(snapshot.entity_events.at(-1)), id: '58000000-0000-4000-8000-000000000099' }) },
+  ]) {
+    const snapshot = postCleanupAcceptanceSnapshot()
+    mutate(snapshot)
+    assert.throws(
+      () => validateOrderFlowAcceptanceEvidence(snapshot, {
+        definition,
+        managerUserId: managerId,
+        phase: 'after_cleanup',
+      }),
+      /exactly one additional delivery event|action history count changed/,
+    )
+  }
+})
+
+test('post-cleanup event payloads and idempotency fingerprints are exact', () => {
+  for (const mutate of [
+    (snapshot) => { snapshot.admin_audit_events.at(-1).details.unexpected = true },
+    (snapshot) => { snapshot.entity_events.at(-1).payload.unexpected = true },
+    (snapshot) => { snapshot.entity_events.at(-1).idempotency_key = 'different-acceptance-fingerprint' },
+  ]) {
+    const snapshot = postCleanupAcceptanceSnapshot()
+    mutate(snapshot)
+    assert.throws(
+      () => validateOrderFlowAcceptanceEvidence(snapshot, {
+        definition,
+        managerUserId: managerId,
+        phase: 'after_cleanup',
+      }),
+      /payload or fingerprint changed|evidence changed/,
+    )
+  }
+})
+
+test('post-cleanup mode rejects unexpected mutable records', () => {
+  const snapshot = postCleanupAcceptanceSnapshot()
+  snapshot.drop_interest_requests.push({
+    ...materializeFixtures(definition, managerId).drop_interest_requests[0],
+    id: '51000000-0000-4000-8000-000000000099',
+  })
+  assert.throws(
+    () => validateSnapshot(snapshot, {
+      acceptancePhase: 'after_cleanup',
+      allowMissing: true,
+      definition,
+      expectOrderFlowAcceptance: true,
+      managerUserId: managerId,
+    }),
+    /either fully absent or fully re-seeded|Unexpected drop_interest_requests/,
+  )
+
+  const partial = postCleanupAcceptanceSnapshot({ reseed: true })
+  partial.orders.pop()
+  assert.throws(
+    () => validateSnapshot(partial, {
+      acceptancePhase: 'after_cleanup',
+      allowMissing: true,
+      definition,
+      expectOrderFlowAcceptance: true,
+      managerUserId: managerId,
+    }),
+    /either fully absent or fully re-seeded/,
+  )
+})
+
+test('default and pre-cleanup modes still reject retained post-cleanup evidence', async () => {
+  const snapshot = postCleanupAcceptanceSnapshot()
+  assert.throws(
+    () => validateSnapshot(snapshot, {
+      allowMissing: true,
+      definition,
+      managerUserId: managerId,
+    }),
+    /Unexpected operational_email_attempts|Unexpected admin_audit_events/,
+  )
+  assert.throws(
+    () => validateOrderFlowAcceptanceEvidence(snapshot, {
+      definition,
+      managerUserId: managerId,
+      phase: 'before_cleanup',
+    }),
+    /parent fixture is missing/,
+  )
+  let writes = 0
+  await assert.rejects(
+    runCleanup({
+      argv: [EXECUTION_FLAG],
+      env: runtimeEnv(),
+      output: () => {},
+      sqlQuery: queryHarness({ snapshot }),
+      sqlRun: () => { writes += 1 },
+    }),
+    /Unexpected operational_email_attempts|Unexpected admin_audit_events/,
+  )
+  await assert.rejects(
+    runCleanup({
+      argv: [
+        EXECUTION_FLAG,
+        ORDER_FLOW_ACCEPTANCE_FLAG,
+        ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG,
+      ],
+      env: runtimeEnv(),
+      output: () => {},
+      sqlQuery: queryHarness({ snapshot }),
+      sqlRun: () => { writes += 1 },
+    }),
+    /exactly one Order Flow acceptance phase flag/,
+  )
+  assert.equal(writes, 0)
+})
+
 test('seed is idempotent and append-only rows do not grow on a second run', async (t) => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pv-clean-staging-seed-'))
   t.after(() => rmSync(root, { force: true, recursive: true }))
@@ -623,6 +840,67 @@ test('seed is idempotent and append-only rows do not grow on a second run', asyn
   const ledgerText = readFileSync(path.join(root, '.tmp/clean-staging-seed-ledger.json'), 'utf8')
   assert.doesNotMatch(ledgerText, /@|manager@example|synthetic-placeholder|service-role-test-key/)
   assertLedgerSafe(JSON.parse(ledgerText))
+})
+
+test('seed and verify preserve post-cleanup proof only with the specific phase flag', async (t) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pv-clean-staging-post-cleanup-seed-'))
+  t.after(() => rmSync(root, { force: true, recursive: true }))
+  const state = { snapshot: postCleanupAcceptanceSnapshot() }
+  const proofAttemptId = state.snapshot.operational_email_attempts.at(-1).id
+  const proofEventId = state.snapshot.email_delivery_events.at(-1).id
+  let writes = 0
+  const baseOptions = {
+    env: runtimeEnv(),
+    output: () => {},
+    root,
+    sqlQuery: queryHarness(state),
+  }
+
+  await assert.rejects(
+    runSeed({
+      ...baseOptions,
+      argv: [EXECUTION_FLAG],
+      sqlRun: () => { writes += 1 },
+    }),
+    /Unexpected operational_email_attempts|Unexpected admin_audit_events/,
+  )
+  await assert.rejects(
+    runSeed({
+      ...baseOptions,
+      argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_FLAG],
+      sqlRun: () => { writes += 1 },
+    }),
+    /pre-cleanup only/,
+  )
+  assert.equal(writes, 0)
+
+  await runSeed({
+    ...baseOptions,
+    argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG],
+    sqlRun: seedHarness(state),
+  })
+  assert.equal(state.snapshot.drop_interest_requests.length, 16)
+  assert.equal(state.snapshot.operational_email_attempts.length, 6)
+  assert.equal(
+    state.snapshot.operational_email_attempts.find((row) => row.id === proofAttemptId)
+      .interest_request_id,
+    null,
+  )
+  assert.equal(state.snapshot.email_delivery_events.some((row) => row.id === proofEventId), true)
+
+  await assert.rejects(
+    runVerify({ ...baseOptions, argv: [EXECUTION_FLAG] }),
+    /Unexpected operational_email_attempts|Unexpected admin_audit_events/,
+  )
+  await assert.rejects(
+    runVerify({ ...baseOptions, argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_FLAG] }),
+    /pre-cleanup only/,
+  )
+  const verified = await runVerify({
+    ...baseOptions,
+    argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG],
+  })
+  assert.equal(verified.verified.acceptance.phase, 'after_cleanup')
 })
 
 test('database Auth inventory requires one confirmed fixture-owned identity', () => {
@@ -747,6 +1025,44 @@ test('acceptance cleanup removes only exact mutable work and retains attempt and
   })
 })
 
+test('post-cleanup phase supports dry-run, reseed cleanup and repeated post-cleanup verification', async () => {
+  const postCleanupState = { snapshot: postCleanupAcceptanceSnapshot() }
+  let writes = 0
+  const dryRun = await runCleanup({
+    argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG],
+    env: runtimeEnv(),
+    output: () => {},
+    sqlQuery: queryHarness(postCleanupState),
+    sqlRun: () => { writes += 1 },
+  })
+  assert.equal(dryRun.dryRun, true)
+  assert.equal(dryRun.plan.delete.drop_interest_requests, 0)
+  assert.equal(dryRun.plan.delete.operational_email_attempts, 0)
+  assert.equal(writes, 0)
+
+  const reseededState = { snapshot: postCleanupAcceptanceSnapshot({ reseed: true }) }
+  const result = await runCleanup({
+    argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG, '--confirm'],
+    env: runtimeEnv(),
+    output: () => {},
+    sqlQuery: queryHarness(reseededState),
+    sqlRun: cleanupHarness(reseededState),
+  })
+  assert.equal(result.dryRun, false)
+  assert.equal(reseededState.snapshot.drop_interest_requests.length, 0)
+  assert.equal(reseededState.snapshot.operational_email_attempts.length, 5)
+  assert.equal(result.verified.acceptance.phase, 'after_cleanup')
+})
+
+test('CLI help describes both phases without requiring environment or database access', async () => {
+  for (const run of [runSeed, runVerify, runCleanup]) {
+    const output = []
+    const result = await run({ argv: ['--help'], env: {}, output: (line) => output.push(line) })
+    assert.equal(result.help, true)
+    assert.match(output.join('\n'), /after-cleanup|post-cleanup/i)
+  }
+})
+
 test('acceptance cleanup flag fails when the expected run evidence is absent', async () => {
   const state = { snapshot: baselineSnapshot() }
   let writes = 0
@@ -845,6 +1161,18 @@ test('generated SQL never changes schema, grants or append-only triggers', () =>
     managerUserId: managerId,
   })
   const acceptanceCleanup = cleanupSql(rows, managerId, { acceptance })
+  const postCleanupSnapshot = postCleanupAcceptanceSnapshot()
+  const postCleanupAcceptance = validateOrderFlowAcceptanceEvidence(postCleanupSnapshot, {
+    definition,
+    managerUserId: managerId,
+    phase: 'after_cleanup',
+  })
+  const acceptanceAwareSeed = seedSql(rows, managerId, {
+    acceptance: postCleanupAcceptance,
+  })
+  const repeatedCleanup = cleanupSql(rows, managerId, {
+    acceptance: postCleanupAcceptance,
+  })
   assert.doesNotMatch(seed, /(?:^|\n)\s*(?:alter|create|drop|grant|revoke)\s/i)
   assert.doesNotMatch(cleanup, /session_replication_role|disable\s+trigger/i)
   assert.doesNotMatch(acceptanceCleanup, /session_replication_role|disable\s+trigger/i)
@@ -862,4 +1190,32 @@ test('generated SQL never changes schema, grants or append-only triggers', () =>
   assert.doesNotMatch(attemptDelete, new RegExp(acceptance.attempt.id, 'i'))
   assert.match(acceptanceCleanup, /raise exception 'acceptance_cleanup_scope_changed'/)
   assert.match(acceptanceCleanup, /raise exception 'acceptance_delivery_evidence_changed'/)
+  assert.match(acceptanceAwareSeed, /interest_request_id is not distinct from null::uuid/)
+  assert.match(acceptanceAwareSeed, /raise exception 'acceptance_cleanup_scope_changed'/)
+  assert.match(repeatedCleanup, /interest_request_id is not distinct from null::uuid/)
+  assert.doesNotMatch(acceptanceAwareSeed, /where\s*;/i)
+  assert.doesNotMatch(repeatedCleanup, /where\s*;/i)
+  assert.doesNotMatch(acceptanceAwareSeed, /not\s*\(\s*\)/i)
+  assert.doesNotMatch(repeatedCleanup, /not\s*\(\s*\)/i)
+})
+
+test('cleanup rechecks unexpected business tables inside its transaction before deleting', () => {
+  const cleanup = cleanupSql(materializeFixtures(definition, managerId), managerId)
+  const lockStatement = cleanup.match(/lock table[\s\S]*?;/i)?.[0]
+  const businessGuard = cleanup.match(
+    /do \$cleanup_business_scope_guard\$[\s\S]*?\$cleanup_business_scope_guard\$;/i,
+  )?.[0]
+
+  assert.ok(lockStatement)
+  assert.match(lockStatement, /public\.manual_shipping_quotes/i)
+  assert.match(lockStatement, /public\.newsletter_signups/i)
+  assert.ok(businessGuard)
+  assert.match(businessGuard, /exists \(select 1 from public\.manual_shipping_quotes\)/i)
+  assert.match(businessGuard, /exists \(select 1 from public\.newsletter_signups\)/i)
+  assert.match(businessGuard, /raise exception 'cleanup_business_scope_changed'/i)
+  assert.ok(cleanup.indexOf(businessGuard) < cleanup.indexOf('delete from public.'))
+  assert.match(
+    cleanup,
+    /\$cleanup_result_guard\$[\s\S]*?exists \(select 1 from public\.manual_shipping_quotes\)[\s\S]*?exists \(select 1 from public\.newsletter_signups\)/i,
+  )
 })

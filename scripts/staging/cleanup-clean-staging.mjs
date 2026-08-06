@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
+  ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG,
   ORDER_FLOW_ACCEPTANCE_FLAG,
   assertAuthInventory,
   assertDatabaseAuthInventory,
@@ -14,6 +15,7 @@ import {
   loadFixtureDefinition,
   materializeFixtures,
   ownerCapabilitySql,
+  orderFlowAcceptancePhase,
   parseFlags,
   printCounts,
   queryJson,
@@ -25,6 +27,16 @@ import {
   validateSnapshot,
 } from './clean-staging-lib.mjs'
 
+const help = `Usage: npm run staging:cleanup -- --confirm-clean-staging [--confirm] [acceptance phase]
+
+Acceptance phases (choose at most one):
+  ${ORDER_FLOW_ACCEPTANCE_FLAG}
+    Validate the exact pre-cleanup acceptance chain, including mutable Board work and parents.
+  ${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG}
+    Validate the exact retained post-cleanup chain; mutable Board work is absent and the attempt parent is null.
+
+Without an acceptance phase, every runtime-created record remains a fail-closed blocker.`
+
 export async function runCleanup({
   argv = process.argv.slice(2),
   authAdmin = null,
@@ -35,11 +47,16 @@ export async function runCleanup({
   root = process.cwd(),
 } = {}) {
   const flags = parseFlags(argv)
+  if (flags.has('--help')) {
+    output(help)
+    return { help: true }
+  }
   assertExecutionContext({ env, flags })
   const confirmed = flags.has('--confirm')
   const removeManagerRole = flags.has('--remove-manager-role')
   const removeManagerUser = flags.has('--remove-manager-user')
-  const expectOrderFlowAcceptance = flags.has(ORDER_FLOW_ACCEPTANCE_FLAG)
+  const acceptancePhase = orderFlowAcceptancePhase(flags)
+  const expectOrderFlowAcceptance = acceptancePhase !== null
   if (removeManagerUser && !removeManagerRole) {
     throw new Error('--remove-manager-user also requires --remove-manager-role.')
   }
@@ -75,11 +92,12 @@ export async function runCleanup({
   const rows = materializeFixtures(definition, managerUserId)
   const before = sqlQuery(snapshotSql(), { env, root })
   const validated = validateSnapshot(before, {
+    acceptancePhase: acceptancePhase ?? 'before_cleanup',
     allowMissing: true,
     definition,
     expectOrderFlowAcceptance,
     managerUserId,
-    requireManager: false,
+    requireManager: expectOrderFlowAcceptance,
   })
   const plan = cleanupPlan(before, { removeManagerRole, removeManagerUser })
   const managerRoleExpected =
