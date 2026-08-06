@@ -20,6 +20,8 @@ export const LEGACY_STAGING_REF = 'cdmocdodehjmcgtxicaj'
 export const FIXTURE_SET = 'PV-CLEAN-STAGING-V1'
 export const EXECUTION_FLAG = '--confirm-clean-staging'
 export const ORDER_FLOW_ACCEPTANCE_FLAG = '--expect-order-flow-acceptance'
+export const ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG =
+  '--expect-order-flow-acceptance-after-cleanup'
 export const LEDGER_PATH = '.tmp/clean-staging-seed-ledger.json'
 
 const fixtureFile = fileURLToPath(
@@ -47,6 +49,28 @@ function fail(message) {
 
 export function parseFlags(argv = process.argv.slice(2)) {
   return new Set(argv)
+}
+
+export function orderFlowAcceptancePhase(
+  flags,
+  { allowBeforeCleanup = true, allowAfterCleanup = true } = {},
+) {
+  const beforeCleanup = flags.has(ORDER_FLOW_ACCEPTANCE_FLAG)
+  const afterCleanup = flags.has(ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG)
+  if (beforeCleanup && afterCleanup) {
+    fail('Choose exactly one Order Flow acceptance phase flag.')
+  }
+  if (beforeCleanup && !allowBeforeCleanup) {
+    fail(
+      `${ORDER_FLOW_ACCEPTANCE_FLAG} is pre-cleanup only; use ${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG} for retained post-cleanup evidence.`,
+    )
+  }
+  if (afterCleanup && !allowAfterCleanup) {
+    fail(`${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG} is not valid for this command.`)
+  }
+  if (beforeCleanup) return 'before_cleanup'
+  if (afterCleanup) return 'after_cleanup'
+  return null
 }
 
 export function assertExecutionContext({ env = process.env, flags = parseFlags() } = {}) {
@@ -805,6 +829,14 @@ function exactObjectKeys(value, expected) {
   return actual.length === expected.length && actual.every((key, index) => key === expected[index])
 }
 
+function exactObject(value, expected) {
+  const keys = Object.keys(expected).sort()
+  return (
+    exactObjectKeys(value, keys) &&
+    keys.every((key) => value[key] === expected[key])
+  )
+}
+
 function assertAcceptanceIdempotencyKey(value) {
   if (
     typeof value !== 'string' ||
@@ -859,9 +891,11 @@ function assertAcceptanceEventPair({
 
 export function validateOrderFlowAcceptanceEvidence(
   snapshot,
-  { definition, managerUserId, phase = 'before' } = {},
+  { definition, managerUserId, phase = 'before_cleanup' } = {},
 ) {
-  if (!['before', 'after'].includes(phase)) fail('Acceptance cleanup phase is invalid.')
+  if (!['before_cleanup', 'after_cleanup'].includes(phase)) {
+    fail('Order Flow acceptance phase must be before_cleanup or after_cleanup.')
+  }
   const managerId = requireManagerId(managerUserId)
   const fixtureRows = materializeFixtures(definition, managerId)
   const scenario01 = scenarioByNumber(definition, 1)
@@ -890,11 +924,14 @@ export function validateOrderFlowAcceptanceEvidence(
   const parentPresent = snapshot.drop_interest_requests.some(
     (row) => row.id === scenario16.ids.reservation,
   )
-  if (phase === 'before' && !parentPresent) {
+  if (phase === 'before_cleanup' && !parentPresent) {
     fail('Acceptance cleanup scenario 16 parent fixture is missing.')
   }
-  const expectedInterestId = parentPresent ? scenario16.ids.reservation : null
+  const expectedInterestId =
+    phase === 'before_cleanup' ? scenario16.ids.reservation : null
   const invitationKey = assertAcceptanceIdempotencyKey(attempt.idempotency_key)
+  const dispatchStartedAt = Date.parse(attempt.dispatch_started_at ?? '')
+  const expiresAt = Date.parse(attempt.expires_at ?? '')
   if (
     attempt.actor_user_id !== managerId ||
     attempt.action !== 'invitation.send' ||
@@ -905,8 +942,10 @@ export function validateOrderFlowAcceptanceEvidence(
     (attempt.interest_request_id ?? null) !== expectedInterestId ||
     attempt.delivery_status !== 'suppressed' ||
     attempt.provider_id !== null ||
-    !attempt.dispatch_claim_id ||
-    !attempt.dispatch_started_at ||
+    !uuidPattern.test(attempt.dispatch_claim_id ?? '') ||
+    !Number.isFinite(dispatchStartedAt) ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= dispatchStartedAt ||
     attempt.dispatch_lease_expires_at !== null ||
     !attempt.completed_at ||
     !/^[a-f0-9]{64}$/.test(String(attempt.token_hash ?? ''))
@@ -946,7 +985,7 @@ export function validateOrderFlowAcceptanceEvidence(
 
   let operationRows = snapshot.admin_operation_idempotency
   let operationKeys
-  if (phase === 'before') {
+  if (phase === 'before_cleanup') {
     if (operationRows.length !== 4) {
       fail('Acceptance cleanup requires exactly four completed idempotency records.')
     }
@@ -1045,24 +1084,32 @@ export function validateOrderFlowAcceptanceEvidence(
     correlationId: attempt.id,
   })
   if (
-    invitationPair.audit.details?.delivery_status !== 'suppressed' ||
-    invitationPair.audit.details?.provider_confirmed !== false ||
-    invitationPair.entity.payload?.delivery_status !== 'suppressed' ||
-    processPair.audit.details?.source_type !== 'drop' ||
-    processPair.entity.payload?.source_type !== 'drop' ||
-    deliveryPair.audit.details?.fulfilment_status !== 'shipped' ||
-    deliveryPair.audit.details?.tracking_present !== true ||
-    deliveryPair.entity.payload?.fulfilment_status !== 'shipped' ||
-    closePair.audit.details?.order_status !== 'paid' ||
-    closePair.audit.details?.fulfilment_status !== 'shipped' ||
-    closePair.entity.payload?.order_status !== 'paid' ||
-    closePair.entity.payload?.fulfilment_status !== 'shipped'
+    !exactObject(processPair.audit.details, { source_type: 'drop' }) ||
+    !exactObject(processPair.entity.payload, { source_type: 'drop' }) ||
+    !exactObject(deliveryPair.audit.details, {
+      fulfilment_status: 'shipped',
+      tracking_present: true,
+    }) ||
+    !exactObject(deliveryPair.entity.payload, { fulfilment_status: 'shipped' }) ||
+    !exactObject(closePair.audit.details, {
+      fulfilment_status: 'shipped',
+      order_status: 'paid',
+    }) ||
+    !exactObject(closePair.entity.payload, {
+      fulfilment_status: 'shipped',
+      order_status: 'paid',
+    }) ||
+    !exactObject(invitationPair.audit.details, {
+      delivery_status: 'suppressed',
+      provider_confirmed: false,
+    }) ||
+    !exactObject(invitationPair.entity.payload, { delivery_status: 'suppressed' })
   ) {
-    fail('Acceptance cleanup audit or entity evidence changed.')
+    fail('Acceptance cleanup audit/entity payload or fingerprint changed.')
   }
 
   const states = snapshot.admin_order_flow_state
-  if (phase === 'before') {
+  if (phase === 'before_cleanup') {
     if (states.length !== 2) fail('Acceptance cleanup requires exactly two board work records.')
     const processState = requireSingleMatching(
       states,
@@ -1107,6 +1154,7 @@ export function validateOrderFlowAcceptanceEvidence(
     attempt,
     deliveryEvent,
     operationRows,
+    phase,
     stateRows: states,
   }
 }
@@ -1241,7 +1289,7 @@ export function validateSnapshot(
     allowMissing = false,
     requireManager = true,
     expectOrderFlowAcceptance = false,
-    acceptancePhase = 'before',
+    acceptancePhase = 'before_cleanup',
   } = {},
 ) {
   const rows = materializeFixtures(definition, managerUserId)
@@ -1252,6 +1300,23 @@ export function validateSnapshot(
         phase: acceptancePhase,
       })
     : null
+  if (acceptancePhase === 'after_cleanup' && allowMissing) {
+    const parentTables = [
+      'drop_interest_requests',
+      'order_invitations',
+      'orders',
+      'payments',
+    ]
+    const parentsAbsent = parentTables.every((table) => snapshot?.[table]?.length === 0)
+    const fixturesComplete = parentTables.every(
+      (table) => snapshot?.[table]?.length === rows[table].length,
+    )
+    if (!parentsAbsent && !fixturesComplete) {
+      fail(
+        'Post-cleanup acceptance requires mutable fixture parents to be either fully absent or fully re-seeded.',
+      )
+    }
+  }
   for (const table of mutableTables.concat(protectedTables)) {
     if (!Array.isArray(snapshot?.[table])) fail(`Snapshot lacks ${table}.`)
     const expected = expectedIds(rows, table)
@@ -1376,7 +1441,25 @@ function idList(rows) {
   return rows.length ? rows.map((row) => sqlLiteral(row.id)).join(',') : 'null'
 }
 
-function seedGuardSql(rows, managerUserId) {
+function seedGuardSql(rows, managerUserId, acceptance = null) {
+  const allowed = {
+    admin_audit_events: [
+      ...rows.admin_audit_events,
+      ...(acceptance?.allowedRows.admin_audit_events ?? []),
+    ],
+    email_delivery_events: [
+      ...rows.email_delivery_events,
+      ...(acceptance?.allowedRows.email_delivery_events ?? []),
+    ],
+    entity_events: [
+      ...rows.entity_events,
+      ...(acceptance?.allowedRows.entity_events ?? []),
+    ],
+    operational_email_attempts: [
+      ...rows.operational_email_attempts,
+      ...(acceptance?.allowedRows.operational_email_attempts ?? []),
+    ],
+  }
   return `
 do $fixture_guard$
 begin
@@ -1388,13 +1471,14 @@ begin
      or exists (select 1 from public.order_invitations where id not in (${idList(rows.order_invitations)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
      or exists (select 1 from public.orders where id not in (${idList(rows.orders)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
      or exists (select 1 from public.payments where id not in (${idList(rows.payments)}) or metadata->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
-     or exists (select 1 from public.operational_email_attempts where id not in (${idList(rows.operational_email_attempts)}) or idempotency_key not like ${sqlLiteral(`${fixturePrefix}%`)})
-     or exists (select 1 from public.admin_audit_events where id not in (${idList(rows.admin_audit_events)}) or details->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
-     or exists (select 1 from public.email_delivery_events where id not in (${idList(rows.email_delivery_events)}) or details->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})
-     or exists (select 1 from public.entity_events where id not in (${idList(rows.entity_events)}) or payload->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)}) then
+     or exists (select 1 from public.operational_email_attempts where id not in (${idList(allowed.operational_email_attempts)}) or (id in (${idList(rows.operational_email_attempts)}) and idempotency_key not like ${sqlLiteral(`${fixturePrefix}%`)}))
+     or exists (select 1 from public.admin_audit_events where id not in (${idList(allowed.admin_audit_events)}) or (id in (${idList(rows.admin_audit_events)}) and details->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)}))
+     or exists (select 1 from public.email_delivery_events where id not in (${idList(allowed.email_delivery_events)}) or (id in (${idList(rows.email_delivery_events)}) and details->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)}))
+     or exists (select 1 from public.entity_events where id not in (${idList(allowed.entity_events)}) or (id in (${idList(rows.entity_events)}) and payload->>'fixture_set' is distinct from ${sqlLiteral(FIXTURE_SET)})) then
     raise exception 'unexpected_business_data';
   end if;
   if exists (select 1 from public.admin_operation_idempotency)
+     or exists (select 1 from public.admin_order_flow_state)
      or exists (select 1 from public.manual_shipping_quotes)
      or exists (select 1 from public.newsletter_signups) then
     raise exception 'unexpected_business_data';
@@ -1404,11 +1488,12 @@ $fixture_guard$;
 `
 }
 
-export function seedSql(rows, managerUserId) {
+export function seedSql(rows, managerUserId, { acceptance = null } = {}) {
   const managerId = requireManagerId(managerUserId)
   const lockTables = [
     'admin_roles',
     'admin_operation_idempotency',
+    'admin_order_flow_state',
     'drop_interest_requests',
     'order_invitations',
     'orders',
@@ -1427,7 +1512,8 @@ begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 lock table ${lockTables} in share row exclusive mode;
-${seedGuardSql(rows, managerId)}
+${seedGuardSql(rows, managerId, acceptance)}
+${acceptanceEvidenceGuardSql(rows, managerId, acceptance)}
 insert into public.admin_roles (user_id, role, granted_by, revoked_at)
 values (${sqlLiteral(managerId)}::uuid, 'manager', null, null)
 on conflict (user_id) do update set role='manager', revoked_at=null;
@@ -1445,7 +1531,7 @@ commit;
 `
 }
 
-function acceptanceCleanupGuardSql(rows, managerUserId, acceptance) {
+function acceptanceEvidenceGuardSql(rows, managerUserId, acceptance) {
   if (!acceptance) return ''
   const attempt = acceptance.attempt
   const deliveryEvent = acceptance.deliveryEvent
@@ -1467,6 +1553,15 @@ function acceptanceCleanupGuardSql(rows, managerUserId, acceptance) {
       ` and version=${sqlLiteral(Number(row.version))})`,
   )
   const stateIds = acceptance.stateRows.map((row) => ({ id: row.drop_interest_request_id }))
+  const stateScopeChanged = acceptance.stateRows.length
+    ? `(select count(*) from public.admin_order_flow_state) <> ${acceptance.stateRows.length}
+      or exists (select 1 from public.admin_order_flow_state where drop_interest_request_id not in (${idList(stateIds)}))
+      or exists (select 1 from public.admin_order_flow_state where not (${statePredicates.join(' or ')}))`
+    : 'exists (select 1 from public.admin_order_flow_state)'
+  const operationScopeChanged = acceptance.operationRows.length
+    ? `(select count(*) from public.admin_operation_idempotency) <> ${acceptance.operationRows.length}
+      or exists (select 1 from public.admin_operation_idempotency where not (${operationPredicates.join(' or ')}))`
+    : 'exists (select 1 from public.admin_operation_idempotency)'
   const allowed = {
     admin_audit_events: [...rows.admin_audit_events, ...acceptance.allowedRows.admin_audit_events],
     email_delivery_events: [...rows.email_delivery_events, deliveryEvent],
@@ -1484,11 +1579,8 @@ begin
      or exists (select 1 from public.email_delivery_events where id not in (${idList(allowed.email_delivery_events)}))
      or exists (select 1 from public.admin_audit_events where id not in (${idList(allowed.admin_audit_events)}))
      or exists (select 1 from public.entity_events where id not in (${idList(allowed.entity_events)}))
-     or (select count(*) from public.admin_order_flow_state) <> ${acceptance.stateRows.length}
-     or exists (select 1 from public.admin_order_flow_state where drop_interest_request_id not in (${idList(stateIds)}))
-     or exists (select 1 from public.admin_order_flow_state where not (${statePredicates.join(' or ')}))
-     or (select count(*) from public.admin_operation_idempotency) <> ${acceptance.operationRows.length}
-     or exists (select 1 from public.admin_operation_idempotency where not (${operationPredicates.join(' or ')})) then
+      or ${stateScopeChanged}
+      or ${operationScopeChanged} then
     raise exception 'acceptance_cleanup_scope_changed';
   end if;
   if not exists (
@@ -1498,9 +1590,10 @@ begin
       and a.action='invitation.send' and a.idempotency_key=${sqlLiteral(attempt.idempotency_key)}
       and a.template='order_invitation' and a.template_version='v1'
       and a.entity_type='order_invitation' and a.entity_id=${sqlLiteral(attempt.entity_id)}
-      and a.interest_request_id=${sqlLiteral(attempt.interest_request_id)}::uuid
+      and a.interest_request_id is not distinct from ${sqlLiteral(attempt.interest_request_id)}::uuid
       and a.delivery_status='suppressed' and a.provider_id is null
       and a.dispatch_claim_id is not null and a.dispatch_started_at is not null
+      and a.expires_at is not null and a.expires_at > a.dispatch_started_at
       and a.dispatch_lease_expires_at is null and a.completed_at is not null
       and a.token_hash ~ '^[a-f0-9]{64}$'
   ) or not exists (
@@ -1529,25 +1622,33 @@ export function cleanupSql(
   const roleSql = removeManagerRole
     ? `delete from public.admin_roles where user_id=${sqlLiteral(managerId)}::uuid and role='manager';`
     : ''
-  const acceptanceGuard = acceptanceCleanupGuardSql(rows, managerId, acceptance)
+  const acceptanceGuard = acceptanceEvidenceGuardSql(rows, managerId, acceptance)
   const acceptanceDeletes = acceptance
-    ? `delete from public.admin_operation_idempotency
+    ? `${acceptance.operationRows.length ? `delete from public.admin_operation_idempotency
 where ${acceptance.operationRows
         .map(
           (row) =>
             `(actor_user_id=${sqlLiteral(managerId)}::uuid and action=${sqlLiteral(row.action)} and idempotency_key=${sqlLiteral(row.idempotency_key)})`,
         )
-        .join(' or ')};
-delete from public.admin_order_flow_state
+        .join(' or ')};` : ''}
+${acceptance.stateRows.length ? `delete from public.admin_order_flow_state
 where drop_interest_request_id in (${idList(
-        acceptance.stateRows.map((row) => ({ id: row.drop_interest_request_id })),
-      )});`
+         acceptance.stateRows.map((row) => ({ id: row.drop_interest_request_id })),
+       )});` : ''}`
     : ''
   return `
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
-lock table public.admin_roles,public.admin_operation_idempotency,public.admin_order_flow_state,public.drop_interest_requests,public.order_invitations,public.orders,public.payments,public.operational_email_attempts,public.email_delivery_events,public.admin_audit_events,public.entity_events in share row exclusive mode;
+lock table public.admin_roles,public.admin_operation_idempotency,public.admin_order_flow_state,public.drop_interest_requests,public.order_invitations,public.orders,public.payments,public.operational_email_attempts,public.email_delivery_events,public.admin_audit_events,public.entity_events,public.manual_shipping_quotes,public.newsletter_signups in share row exclusive mode;
+do $cleanup_business_scope_guard$
+begin
+  if exists (select 1 from public.manual_shipping_quotes)
+     or exists (select 1 from public.newsletter_signups) then
+    raise exception 'cleanup_business_scope_changed';
+  end if;
+end
+$cleanup_business_scope_guard$;
 ${acceptanceGuard}
 ${acceptanceDeletes}
 delete from public.operational_email_attempts a
@@ -1571,6 +1672,8 @@ begin
      or exists (select 1 from public.payments)
      or exists (select 1 from public.admin_order_flow_state)
      or exists (select 1 from public.admin_operation_idempotency)
+     or exists (select 1 from public.manual_shipping_quotes)
+     or exists (select 1 from public.newsletter_signups)
      or exists (
        select 1 from public.operational_email_attempts a
        where not exists (select 1 from public.email_delivery_events e where e.attempt_id=a.id)
@@ -1613,8 +1716,8 @@ export function validateCleanupSnapshot(
     expectOrderFlowAcceptance = false,
   } = {},
 ) {
-  validateSnapshot(snapshot, {
-    acceptancePhase: 'after',
+  const validated = validateSnapshot(snapshot, {
+    acceptancePhase: 'after_cleanup',
     allowMissing: true,
     definition,
     expectOrderFlowAcceptance,
@@ -1637,7 +1740,7 @@ export function validateCleanupSnapshot(
   if (managerRoleExpected ? activeManagers.length !== 1 : activeManagers.length !== 0) {
     fail('Manager role cleanup result does not match the explicit flags.')
   }
-  return { retained: retainedHistory(snapshot) }
+  return { acceptance: validated.acceptance, retained: retainedHistory(snapshot) }
 }
 
 export function buildLedger({

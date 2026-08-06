@@ -120,10 +120,15 @@ not be promoted ahead of the backward-compatible database migration.
 The Clean Staging acceptance cleanup is explicitly run-aware. Its normal mode still rejects every
 runtime-created record. The separate `--expect-order-flow-acceptance` mode accepts only the exact
 scenario 01 Process, scenario 10 delivery/close and scenario 16 suppressed-invitation evidence
-contract. It deletes the two mutable Board work rows and four completed idempotency rows with the
+contract before cleanup. It deletes the two mutable Board work rows and four completed idempotency rows with the
 synthetic parents, but retains the correlated operational attempt plus all delivery, audit and
 entity events. This uses the existing `SET NULL` parent relation and `RESTRICT` delivery-evidence
 relation; no trigger, constraint or append-only record is changed or removed.
+
+The distinct `--expect-order-flow-acceptance-after-cleanup` mode validates that retained semantic
+chain after the mutable work and parents are gone. Only this explicit phase lets seed preserve the
+validated evidence and lets verify require the complete re-seeded fixture matrix plus that evidence.
+Normal seed, verify and cleanup modes remain strict and reject every additional runtime record.
 
 Rollback before any remote apply is an ordinary PR revert. After an environment applies the
 migration, do not edit or delete the migration and do not drop the work table ad hoc: ship a new

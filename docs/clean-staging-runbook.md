@@ -125,22 +125,62 @@ npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-ro
 npm run staging:cleanup -- --confirm-clean-staging --confirm --remove-manager-role --remove-manager-user
 ```
 
-An authenticated Order Flow acceptance run uses a separate fail-closed acknowledgement. Use it
-only after the documented matrix has produced exactly the expected scenario 01 Process work,
-scenario 10 delivery/close work and one scenario 16 suppressed invitation attempt:
+An authenticated Order Flow acceptance run has two separate fail-closed phases. The existing
+pre-cleanup acknowledgement is only for the state in which the documented matrix has produced
+exactly the expected scenario 01 Process work, scenario 10 delivery/close work and one scenario 16
+suppressed invitation attempt, while their mutable fixture parents still exist:
 
 ```powershell
 npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance
 npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance --confirm
 ```
 
-That acknowledgement is not a general allowance for suppressed email. Before any delete, the
-tooling requires the exact four completed action/idempotency records, two Board work records and
-their exact scenario relationships. It also requires exactly one additional scenario 16
+`--expect-order-flow-acceptance` therefore means exactly `before_cleanup`; it is not accepted by
+seed or verify. The separate retained-evidence acknowledgement is:
+
+```text
+--expect-order-flow-acceptance-after-cleanup
+```
+
+It means exactly `after_cleanup`: the two Board work rows, four completed idempotency rows and all
+fixture-owned mutable parents have already been removed; the retained scenario 16 attempt has a
+`NULL` interest parent through the existing foreign key; and the exact append-only evidence is
+still present. It is not a general allowance for suppressed email or unexpected history.
+
+In both phases, the tooling requires exactly one additional scenario 16
 `order_invitation` attempt and one correlated delivery event, both `suppressed`, with no provider
 ID or sent evidence. Zero, two or more candidates, another scenario/invitation, another template or
-status, changed delivery evidence, or any unrelated record blocks the run. Random runtime IDs are
-accepted only through those semantic relationships; they are never added to the fixture allowlist.
+status, a wrong actor, changed correlation/idempotency relationships, changed audit/entity actions,
+entities, sources or exact payload fingerprints, missing/extra event pairs, provider evidence, or
+any unrelated mutable or append-only record blocks the run. Random runtime IDs are accepted only
+through those semantic relationships; they are never added to the fixture allowlist.
+
+For a Clean Staging environment already in the retained post-cleanup state, the safe sequence is:
+
+```powershell
+# 1. Read-only dry-run: prove the current post-cleanup state and retained evidence.
+npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
+
+# 2. Recreate only the version-controlled fixtures while preserving the validated evidence.
+npm run staging:seed -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
+
+# 3. Verify the complete fixture matrix plus the retained evidence.
+npm run staging:verify -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
+
+# 4. Later, preview the bounded cleanup selection again.
+npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
+
+# 5. After separate authorization, perform that exact limited cleanup.
+npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup --confirm
+
+# 6. Read-only final proof of the post-cleanup state.
+npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
+```
+
+Seed and verify preserve/accept the retained runtime evidence only with the explicit
+`--expect-order-flow-acceptance-after-cleanup` flag. Without it they continue to reject the extra
+attempt, delivery event and four audit/entity pairs. Passing both phase flags is an error. Use
+`--help` on each staging command for its accepted phase semantics.
 
 Manager removal is independent and explicit. `--remove-manager-user` requires
 `--remove-manager-role` plus a process-scoped `SUPABASE_SERVICE_ROLE_KEY`, and performs only a
@@ -149,9 +189,11 @@ local ledger is `.tmp/clean-staging-seed-ledger.json` and contains only fixture/
 UUIDs, table names and timestamps.
 
 Limited cleanup removes marked mutable reservations, invitations, orders, payments and unreferenced
-delivery attempts. For an explicitly acknowledged Order Flow acceptance run it also removes only
-the exact acceptance-created Board work and completed idempotency rows, before removing their
-synthetic parents. It never deletes `product_registry`, migration history or append-only audit,
+delivery attempts. For an explicitly acknowledged pre-cleanup Order Flow acceptance run it also
+removes only the exact acceptance-created Board work and completed idempotency rows, before removing
+their synthetic parents. A later after-cleanup-aware limited cleanup removes only re-seeded fixture
+parents; the previously retained proof remains linked and unchanged. It never deletes
+`product_registry`, migration history or append-only audit,
 entity and delivery events. Delivery attempts referenced by retained delivery events also remain;
 therefore the scenario 16 suppressed attempt and its delivery proof remain after their
 `interest_request_id` is cleared by the existing `ON DELETE SET NULL` foreign key. The delivery

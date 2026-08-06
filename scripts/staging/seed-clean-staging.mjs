@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
+  ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG,
   assertDatabaseAuthInventory,
   assertExecutionContext,
   assertOwnerCapabilities,
@@ -9,6 +10,7 @@ import {
   loadFixtureDefinition,
   materializeFixtures,
   ownerCapabilitySql,
+  orderFlowAcceptancePhase,
   parseFlags,
   printCounts,
   printScenarioMatrix,
@@ -22,6 +24,11 @@ import {
   writeLedger,
 } from './clean-staging-lib.mjs'
 
+const help = `Usage: npm run staging:seed -- --confirm-clean-staging [${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG}]
+
+Default mode seeds only an empty or ordinary fixture state and rejects runtime evidence.
+${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG} first validates the exact retained post-cleanup Order Flow evidence, preserves it, seeds the fixture set, and verifies both.`
+
 export async function runSeed({
   argv = process.argv.slice(2),
   env = process.env,
@@ -31,7 +38,14 @@ export async function runSeed({
   root = process.cwd(),
 } = {}) {
   const flags = parseFlags(argv)
+  if (flags.has('--help')) {
+    output(help)
+    return { help: true }
+  }
   assertExecutionContext({ env, flags })
+  const acceptancePhase = orderFlowAcceptancePhase(flags, {
+    allowBeforeCleanup: false,
+  })
   const capabilities = sqlQuery(ownerCapabilitySql(), { env, root })
   assertOwnerCapabilities(capabilities)
 
@@ -45,19 +59,23 @@ export async function runSeed({
   })
   const definition = loadFixtureDefinition()
   const before = sqlQuery(snapshotSql(), { env, root })
-  validateSnapshot(before, {
+  const beforeValidation = validateSnapshot(before, {
+    acceptancePhase: acceptancePhase ?? 'before_cleanup',
     allowMissing: true,
     definition,
+    expectOrderFlowAcceptance: acceptancePhase !== null,
     managerUserId: manager.id,
-    requireManager: false,
+    requireManager: acceptancePhase !== null,
   })
 
   const rows = materializeFixtures(definition, manager.id)
-  sqlRun(seedSql(rows, manager.id), { env, root })
+  sqlRun(seedSql(rows, manager.id, { acceptance: beforeValidation.acceptance }), { env, root })
 
   const after = sqlQuery(snapshotSql(), { env, root })
   const verified = validateSnapshot(after, {
+    acceptancePhase: acceptancePhase ?? 'before_cleanup',
     definition,
+    expectOrderFlowAcceptance: acceptancePhase !== null,
     managerUserId: manager.id,
   })
   const ledger = buildLedger({
