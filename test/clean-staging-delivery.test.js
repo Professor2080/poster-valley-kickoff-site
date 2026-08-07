@@ -31,7 +31,7 @@ test('parses the Supabase CLI 2.111.0 table without retaining unrelated output',
   });
   assert.deepEqual(
     parseMigrationList(
-      '  | \\u001b[32m`20260731113000`\\u001b[0m | \\u001b[32m`20260731113000`\\u001b[0m | 2026-07-31 |',
+      '  | \u001b[32m`20260731113000`\u001b[0m | \u001b[32m`20260731113000`\u001b[0m | 2026-07-31 |',
     ),
     {
       local: ['20260731113000'],
@@ -43,6 +43,7 @@ test('parses the Supabase CLI 2.111.0 table without retaining unrelated output',
     remote: [],
   });
 });
+
 test('requires remote history to be an exact local prefix and pending scope to match', () => {
   const state = {
     filesystem: ['20260731113000', '20260731193947'],
