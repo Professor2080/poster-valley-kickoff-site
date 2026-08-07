@@ -50,6 +50,10 @@ The required contract arguments and worktree roles are documented in the
 
 ## Development foundation
 
+- [Current project state](PROJECT_STATE.md)
+- [Architecture and trust boundaries](ARCHITECTURE.md)
+- [Operating and stop rules](OPERATING_RULES.md)
+- [Managed database delivery decision](docs/decisions/ADR-0001-managed-database-delivery.md)
 - [Development workflow](docs/development-workflow.md)
 - [Environment matrix](docs/environment-matrix.md)
 - [Database release process](docs/database-release-process.md)
@@ -67,9 +71,10 @@ recorded as `ACTIVE_HEALTHY`. Its remote migration history contains
 `20260731113000_schema_baseline_v1` followed by
 `20260731193947_harden_default_privileges`; the resulting schema has 13 tables, 4 views, 2 enums,
 27 routines, 9 triggers and 2 policies. Version-controlled Clean Staging fixture tooling exists but
-has not been executed remotely. PR #20 remains Draft and unmerged, Production is unchanged and
-Legacy Staging remains inactive. The next gate is to seed and verify Clean Staging, then let Pascal
-review the frontend and Admin flows.
+has not been executed remotely. Production is unchanged and Legacy Staging remains inactive. The interactive local credential
+route is frozen. The next infrastructure gate is a reviewed GitHub Actions route using a protected
+Clean Staging environment; after that is proven, the next product gate is Pascal's review of the
+frontend and Admin flows.
 
 ## First Drop Assets
 
