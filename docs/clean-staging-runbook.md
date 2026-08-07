@@ -156,32 +156,32 @@ entities, sources or exact payload fingerprints, missing/extra event pairs, prov
 any unrelated mutable or append-only record blocks the run. Random runtime IDs are accepted only
 through those semantic relationships; they are never added to the fixture allowlist.
 
-For a Clean Staging environment already in the retained post-cleanup state, the safe sequence is:
+For a Clean Staging environment already in the retained post-cleanup state, do not re-seed. The
+retained append-only evidence can legitimately be newer than version-controlled mutable fixtures,
+so recreating those parents would no longer reproduce the scenario matrix. The safe sequence is:
 
 ```powershell
 # 1. Read-only dry-run: prove the current post-cleanup state and retained evidence.
 npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
 
-# 2. Recreate only the version-controlled fixtures while preserving the validated evidence.
-npm run staging:seed -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
-
-# 3. Verify the complete fixture matrix plus the retained evidence.
+# 2. Verify the retained evidence without recreating mutable fixtures.
 npm run staging:verify -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
 
-# 4. Later, preview the bounded cleanup selection again.
-npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
+# 3. Rebuild the disposable Clean Staging project from committed migrations before another full
+#    fixture-matrix run, then use the ordinary seed command.
+# npm run staging:seed -- --confirm-clean-staging
 
-# 5. After separate authorization, perform that exact limited cleanup.
-npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup --confirm
-
-# 6. Read-only final proof of the post-cleanup state.
+# 4. Until that rebuild, preview the already-empty bounded cleanup selection again if needed.
 npm run staging:cleanup -- --confirm-clean-staging --expect-order-flow-acceptance-after-cleanup
 ```
 
-Seed and verify preserve/accept the retained runtime evidence only with the explicit
-`--expect-order-flow-acceptance-after-cleanup` flag. Without it they continue to reject the extra
-attempt, delivery event and four audit/entity pairs. Passing both phase flags is an error. Use
-`--help` on each staging command for its accepted phase semantics.
+Seed always rejects `--expect-order-flow-acceptance-after-cleanup` before database access and points
+to the disposable rebuild path. Verify and cleanup accept retained runtime evidence only with that
+explicit flag. Without it they continue to reject the extra attempt, delivery event and four
+audit/entity pairs. Passing both phase flags is an error. Paid fixtures pre-create deterministic,
+fixture-marked `payment.paid` provider events before inserting payments; the real database trigger
+then resolves its duplicate idempotency key without adding random append-only history. Use `--help`
+on each staging command for its accepted phase semantics.
 
 Manager removal is independent and explicit. `--remove-manager-user` requires
 `--remove-manager-role` plus a process-scoped `SUPABASE_SERVICE_ROLE_KEY`, and performs only a
