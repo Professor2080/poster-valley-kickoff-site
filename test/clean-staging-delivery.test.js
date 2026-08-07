@@ -18,15 +18,29 @@ test('parses exact expected migration versions', () => {
   assert.throws(() => parseExpectedVersions('latest'), /FORMAT/);
 });
 
-test('parses Supabase migration list without retaining unrelated output', () => {
+test('parses the Supabase CLI 2.111.0 table without retaining unrelated output', () => {
   const parsed = parseMigrationList(`
-    LOCAL           │ REMOTE          │ TIME (UTC)
-    20260731113000  │ 20260731113000  │ 2026-07-31
-    20260731193947  │                 │ 2026-07-31
+    LOCAL               | REMOTE              | TIME (UTC)
+    --------------------|---------------------|--------------------
+    \`20260731113000\`  | \`20260731113000\`  | \`2026-07-31 11:30:00\`
+    \`20260731193947\`  | \` \`               | \`2026-07-31 19:39:47\`
   `);
   assert.deepEqual(parsed, {
     local: ['20260731113000', '20260731193947'],
     remote: ['20260731113000'],
+  });
+  assert.deepEqual(
+    parseMigrationList(
+      '  | \u001b[32m`20260731113000`\u001b[0m | \u001b[32m`20260731113000`\u001b[0m | 2026-07-31 |',
+    ),
+    {
+      local: ['20260731113000'],
+      remote: ['20260731113000'],
+    },
+  );
+  assert.deepEqual(parseMigrationList('status 20260731113000 without table cells'), {
+    local: [],
+    remote: [],
   });
 });
 

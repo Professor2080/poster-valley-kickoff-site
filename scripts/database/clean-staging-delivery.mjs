@@ -25,9 +25,12 @@ export function parseExpectedVersions(value) {
 export function parseMigrationList(output) {
   const local = [];
   const remote = [];
-  const normalized = String(output).replace(/\u001b\[[0-9;]*m/g, '').replaceAll('│', '|');
+  const normalized = String(output)
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .replaceAll('`', '')
+    .replaceAll('│', '|');
   for (const line of normalized.split(/\r?\n/)) {
-    const match = line.match(/^\s*(\d{14})?\s*\|\s*(\d{14})?\s*\|/);
+    const match = line.match(/^\s*\|?\s*(\d{14})?\s*\|\s*(\d{14})?\s*\|/);
     if (!match) continue;
     if (match[1]) local.push(match[1]);
     if (match[2]) remote.push(match[2]);
