@@ -25,23 +25,25 @@ See [ARCHITECTURE.md](ARCHITECTURE.md), [OPERATING_RULES.md](OPERATING_RULES.md)
 
 ## Immediate sequence
 
-1. Merge this governance change after review.
-2. Design the smallest GitHub Actions route that can verify migration scope and apply only reviewed
-   migrations to Clean Staging.
-3. Configure a protected GitHub `clean-staging` environment. Store credentials there; never pass
-   them through Codex or a local launcher.
-4. Prove the route first with dry-run/plan evidence and the already reviewed pending migration set.
-5. Verify Clean Staging history and contracts read-only after the CI run.
-6. Retire the local credential launcher only after the CI route has been proven.
-7. Return immediately to the Order Flow Board Preview and Pascal's functional review.
+1. Review and merge the Draft PR containing the protected Clean Staging workflow.
+2. Configure the protected GitHub `clean-staging` environment and its two Clean-Staging-only
+   secrets without exposing values to Codex or a local shell.
+3. Run a separately authorized `plan` operation for the exact candidate SHA and expected pending
+   migration set.
+4. Review the privacy-safe plan evidence and digest.
+5. Run a separately authorized `apply` operation only when a non-empty migration set needs
+   application.
+6. Verify Clean Staging history and contracts read-only after an approved apply.
+7. Retire the local credential launcher only after the CI route has been proven.
+8. Return immediately to the Order Flow Board Preview and Pascal's functional review.
 
 Each numbered item is a separate, bounded work block. Production, Legacy Staging, live Mollie,
 operational email, and customer data are outside this sequence.
 
 ## Current blockers
 
-- The GitHub Actions-to-Clean-Staging route is not yet implemented or proven.
-- The exact GitHub environment/secrets configuration is not yet verified.
+- The GitHub Actions-to-Clean-Staging route is proposed in a Draft PR but is not merged or proven.
+- The exact GitHub environment/secrets configuration is not yet created or verified.
 - Clean Staging must not be mutated until the workflow diff, target ref, migration plan, and
   provider-suppression conditions have passed review.
 
