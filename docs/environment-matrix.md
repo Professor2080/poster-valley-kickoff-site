@@ -27,6 +27,12 @@ rebuild of the disposable project from committed migrations. Production and Lega
 rejected targets. Fixtures remain present during review, operational email remains suppressed, and
 Pascal's actual Admin login may trigger at most one Supabase Auth login email.
 
+That fixture path is separate from migration delivery. Remote migration planning and application
+use only the protected manual workflow in
+[Clean Staging database delivery](clean-staging-ci-delivery.md). Its database password and Supabase
+access token exist only as protected GitHub environment secrets; neither value is available to
+Codex, local launchers, Preview or fixture tooling.
+
 Never infer a target from a URL, alias or variable name. Verify the exact repository, project ref,
 deployment environment, branch/commit, migration history and credential mode before any remote
 action. Environment access or a code-change request does not itself authorize a stateful test,

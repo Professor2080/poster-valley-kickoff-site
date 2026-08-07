@@ -4,10 +4,11 @@ This runbook records the Clean Staging operating model and transition plan. Clea
 that fact does not authorize linking, database access, migration, Vercel configuration, provider
 calls or deployment.
 
-For safe Supabase Clean Staging access from Codex, follow only the
-[central DeveloperToolchain workflow](https://github.com/Professor2080/DeveloperToolchain/blob/main/docs/supabase-session-pooler-codex.md)
-via `scripts/start-codex-with-supabase.ps1`; this runbook does not duplicate that procedure or its
-safety contract.
+The interactive local Codex credential route is frozen and must not be used, repaired or extended.
+Migration planning and application belong only to the protected, manual GitHub Actions boundary
+defined in [Clean Staging database delivery](clean-staging-ci-delivery.md). That workflow remains
+inactive until its Draft PR is reviewed and merged, the protected GitHub environment is configured,
+and the exact plan or apply run is separately authorized.
 
 ## Recorded status on 2026-08-01
 

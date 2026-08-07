@@ -1,0 +1,114 @@
+name: Clean Staging Database Delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Plan first; apply requires the digest from an approved plan run
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+      candidate_sha:
+        description: Exact 40-character commit SHA to inspect or apply
+        required: true
+        type: string
+      expected_pending_versions:
+        description: Comma-separated 14-digit migration versions, or NONE
+        required: true
+        type: string
+      approved_plan_digest:
+        description: Required only for apply; copy the digest from the reviewed plan run
+        required: false
+        type: string
+      confirm_project_ref:
+        description: Type the exact Clean Staging project ref
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clean-staging-database-delivery
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    name: ${{ inputs.operation }} exact migration scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: clean-staging
+    steps:
+      - name: Check out trusted workflow implementation from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trusted
+          fetch-depth: 0
+
+      - name: Check out exact candidate without executing candidate tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - name: Validate immutable repository and candidate boundaries
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CONFIRM_PROJECT_REF: ${{ inputs.confirm_project_ref }}
+          EXPECTED_PROJECT_REF: stbunwkgvxfwmbjivgos
+          OPERATION: ${{ inputs.operation }}
+          APPROVED_PLAN_DIGEST: ${{ inputs.approved_plan_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git -C candidate rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+          git -C candidate merge-base --is-ancestor "$GITHUB_SHA" "$CANDIDATE_SHA"
+          [[ "$CONFIRM_PROJECT_REF" == "$EXPECTED_PROJECT_REF" ]]
+          if [[ "$OPERATION" == "apply" ]]; then
+            [[ "$APPROVED_PLAN_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          else
+            [[ -z "$APPROVED_PLAN_DIGEST" ]]
+          fi
+
+      - name: Use Node.js 24.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: trusted/package-lock.json
+
+      - name: Activate npm 11.16.0
+        run: npm install --global npm@11.16.0
+
+      - name: Install only trusted main dependencies
+        working-directory: trusted
+        run: npm ci
+
+      - name: Plan or apply exact Clean Staging migration scope
+        shell: bash
+        env:
+          POSTER_VALLEY_ENV: clean-staging
+          CLEAN_STAGING_PROJECT_REF: stbunwkgvxfwmbjivgos
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.CLEAN_STAGING_SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.CLEAN_STAGING_DB_PASSWORD }}
+          TRUSTED_ROOT: ${{ github.workspace }}/trusted
+          CANDIDATE_ROOT: ${{ github.workspace }}/candidate
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          EXPECTED_PENDING_VERSIONS: ${{ inputs.expected_pending_versions }}
+          APPROVED_PLAN_DIGEST: ${{ inputs.approved_plan_digest }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          node trusted/scripts/database/clean-staging-delivery.mjs \
+            "$OPERATION" \
+            "$EXPECTED_PENDING_VERSIONS" \
+            "$APPROVED_PLAN_DIGEST" | tee clean-staging-result.json
+          printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
+          cat clean-staging-result.json >> "$GITHUB_STEP_SUMMARY"
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"
