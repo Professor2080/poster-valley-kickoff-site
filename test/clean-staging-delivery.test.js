@@ -1,12 +1,63 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  assertRebuildAuthorization,
   assertMigrationState,
   createPlanDigest,
+  createRebuildInvocation,
   parseExpectedVersions,
   parseMigrationList,
 } from '../scripts/database/clean-staging-delivery.mjs';
+
+test('protected workflow independently gates the destructive rebuild operation', () => {
+  const workflow = readFileSync('.github/workflows/clean-staging-database.yml', 'utf8');
+  for (const required of [
+    '- rebuild',
+    'environment: clean-staging',
+    '[[ "$CANDIDATE_SHA" == "$GITHUB_SHA" ]]',
+    '[[ "${{ inputs.expected_pending_versions }}" == "NONE" ]]',
+    '[[ "$REBUILD_CONFIRMATION" == "REBUILD $EXPECTED_PROJECT_REF" ]]',
+  ]) {
+    assert.ok(workflow.includes(required), `missing rebuild gate: ${required}`);
+  }
+});
+
+test('uses the official linked reset without automatic seed data', () => {
+  assert.deepEqual(createRebuildInvocation(), {
+    args: ['db', 'reset', '--linked', '--no-seed'],
+    input: 'y\n',
+  });
+});
+
+test('allows rebuild only for exact main with empty pending scope and explicit target confirmation', () => {
+  const allowed = {
+    operation: 'rebuild',
+    expectedPending: [],
+    approvedDigest: '',
+    confirmation: 'REBUILD stbunwkgvxfwmbjivgos',
+    workflowSha: 'a'.repeat(40),
+    candidateSha: 'a'.repeat(40),
+  };
+  assert.doesNotThrow(() => assertRebuildAuthorization(allowed));
+  assert.throws(
+    () => assertRebuildAuthorization({ ...allowed, expectedPending: ['20260731113000'] }),
+    /REBUILD_PENDING_SCOPE_NOT_NONE/,
+  );
+  assert.throws(
+    () => assertRebuildAuthorization({ ...allowed, approvedDigest: 'b'.repeat(64) }),
+    /REBUILD_PLAN_DIGEST_NOT_ALLOWED/,
+  );
+  assert.throws(
+    () => assertRebuildAuthorization({ ...allowed, confirmation: 'REBUILD another-project' }),
+    /REBUILD_CONFIRMATION_INVALID/,
+  );
+  assert.throws(
+    () => assertRebuildAuthorization({ ...allowed, candidateSha: 'b'.repeat(40) }),
+    /REBUILD_CANDIDATE_NOT_MAIN/,
+  );
+});
 
 test('parses exact expected migration versions', () => {
   assert.deepEqual(parseExpectedVersions('NONE'), []);
