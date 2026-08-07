@@ -37,6 +37,7 @@ export function parseMigrationList(output) {
   }
   return { local, remote };
 }
+
 export function assertMigrationState({ filesystem, listedLocal, remote, expectedPending }) {
   const unique = (items) => new Set(items).size === items.length;
   if (![filesystem, listedLocal, remote].every(unique)) throw new Error('MIGRATION_VERSION_DUPLICATE');
