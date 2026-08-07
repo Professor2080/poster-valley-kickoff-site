@@ -42,6 +42,23 @@ The current product combines:
 
 Do not turn this repository into the wider Poster Valley platform unless the user explicitly changes that scope.
 
+## Product-focus and architecture gate
+
+Before every technical work block, read [PROJECT_STATE.md](PROJECT_STATE.md),
+[ARCHITECTURE.md](ARCHITECTURE.md), and [OPERATING_RULES.md](OPERATING_RULES.md). State the
+business outcome, work classification, managed alternative considered, permanent complexity
+change, and bounded stop condition before implementation.
+
+The stop rules in `OPERATING_RULES.md` are mandatory. In particular, stop after two failed
+attempts with the same approach, after two consecutive non-product work blocks, or when an ordinary
+operation crosses more than three custom process/tool boundaries. Do not add another wrapper,
+launcher, shim, or probe before an alternatives review.
+
+Codex must not receive or transport a remote database password. Staging database delivery belongs
+to a reviewed GitHub Actions workflow using a protected environment; Production remains separately
+approved. The accepted decision is recorded in
+[ADR-0001](docs/decisions/ADR-0001-managed-database-delivery.md).
+
 ## Product rules
 
 Preserve these accepted rules unless the user explicitly decides otherwise:
