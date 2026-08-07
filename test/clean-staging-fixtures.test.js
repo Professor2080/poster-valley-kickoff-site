@@ -359,10 +359,9 @@ function acceptanceSnapshot() {
   return snapshot
 }
 
-function postCleanupAcceptanceSnapshot({ reseed = false } = {}) {
+function postCleanupAcceptanceSnapshot() {
   const state = { snapshot: acceptanceSnapshot() }
   cleanupHarness(state)()
-  if (reseed) seedHarness(state)()
   return state.snapshot
 }
 
@@ -493,7 +492,7 @@ test('all sixteen scenarios satisfy fixture, schema and lifecycle contracts', ()
   assert.deepEqual(result.retained, {
     admin_audit_events: 4,
     email_delivery_events: 4,
-    entity_events: 4,
+    entity_events: 10,
     operational_email_attempts: 4,
   })
 })
@@ -519,7 +518,7 @@ test('one exact scenario 16 suppressed acceptance attempt and event is cleanup-e
   assert.deepEqual(cleanupPlan(snapshot).retained_append_only_history, {
     admin_audit_events: 8,
     email_delivery_events: 5,
-    entity_events: 8,
+    entity_events: 14,
     operational_email_attempts: 5,
   })
 })
@@ -622,7 +621,7 @@ test('post-cleanup phase validates the exact retained chain with mutable parents
   assert.deepEqual(result.retained, {
     admin_audit_events: 8,
     email_delivery_events: 5,
-    entity_events: 8,
+    entity_events: 14,
     operational_email_attempts: 5,
   })
 })
@@ -751,7 +750,9 @@ test('post-cleanup mode rejects unexpected mutable records', () => {
     /either fully absent or fully re-seeded|Unexpected drop_interest_requests/,
   )
 
-  const partial = postCleanupAcceptanceSnapshot({ reseed: true })
+  const partialState = { snapshot: postCleanupAcceptanceSnapshot() }
+  seedHarness(partialState)()
+  const partial = partialState.snapshot
   partial.orders.pop()
   assert.throws(
     () => validateSnapshot(partial, {
@@ -842,12 +843,10 @@ test('seed is idempotent and append-only rows do not grow on a second run', asyn
   assertLedgerSafe(JSON.parse(ledgerText))
 })
 
-test('seed and verify preserve post-cleanup proof only with the specific phase flag', async (t) => {
+test('seed refuses post-cleanup reseed while verify preserves the retained proof', async (t) => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pv-clean-staging-post-cleanup-seed-'))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   const state = { snapshot: postCleanupAcceptanceSnapshot() }
-  const proofAttemptId = state.snapshot.operational_email_attempts.at(-1).id
-  const proofEventId = state.snapshot.email_delivery_events.at(-1).id
   let writes = 0
   const baseOptions = {
     env: runtimeEnv(),
@@ -874,23 +873,19 @@ test('seed and verify preserve post-cleanup proof only with the specific phase f
   )
   assert.equal(writes, 0)
 
-  await runSeed({
-    ...baseOptions,
-    argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG],
-    sqlRun: seedHarness(state),
-  })
-  assert.equal(state.snapshot.drop_interest_requests.length, 16)
-  assert.equal(state.snapshot.operational_email_attempts.length, 6)
-  assert.equal(
-    state.snapshot.operational_email_attempts.find((row) => row.id === proofAttemptId)
-      .interest_request_id,
-    null,
+  await assert.rejects(
+    runSeed({
+      ...baseOptions,
+      argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG],
+      sqlRun: () => { writes += 1 },
+    }),
+    /rebuild disposable Clean Staging/i,
   )
-  assert.equal(state.snapshot.email_delivery_events.some((row) => row.id === proofEventId), true)
+  assert.equal(writes, 0)
 
   await assert.rejects(
     runVerify({ ...baseOptions, argv: [EXECUTION_FLAG] }),
-    /Unexpected operational_email_attempts|Unexpected admin_audit_events/,
+    /Expected drop_interest_requests record is missing|Unexpected operational_email_attempts|Unexpected admin_audit_events/,
   )
   await assert.rejects(
     runVerify({ ...baseOptions, argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_FLAG] }),
@@ -993,7 +988,7 @@ test('limited cleanup removes only mutable fixtures and retains append-only hist
   assert.equal(state.snapshot.operational_email_attempts.length, 4)
   assert.equal(state.snapshot.admin_audit_events.length, 4)
   assert.equal(state.snapshot.email_delivery_events.length, 4)
-  assert.equal(state.snapshot.entity_events.length, 4)
+  assert.equal(state.snapshot.entity_events.length, 10)
   validateCleanupSnapshot(state.snapshot, { definition, managerUserId: managerId })
 })
 
@@ -1025,7 +1020,7 @@ test('acceptance cleanup removes only exact mutable work and retains attempt and
   })
 })
 
-test('post-cleanup phase supports dry-run, reseed cleanup and repeated post-cleanup verification', async () => {
+test('post-cleanup phase supports dry-run and repeated cleanup verification without reseed', async () => {
   const postCleanupState = { snapshot: postCleanupAcceptanceSnapshot() }
   let writes = 0
   const dryRun = await runCleanup({
@@ -1040,17 +1035,16 @@ test('post-cleanup phase supports dry-run, reseed cleanup and repeated post-clea
   assert.equal(dryRun.plan.delete.operational_email_attempts, 0)
   assert.equal(writes, 0)
 
-  const reseededState = { snapshot: postCleanupAcceptanceSnapshot({ reseed: true }) }
   const result = await runCleanup({
     argv: [EXECUTION_FLAG, ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG, '--confirm'],
     env: runtimeEnv(),
     output: () => {},
-    sqlQuery: queryHarness(reseededState),
-    sqlRun: cleanupHarness(reseededState),
+    sqlQuery: queryHarness(postCleanupState),
+    sqlRun: cleanupHarness(postCleanupState),
   })
   assert.equal(result.dryRun, false)
-  assert.equal(reseededState.snapshot.drop_interest_requests.length, 0)
-  assert.equal(reseededState.snapshot.operational_email_attempts.length, 5)
+  assert.equal(postCleanupState.snapshot.drop_interest_requests.length, 0)
+  assert.equal(postCleanupState.snapshot.operational_email_attempts.length, 5)
   assert.equal(result.verified.acceptance.phase, 'after_cleanup')
 })
 
@@ -1167,9 +1161,6 @@ test('generated SQL never changes schema, grants or append-only triggers', () =>
     managerUserId: managerId,
     phase: 'after_cleanup',
   })
-  const acceptanceAwareSeed = seedSql(rows, managerId, {
-    acceptance: postCleanupAcceptance,
-  })
   const repeatedCleanup = cleanupSql(rows, managerId, {
     acceptance: postCleanupAcceptance,
   })
@@ -1190,13 +1181,41 @@ test('generated SQL never changes schema, grants or append-only triggers', () =>
   assert.doesNotMatch(attemptDelete, new RegExp(acceptance.attempt.id, 'i'))
   assert.match(acceptanceCleanup, /raise exception 'acceptance_cleanup_scope_changed'/)
   assert.match(acceptanceCleanup, /raise exception 'acceptance_delivery_evidence_changed'/)
-  assert.match(acceptanceAwareSeed, /interest_request_id is not distinct from null::uuid/)
-  assert.match(acceptanceAwareSeed, /raise exception 'acceptance_cleanup_scope_changed'/)
+  assert.throws(
+    () => seedSql(rows, managerId, { acceptance: postCleanupAcceptance }),
+    /rebuild disposable Clean Staging/i,
+  )
   assert.match(repeatedCleanup, /interest_request_id is not distinct from null::uuid/)
-  assert.doesNotMatch(acceptanceAwareSeed, /where\s*;/i)
   assert.doesNotMatch(repeatedCleanup, /where\s*;/i)
-  assert.doesNotMatch(acceptanceAwareSeed, /not\s*\(\s*\)/i)
   assert.doesNotMatch(repeatedCleanup, /not\s*\(\s*\)/i)
+})
+
+test('paid fixtures pre-create deterministic provider events before payment triggers run', () => {
+  const rows = materializeFixtures(definition, managerId)
+  const paidEvents = rows.entity_events.filter((row) => row.event_type === 'payment.paid')
+  assert.equal(paidEvents.length, 6)
+  assert.deepEqual(
+    paidEvents.map((row) => row.id),
+    definition.scenarios
+      .filter((scenario) => scenario.payment?.status === 'paid')
+      .map((scenario) => scenario.ids.payment_event),
+  )
+  for (const event of paidEvents) {
+    assert.equal(event.source, 'provider')
+    assert.equal(event.actor_user_id, null)
+    assert.equal(event.payload.fixture_set, FIXTURE_SET)
+    assert.equal(event.payload.webhook_confirmed, true)
+  }
+
+  const sql = seedSql(rows, managerId)
+  assert.ok(sql.indexOf('insert into public.entity_events') < sql.indexOf('insert into public.payments'))
+
+  const missingEvent = clone(definition)
+  delete missingEvent.scenarios.find((scenario) => scenario.payment?.status === 'paid').ids.payment_event
+  assert.throws(
+    () => materializeFixtures(missingEvent, managerId),
+    /paid fixture requires exactly one deterministic payment event UUID/,
+  )
 })
 
 test('cleanup rechecks unexpected business tables inside its transaction before deleting', () => {

@@ -403,6 +403,10 @@ export function validateFixtureDefinition(definition) {
     if (numbers.has(scenario.number) || keys.has(scenario.key)) {
       fail('Fixture scenario identities must be unique.')
     }
+    const paid = scenario.payment?.status === 'paid'
+    if (paid !== Boolean(scenario.ids?.payment_event)) {
+      fail('Each paid fixture requires exactly one deterministic payment event UUID.')
+    }
     numbers.add(scenario.number)
     keys.add(scenario.key)
     for (const id of Object.values(scenario.ids ?? {})) {
@@ -566,11 +570,30 @@ export function materializeFixtures(definition, managerUserId) {
 
     if (scenario.payment) {
       const paid = scenario.payment.status === 'paid'
+      const providerPaymentId = `tr_testPVCLEANSTAGINGV1S${number}`
+      if (paid) {
+        rows.entity_events.push({
+          id: scenario.ids.payment_event,
+          actor_user_id: null,
+          source: 'provider',
+          event_type: 'payment.paid',
+          entity_type: 'order',
+          entity_id: scenario.ids.order,
+          correlation_id: null,
+          idempotency_key: providerPaymentId,
+          payload: {
+            ...metadata,
+            provider: 'mollie',
+            payment_status: 'paid',
+            webhook_confirmed: true,
+          },
+        })
+      }
       rows.payments.push({
         id: scenario.ids.payment,
         order_id: scenario.ids.order,
         provider: 'mollie',
-        provider_payment_id: `tr_testPVCLEANSTAGINGV1S${number}`,
+        provider_payment_id: providerPaymentId,
         status: scenario.payment.status,
         amount: 74.95,
         currency: 'EUR',
@@ -1489,6 +1512,11 @@ $fixture_guard$;
 }
 
 export function seedSql(rows, managerUserId, { acceptance = null } = {}) {
+  if (acceptance) {
+    fail(
+      'Post-cleanup re-seed is unsupported; rebuild disposable Clean Staging from committed migrations.',
+    )
+  }
   const managerId = requireManagerId(managerUserId)
   const lockTables = [
     'admin_roles',
@@ -1520,13 +1548,13 @@ on conflict (user_id) do update set role='manager', revoked_at=null;
 ${insertRowsSql('drop_interest_requests', rows.drop_interest_requests)}
 ${insertRowsSql('order_invitations', rows.order_invitations)}
 ${insertRowsSql('orders', rows.orders)}
+${insertRowsSql('entity_events', rows.entity_events)}
 ${insertRowsSql('payments', rows.payments)}
 ${insertRowsSql('operational_email_attempts', rows.operational_email_attempts, {
     update: 'interest_request_id=excluded.interest_request_id',
   })}
 ${insertRowsSql('email_delivery_events', rows.email_delivery_events)}
 ${insertRowsSql('admin_audit_events', rows.admin_audit_events)}
-${insertRowsSql('entity_events', rows.entity_events)}
 commit;
 `
 }

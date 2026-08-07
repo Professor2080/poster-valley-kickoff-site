@@ -22,8 +22,10 @@ trigger and six-migration gate. They do not use a database URL, password, Direct
 Session Pooler or Transaction Pooler, and add no permanent grants or staging RPC. The normal chain
 reuses exactly one confirmed fixture-owned Auth identity from a PII-minimized database inventory and
 needs no service-role key. That key is required only for the separately explicit Auth soft-delete
-option. Limited cleanup retains marked append-only synthetic history; a complete cleanup is a
-rebuild of the disposable project from committed migrations. Production and Legacy Staging are
+option. Paid fixtures pre-create deterministic provider events so payment triggers cannot add
+random fixture history. Limited cleanup retains marked append-only synthetic history; re-seeding
+after that cleanup is blocked, and a complete reset is a rebuild of the disposable project from
+committed migrations. Production and Legacy Staging are
 rejected targets. Fixtures remain present during review, operational email remains suppressed, and
 Pascal's actual Admin login may trigger at most one Supabase Auth login email.
 

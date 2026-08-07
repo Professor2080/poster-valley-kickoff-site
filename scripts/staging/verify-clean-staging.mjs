@@ -54,6 +54,7 @@ export async function runVerify({
   const snapshot = sqlQuery(snapshotSql(), { env, root })
   const verified = validateSnapshot(snapshot, {
     acceptancePhase: acceptancePhase ?? 'before_cleanup',
+    allowMissing: acceptancePhase === 'after_cleanup',
     definition,
     expectOrderFlowAcceptance: acceptancePhase !== null,
     managerUserId: active.id,

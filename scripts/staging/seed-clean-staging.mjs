@@ -1,7 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
-  ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG,
   assertDatabaseAuthInventory,
   assertExecutionContext,
   assertOwnerCapabilities,
@@ -24,10 +23,10 @@ import {
   writeLedger,
 } from './clean-staging-lib.mjs'
 
-const help = `Usage: npm run staging:seed -- --confirm-clean-staging [${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG}]
+const help = `Usage: npm run staging:seed -- --confirm-clean-staging
 
 Default mode seeds only an empty or ordinary fixture state and rejects runtime evidence.
-${ORDER_FLOW_ACCEPTANCE_AFTER_CLEANUP_FLAG} first validates the exact retained post-cleanup Order Flow evidence, preserves it, seeds the fixture set, and verifies both.`
+Post-cleanup retained acceptance evidence cannot be reseeded safely. Rebuild disposable Clean Staging from committed migrations instead.`
 
 export async function runSeed({
   argv = process.argv.slice(2),
@@ -46,6 +45,11 @@ export async function runSeed({
   const acceptancePhase = orderFlowAcceptancePhase(flags, {
     allowBeforeCleanup: false,
   })
+  if (acceptancePhase === 'after_cleanup') {
+    throw new Error(
+      'Post-cleanup re-seed is unsupported; rebuild disposable Clean Staging from committed migrations.',
+    )
+  }
   const capabilities = sqlQuery(ownerCapabilitySql(), { env, root })
   assertOwnerCapabilities(capabilities)
 
