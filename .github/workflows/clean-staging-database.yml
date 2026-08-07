@@ -4,15 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Plan first; apply requires the digest from an approved plan run
+        description: Plan first; apply needs a digest; rebuild destroys only exact Clean Staging
         required: true
         default: plan
         type: choice
         options:
           - plan
           - apply
+          - rebuild
       candidate_sha:
-        description: Exact 40-character commit SHA to inspect or apply
+        description: Exact 40-character commit SHA to inspect, apply, or rebuild from
         required: true
         type: string
       expected_pending_versions:
@@ -21,6 +22,10 @@ on:
         type: string
       approved_plan_digest:
         description: Required only for apply; copy the digest from the reviewed plan run
+        required: false
+        type: string
+      confirm_rebuild:
+        description: For rebuild only, type REBUILD followed by a space and the exact project ref
         required: false
         type: string
       confirm_project_ref:
@@ -39,7 +44,7 @@ jobs:
   deliver:
     name: ${{ inputs.operation }} exact migration scope
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: clean-staging
     steps:
       - name: Check out trusted workflow implementation from main
@@ -63,6 +68,7 @@ jobs:
           EXPECTED_PROJECT_REF: stbunwkgvxfwmbjivgos
           OPERATION: ${{ inputs.operation }}
           APPROVED_PLAN_DIGEST: ${{ inputs.approved_plan_digest }}
+          REBUILD_CONFIRMATION: ${{ inputs.confirm_rebuild }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
@@ -70,7 +76,12 @@ jobs:
           [[ "$(git -C candidate rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
           git -C candidate merge-base --is-ancestor "$GITHUB_SHA" "$CANDIDATE_SHA"
           [[ "$CONFIRM_PROJECT_REF" == "$EXPECTED_PROJECT_REF" ]]
-          if [[ "$OPERATION" == "apply" ]]; then
+          if [[ "$OPERATION" == "rebuild" ]]; then
+            [[ "$CANDIDATE_SHA" == "$GITHUB_SHA" ]]
+            [[ "${{ inputs.expected_pending_versions }}" == "NONE" ]]
+            [[ -z "$APPROVED_PLAN_DIGEST" ]]
+            [[ "$REBUILD_CONFIRMATION" == "REBUILD $EXPECTED_PROJECT_REF" ]]
+          elif [[ "$OPERATION" == "apply" ]]; then
             [[ "$APPROVED_PLAN_DIGEST" =~ ^[0-9a-f]{64}$ ]]
           else
             [[ -z "$APPROVED_PLAN_DIGEST" ]]
@@ -90,7 +101,7 @@ jobs:
         working-directory: trusted
         run: npm ci
 
-      - name: Plan or apply exact Clean Staging migration scope
+      - name: Plan, apply, or rebuild exact Clean Staging migration scope
         shell: bash
         env:
           POSTER_VALLEY_ENV: clean-staging
@@ -103,12 +114,14 @@ jobs:
           EXPECTED_PENDING_VERSIONS: ${{ inputs.expected_pending_versions }}
           APPROVED_PLAN_DIGEST: ${{ inputs.approved_plan_digest }}
           OPERATION: ${{ inputs.operation }}
+          REBUILD_CONFIRMATION: ${{ inputs.confirm_rebuild }}
         run: |
           set -euo pipefail
           node trusted/scripts/database/clean-staging-delivery.mjs \
             "$OPERATION" \
             "$EXPECTED_PENDING_VERSIONS" \
-            "$APPROVED_PLAN_DIGEST" | tee clean-staging-result.json
+            "$APPROVED_PLAN_DIGEST" \
+            "$REBUILD_CONFIRMATION" | tee clean-staging-result.json
           printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
           cat clean-staging-result.json >> "$GITHUB_STEP_SUMMARY"
           printf '```\n' >> "$GITHUB_STEP_SUMMARY"

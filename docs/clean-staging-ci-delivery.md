@@ -1,15 +1,16 @@
 # Clean Staging database delivery
 
 This runbook defines the protected GitHub Actions boundary for migration planning and application to
-Supabase Clean Staging. It does not authorize a workflow run, secret change, database connection or
-migration.
+Supabase Clean Staging. It does not authorize a workflow run, secret change, database connection,
+migration or rebuild.
 
 ## Why this route
 
 Supabase's native GitHub integration is the preferred managed default for straightforward automatic
 deployments and preview branches. Poster Valley currently uses a separate existing Clean Staging
 project and requires two independently approved actions: first produce reviewable plan evidence,
-then apply exactly that plan. The repository therefore uses one small manual GitHub Actions workflow
+then apply exactly that plan. A separately approved rebuild may reset this disposable project from
+the exact migrations on `main`. The repository therefore uses one small manual GitHub Actions workflow
 instead of automatic provider deployment. Reconsider the native integration before expanding this
 workflow or after two failures with this approach.
 
@@ -27,6 +28,11 @@ The workflow is manual-only and must be dispatched from `main`. It:
 - keeps raw CLI stdout/stderr out of logs and emits only classified JSON evidence;
 - blocks remote-only history, edited history, ambiguous scope, an empty apply, a changed dry-run
   history, a stale plan digest and every target mismatch.
+- accepts `rebuild` only when the candidate is exactly the workflow's current `main`, the existing
+  remote history already equals all six committed migrations, the pending input is `NONE`, the plan
+  digest is empty and the operator types `REBUILD stbunwkgvxfwmbjivgos`;
+- rebuilds with the pinned CLI's official `db reset --linked --no-seed` path and verifies exact
+  migration equality plus a non-mutating dry-run afterward.
 
 Production `epqpeoubkbftcvxjbqeo` and Legacy Staging `cdmocdodehjmcgtxicaj` are never accepted.
 
@@ -75,6 +81,18 @@ and migration set.
 The apply run repeats target, history and dry-run validation before writing. It applies only when
 the recomputed digest equals the approved plan digest, then requires remote history to equal the
 candidate migration history. Any mismatch stops fail-closed.
+
+## Rebuild run
+
+A rebuild is destructive and is permitted only for the disposable Clean Staging project after
+separate authorization. Run the workflow from `main`, choose `rebuild`, enter the exact current
+`main` SHA, set pending versions to `NONE`, leave the plan digest empty, confirm the project ref and
+type `REBUILD stbunwkgvxfwmbjivgos` in the rebuild field. Approve the protected environment job.
+
+The job first proves that remote history already equals the six migrations on `main` and that a
+dry-run is empty. It then performs `supabase db reset --linked --no-seed`, confirms all six
+migrations were recreated, and repeats the empty dry-run check. It never targets Production or
+Legacy Staging and does not seed fixtures automatically.
 
 ## Evidence and stop conditions
 

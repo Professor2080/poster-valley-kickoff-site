@@ -204,9 +204,12 @@ rechecks the exact selection under locks before deleting. A complete reset remai
 rebuild route.
 
 Fixtures remain available throughout Pascal's review. Operational email stays suppressed and
-Mollie is never called. A full reset is deliberately not automated: pause or replace Clean Staging,
-rebuild it from the six allowlisted Order Flow Board migrations, seed again, and relink the isolated Preview only if
-the project ref changed. Never disable triggers or manually delete append-only history.
+Mollie is never called. A full reset uses the separately approved `rebuild` operation in the
+protected Clean Staging GitHub Actions workflow. It accepts only the exact current `main`, exact
+project ref, aligned six-migration history, `NONE` pending scope and an explicit rebuild phrase;
+then it runs the pinned CLI's official `db reset --linked --no-seed` route and verifies migration
+equality again. Seed afterward through the ordinary fixture command. Never disable triggers or
+manually delete append-only history.
 
 ## Synthetic data standard
 

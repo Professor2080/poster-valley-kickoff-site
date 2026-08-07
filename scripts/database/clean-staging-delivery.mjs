@@ -63,12 +63,36 @@ export function createPlanDigest({ workflowSha, candidateSha, remoteVersions, pe
   return createHash('sha256').update(evidence).digest('hex');
 }
 
+export function assertRebuildAuthorization({
+  operation,
+  expectedPending,
+  approvedDigest,
+  confirmation,
+  workflowSha,
+  candidateSha,
+}) {
+  if (operation !== 'rebuild') return;
+  if (expectedPending.length !== 0) throw new Error('REBUILD_PENDING_SCOPE_NOT_NONE');
+  if (approvedDigest) throw new Error('REBUILD_PLAN_DIGEST_NOT_ALLOWED');
+  if (confirmation !== `REBUILD ${CLEAN_STAGING_PROJECT_REF}`) {
+    throw new Error('REBUILD_CONFIRMATION_INVALID');
+  }
+  if (workflowSha !== candidateSha) throw new Error('REBUILD_CANDIDATE_NOT_MAIN');
+}
+
+export function createRebuildInvocation() {
+  return {
+    args: ['db', 'reset', '--linked', '--no-seed'],
+    input: 'y\n',
+  };
+}
+
 function fail(code, phase = 'VALIDATE', exitCode = 1) {
   process.stdout.write(`${JSON.stringify({ ok: false, code, phase })}\n`);
   process.exit(exitCode);
 }
 
-function runSupabase(args, phase) {
+function runSupabase(args, phase, { input } = {}) {
   const trustedRoot = process.env.TRUSTED_ROOT;
   const candidateRoot = process.env.CANDIDATE_ROOT;
   if (!trustedRoot || !candidateRoot) fail('WORKSPACE_ROOTS_MISSING');
@@ -79,6 +103,7 @@ function runSupabase(args, phase) {
     encoding: 'utf8',
     maxBuffer: 4 * 1024 * 1024,
     windowsHide: true,
+    input,
   });
   if (result.error || result.status !== 0) fail('SUPABASE_COMMAND_FAILED', phase, 20);
   return result.stdout;
@@ -136,8 +161,8 @@ async function assertTrustedConfig() {
 }
 
 async function main() {
-  const [operation, expectedRaw, approvedDigest = ''] = process.argv.slice(2);
-  if (!['plan', 'apply'].includes(operation)) throw new Error('OPERATION_INVALID');
+  const [operation, expectedRaw, approvedDigest = '', rebuildConfirmation = ''] = process.argv.slice(2);
+  if (!['plan', 'apply', 'rebuild'].includes(operation)) throw new Error('OPERATION_INVALID');
   if (process.env.POSTER_VALLEY_ENV !== 'clean-staging') throw new Error('ENVIRONMENT_INVALID');
   if (process.env.CLEAN_STAGING_PROJECT_REF !== CLEAN_STAGING_PROJECT_REF) {
     throw new Error('PROJECT_REF_INVALID');
@@ -154,6 +179,14 @@ async function main() {
   }
 
   const expectedPending = parseExpectedVersions(expectedRaw);
+  assertRebuildAuthorization({
+    operation,
+    expectedPending,
+    approvedDigest,
+    confirmation: rebuildConfirmation,
+    workflowSha,
+    candidateSha,
+  });
   await assertTrustedConfig();
   const localVersions = await assertTrustedMigrations();
   const version = runSupabase(['--version'], 'CLI_VERSION').trim();
@@ -202,6 +235,32 @@ async function main() {
     });
   }
 
+  let afterRebuild = null;
+  if (operation === 'rebuild') {
+    const rebuild = createRebuildInvocation();
+    runSupabase(rebuild.args, 'REBUILD', { input: rebuild.input });
+    afterRebuild = parseMigrationList(runSupabase(['migration', 'list', '--linked'], 'LIST_AFTER_REBUILD'));
+    assertMigrationState({
+      filesystem: localVersions,
+      listedLocal: afterRebuild.local,
+      remote: afterRebuild.remote,
+      expectedPending: [],
+    });
+    runSupabase(['db', 'push', '--linked', '--dry-run'], 'DRY_RUN_AFTER_REBUILD');
+    const afterRebuildDryRun = parseMigrationList(
+      runSupabase(['migration', 'list', '--linked'], 'LIST_AFTER_REBUILD_DRY_RUN'),
+    );
+    assertMigrationState({
+      filesystem: localVersions,
+      listedLocal: afterRebuildDryRun.local,
+      remote: afterRebuildDryRun.remote,
+      expectedPending: [],
+    });
+    if (afterRebuild.remote.join(',') !== afterRebuildDryRun.remote.join(',')) {
+      throw new Error('REBUILD_DRY_RUN_MUTATED_HISTORY');
+    }
+  }
+
   process.stdout.write(`${JSON.stringify({
     ok: true,
     operation,
@@ -213,6 +272,8 @@ async function main() {
     pendingVersions: pending,
     planDigest,
     applied: operation === 'apply',
+    rebuilt: operation === 'rebuild',
+    afterRebuildVersions: afterRebuild?.remote ?? null,
   })}\n`);
 }
 
