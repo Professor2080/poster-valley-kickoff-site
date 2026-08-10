@@ -7,35 +7,31 @@ Choose the fast, controlled or infrastructure route in the
 
 ## Recorded release-platform status
 
-As recorded on 2026-08-01:
+As recorded read-only on 2026-08-10:
 
-- `main` is `2027378daae5bb3f29354fcd449367ff1c648909`;
+- the current `main` candidate was verified against the live remote;
 - GitHub ruleset `Protect main` is active;
 - required checks are `quality-gate` and `production-dependency-audit`;
 - the existing GitHub integration builds Vercel Preview for feature branches and Vercel Production
-  from `main`;
-- Production Supabase is `epqpeoubkbftcvxjbqeo` and unchanged;
+  from `main`; the current Production deployment for this SHA is `READY`;
+- the relevant Order Flow and protected-delivery changes are merged and there were no open pull
+  requests at the start of this review;
+- Production Supabase is `ACTIVE_HEALTHY` on PostgreSQL 17. Its Order Flow migration history and
+  functional contract are present;
 - Legacy Staging `cdmocdodehjmcgtxicaj` is inactive, frozen and not a valid migration baseline;
-- Clean Staging `stbunwkgvxfwmbjivgos` is `ACTIVE_HEALTHY`; the canonical baseline and
-  default-privilege hardening are applied and verified. The `PV-CLEAN-STAGING-V1` fixtures remain
-  present and were reconfirmed read-only on 2026-08-02; no fixture write was performed in the PR
-  #20 Production-preparation task.
+- Clean Staging is `ACTIVE_HEALTHY` on PostgreSQL 17 and has the current active migration history.
+  The accepted Order Flow fixture run is cleaned while required append-only evidence remains by
+  design.
 
 Ruleset, CI, Vercel, Supabase or provider dashboard state must be rechecked read-only for the exact
 candidate when it becomes release evidence. A recorded status never authorizes a write.
 
-Schema Baseline v1 is locally proven but has not been applied remotely. Its six source migrations
-are byte-preserved in the historical archive and only the canonical baseline remains active. The
-payment-idempotency MEDIUM/P2 finding is repaired locally. The independent Codex Security review
-was content-complete, but final report/SARIF sealing failed because of a tooling lifecycle error;
-the accepted review limit therefore forbids starting another broad review without a new BLOCKER or
-HIGH finding.
-
-After this Draft PR's required checks and exact Vercel Preview are green, the next separately
-authorized gate is to seed and verify `PV-CLEAN-STAGING-V1`, perform Pascal's authenticated review,
-and then run limited cleanup or rebuild the disposable environment. Before Production, a read-only
-cardinality check and separately approved additive compatibility DDL remain mandatory. PR #18 stays
-unchanged until the baseline merges; it is then rebased with a later migration timestamp.
+The Order Flow Board database and application release is complete. A 2026-08-10 read-only review
+found no missing functional support and performed no Production write. Production is nevertheless
+not claimed to be fully catalog-identical to a clean `main` rebuild. Treat that as a separate
+infrastructure reconciliation item. Do not infer full schema equality from an empty migration plan,
+and do not change historical objects without a separately reviewed plan and explicit Production
+approval.
 
 ## Universal release gate
 

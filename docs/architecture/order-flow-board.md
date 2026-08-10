@@ -1,6 +1,6 @@
 # Order Flow Board
 
-Status: implemented on a feature branch; migration not applied remotely.
+Status: released; read-only release verification completed on 2026-08-10.
 
 ## Purpose and source boundaries
 
@@ -112,10 +112,15 @@ creation, Shipped, delivery confirmation and Closed archive behavior inside a ro
 applies every active migration twice from `template0`, validates catalog/ACL fingerprints and runs
 the permanent contracts.
 
-No migration is applied by a PR or CI. Release remains database-first and requires a separately
-authorized PostgreSQL 17 local proof, exact Clean Staging history/dry-run/apply, authenticated
-synthetic acceptance and later a separately authorized Production migration. The application must
-not be promoted ahead of the backward-compatible database migration.
+The release followed the database-first path: PostgreSQL 17 proof, exact migration-history gates,
+authenticated synthetic acceptance and a separately authorized database apply preceded the
+application release. A read-only review confirmed the functional Board RPC, authorization,
+history-protection, threshold and active-stage contracts. No follow-up Order Flow migration is
+pending.
+
+The release environment is not claimed to be fully catalog-identical to a clean `main` rebuild.
+That remains a separate infrastructure concern and does not authorize a cleanup migration during a
+product release.
 
 The Clean Staging acceptance cleanup is explicitly run-aware. Its normal mode still rejects every
 runtime-created record. The separate `--expect-order-flow-acceptance` mode accepts only the exact

@@ -25,6 +25,8 @@ through an approved repository change.
 
 ## Schema Baseline v1 promotion status
 
+Recorded read-only on 2026-08-10:
+
 - `supabase/migrations/20260731113000_schema_baseline_v1.sql` is the immutable first active
   migration and has been proven twice from `template0` on PostgreSQL 17.
 - `supabase/migrations/20260731193947_harden_default_privileges.sql` is the exact allowlisted first
@@ -35,15 +37,18 @@ through an approved repository change.
   input.
 - The payment-start idempotency finding is repaired locally through one canonical order per
   invitation, one payment per order/provider, atomic server-only RPCs and persistent Mollie keys.
-- Clean Staging `stbunwkgvxfwmbjivgos` is `ACTIVE_HEALTHY`; the canonical baseline was applied there
-  under separate authorization and its migration history, schema, grants and contracts were
-  verified. This hardening task performs no remote database write.
-- The next separately authorized database gate is to require exact pre-feature history containing
-  only the canonical baseline, dry-run only the allowlisted hardening migration, apply it, and
-  verify the new default-ACL contracts before Preview validation.
-- Before Production, perform a separately authorized read-only cardinality check and approve the
-  additive compatibility DDL. The baseline file itself must never be run against the existing
-  Production schema.
+- Clean Staging is `ACTIVE_HEALTHY` on PostgreSQL 17 and contains the current active migration
+  sequence from `main`.
+- The release environment has the same Order Flow migration history and the intended functional
+  schema, authorization, history, status and threshold contracts are present. No Order Flow
+  migration is pending.
+- Equal migration versions are not treated as complete catalog equality. The release environment
+  is not claimed to be fully catalog-identical to a clean `main` rebuild.
+- This difference is an infrastructure blocker for a claim of full reproducibility, but not
+  evidence of missing Order Flow functionality. Do not repair, drop or rewrite anything during a
+  feature release. A separate reviewed reconciliation plan and explicit Production approval are
+  required.
+- The baseline file itself must never be run against the existing Production schema.
 - Legacy Staging `cdmocdodehjmcgtxicaj` remains inactive and is not a release target.
 
 ## Feature-migration entry gate
