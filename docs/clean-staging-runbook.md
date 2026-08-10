@@ -6,44 +6,43 @@ calls or deployment.
 
 The interactive local Codex credential route is frozen and must not be used, repaired or extended.
 Migration planning and application belong only to the protected, manual GitHub Actions boundary
-defined in [Clean Staging database delivery](clean-staging-ci-delivery.md). That workflow remains
-inactive until its Draft PR is reviewed and merged, the protected GitHub environment is configured,
-and the exact plan or apply run is separately authorized.
+defined in [Clean Staging database delivery](clean-staging-ci-delivery.md). That protected workflow
+is merged and supports exact plan, apply and disposable rebuild operations. Every stateful run still
+requires its own authorization and exact target/SHA/scope gates.
 
-## Recorded status on 2026-08-01
+## Recorded status on 2026-08-10
 
 Repository and release facts recorded for this operating-model task:
 
-- `main`: `2027378daae5bb3f29354fcd449367ff1c648909`;
+- current `main`: verified against the live remote;
 - GitHub ruleset `Protect main`: active;
 - required checks: `quality-gate` and `production-dependency-audit`;
 - Vercel Preview and Production: built through the existing GitHub integration;
-- Production Supabase: `epqpeoubkbftcvxjbqeo`, unchanged and never a feature-test target;
+- Production Supabase: Order Flow release present and never a feature-test target;
 - Legacy Staging: `cdmocdodehjmcgtxicaj`, inactive, frozen and not a reproducible migration
   baseline;
-- Clean Staging: `stbunwkgvxfwmbjivgos`, `eu-west-1`, `ACTIVE_HEALTHY`; the canonical baseline and
-  default-privilege hardening were applied under separate authorizations. Migration history,
-  schema, grants, baseline contracts and default ACLs were verified.
+- Clean Staging: PostgreSQL 17, `ACTIVE_HEALTHY`; the current active migration sequence is present.
 
 | Component | Status |
 | --- | --- |
-| Production | active and unchanged |
+| Production | active; Order Flow Board live; separate catalog-alignment follow-up recorded |
 | Legacy Staging | inactive and frozen; not a valid migration baseline |
-| Clean Staging | `ACTIVE_HEALTHY`; canonical baseline and hardening applied and verified; `PV-CLEAN-STAGING-V1` fixtures present |
-| PR #18 | Draft; current `main` merged normally; later-timestamp migration awaiting separate validation |
+| Clean Staging | `ACTIVE_HEALTHY`; active history aligned; accepted fixtures cleaned; required evidence retained |
+| Order Flow release | merged and completed through the controlled release path |
+| Fixture reset | corrected and verified |
+| Protected rebuild | merged and available for separately authorized runs |
 | A4 | frozen and outside the active release path |
 | Migration-history recovery | stopped |
 | WooCommerce architecture | recorded on `main` |
-| Next database gate | separately authorize the version-controlled synthetic seed on exact Clean Staging |
+| Next database gate | none for Order Flow; separate Production catalog-reconciliation plan only if exact reproducibility is required |
 
-### Shipping PR #18
+### Shipping and Order Flow release
 
-Draft PR #18, **Add safe shipping confirmation workflow**, is on branch
-`codex/shipping-confirmation` at `67742210c3036c9ed9efccedd89e0b0771ca0d40`. It is not merged.
-Migration `20260802130000_shipping_confirmation_safety.sql` has not been applied permanently to any
-environment. Current `main` was merged normally into PR #18 and the migration now sorts after the
-canonical baseline and default-privilege hardening. Clean Staging validation still requires separate
-authorization; do not redirect that validation to Legacy Staging or Production.
+Shipping confirmation, Order Flow Board and threshold changes are merged and present in both release
+environments. The authenticated acceptance suite covered the version-controlled scenarios. Cleanup
+removed mutable fixtures while preserving the required append-only evidence. Do not re-seed the
+retained post-cleanup state; use the protected disposable rebuild route before another full
+acceptance run.
 
 ### Why Legacy Staging is frozen
 
@@ -246,19 +245,17 @@ cleanup.
 
 Each external or stateful step below is a separately authorized infrastructure action.
 
-1. Keep Draft PR #20 on the normal GitHub review path; the canonical baseline apply and its
-   read-only schema, RLS, grant, payment-contract and fingerprint verification are complete.
-2. Keep the verified Clean Staging history exactly equal to the canonical baseline followed by the
-   allowlisted default-privilege hardening.
-3. After separate authorization, run the version-controlled seed and verification, leaving the
-   fixtures in place for Pascal's review.
-4. Use limited cleanup after acceptance, or rebuild the disposable environment for a full reset.
+1. Keep the verified Clean Staging history exactly equal to all six active migrations on `main`.
+2. Keep the retained post-cleanup acceptance evidence intact.
+3. Before another full acceptance run, separately authorize the protected disposable rebuild and
+   exact version-controlled seed.
+4. Use limited cleanup after acceptance, or the protected rebuild for a full reset.
 5. Keep the isolated Vercel Preview on Clean Staging with suppressed/test provider configuration.
-6. Validate PR #18's later-timestamp migration through the same controlled path after its normal
-   merge of current `main`.
+6. Validate every future migration through the same controlled path after its normal merge order is
+   established.
 7. Keep inactive Legacy Staging frozen during the transition.
-8. Before Production, complete the separately approved read-only cardinality check and additive
-   compatibility-DDL plan; never apply the initial baseline DDL to the existing Production schema.
+8. Keep Production catalog reconciliation separate from product releases; never apply the initial
+   baseline DDL to the existing Production schema.
 
 ## Recorded creation evidence and remaining release evidence
 

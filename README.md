@@ -67,14 +67,13 @@ authorization, payments, operational email and other trust-boundary changes, and
 environment or platform work. Committed migrations on `main` are the sole database-history source.
 The existing Supabase project `cdmocdodehjmcgtxicaj` is inactive and frozen as Legacy Staging; it
 is not a valid migration baseline. Clean Staging `stbunwkgvxfwmbjivgos` exists in `eu-west-1` and is
-recorded as `ACTIVE_HEALTHY`. Its remote migration history contains
-`20260731113000_schema_baseline_v1` followed by
-`20260731193947_harden_default_privileges`; the resulting schema has 13 tables, 4 views, 2 enums,
-27 routines, 9 triggers and 2 policies. Version-controlled Clean Staging fixture tooling exists but
-has not been executed remotely. Production is unchanged and Legacy Staging remains inactive. The interactive local credential
-route is frozen. The next infrastructure gate is a reviewed GitHub Actions route using a protected
-Clean Staging environment; after that is proven, the next product gate is Pascal's review of the
-frontend and Admin flows.
+recorded as `ACTIVE_HEALTHY`. Its migration history is aligned with the current active sequence and
+the protected plan/apply/rebuild workflow is available. The accepted Order Flow fixture run was
+cleaned while required append-only evidence was retained. The Order Flow Board release is live and
+a read-only review found no missing functional support. Production is intentionally not claimed to
+be fully catalog-identical to a clean rebuild from `main`; that remains a separate infrastructure
+follow-up. See [Current project state](PROJECT_STATE.md). Legacy Staging remains inactive and the
+interactive local credential route remains frozen.
 
 ## First Drop Assets
 
