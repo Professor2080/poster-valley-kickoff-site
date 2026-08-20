@@ -1,130 +1,142 @@
 import type { Drop } from '../data/drops'
+import { getCreatorById, getOtherDropsForCreator, liveDrops } from '../data/drops'
+import { DropArtwork } from './DropArtwork'
+import { DropCard } from './DropCard'
 import { DropInterestForm } from './DropInterestForm'
+import { PrintMeter } from './PrintMeter'
 
 export function DesignDetailPage({ drop }: { drop: Drop }) {
+  const creator = getCreatorById(drop.creatorId)
+  const creatorDrops = getOtherDropsForCreator(drop.creatorId, drop.id)
+  const continueDrops = liveDrops.filter((item) => item.id !== drop.id).slice(0, 3)
+  const action = getPrimaryAction(drop)
+
   return (
     <>
-      <section className="section-pad bg-paper pt-32 text-ink">
-        <div className="mx-auto grid max-w-[88rem] gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div className="lg:sticky lg:top-28">
+      <section id="drop-top" className="section-pad bg-paper pt-32 text-ink">
+        <div className="mx-auto grid max-w-[88rem] gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
+          <div className="drop-detail-artwork lg:sticky lg:top-28">
             <div className="overflow-hidden border border-ink/12 bg-white p-3 shadow-poster">
-              <img
-                src={drop.image}
-                alt={drop.alt}
-                width="1190"
-                height="1684"
-                className="aspect-[1190/1684] w-full object-cover"
-              />
+              <DropArtwork drop={drop} priority />
             </div>
+            {drop.prototypeNote ? <p>{drop.prototypeNote}</p> : null}
           </div>
 
           <div>
-            <a
-              className="text-xs uppercase tracking-[0.22em] text-ink/45 transition hover:text-ink focus-visible:text-ink"
-              href="/"
-            >
-              Back to overview
-            </a>
-            <p className="eyebrow mt-10 text-ink/45">Poster detail</p>
-            <h1 className="mt-5 max-w-4xl font-heading text-[clamp(4rem,9vw,9rem)] font-semibold leading-[0.84] tracking-[-0.085em]">
-              {drop.title}
-            </h1>
-            <p className="mt-8 max-w-2xl text-xl leading-9 text-ink/64">{drop.summary}</p>
+            <a className="detail-back-link" href="/#drops">Back to live drops</a>
+            <div className="detail-kicker-row">
+              <p className="eyebrow text-ink/45">Drop {drop.number}</p>
+              <p>{drop.statusLabel}</p>
+            </div>
+            <h1 className="detail-title">{drop.title}</h1>
+            <p className="detail-creator">by {drop.creator}{drop.isPrototype ? ' · prototype identity' : ''}</p>
+            <p className="detail-summary">{drop.summary}</p>
 
-            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-              <a className="button-dark" href="#drop-interest">
-                {drop.reservationCtaLabel}
-              </a>
-              <p className="max-w-sm text-sm leading-6 text-ink/48">
-                No payment now. If this poster goes into production, we send a personal order
-                invitation with final details before payment.
-              </p>
+            {drop.progress ? <div id="print-meter" className="detail-meter"><PrintMeter progress={drop.progress} tone="light" /></div> : null}
+
+            <div className="detail-action-row">
+              {action ? <a className="button-dark" href={action.href}>{action.label}</a> : null}
+              <p>{action?.note ?? 'This Design has no primary purchase or reservation action in its current state.'}</p>
             </div>
 
-            <div className="mt-9 grid gap-4 sm:grid-cols-2">
-              <InfoBlock label="Status" value={drop.statusLabel} />
+            <dl className="detail-facts">
+              <InfoBlock label="Status" value={drop.editionLabel} />
               <InfoBlock label="Creator" value={drop.creator} />
               <InfoBlock label="Size" value={drop.dimensions.display} />
               <InfoBlock label="Poster price" value={drop.priceLabel} />
+            </dl>
+
+            <div id="design-story" className="detail-story">
+              <p className="eyebrow text-ink/42">Design story</p>
+              <h2>A closer look at the idea.</h2>
+              <p>{drop.story}</p>
+              <blockquote>{drop.designThought}</blockquote>
             </div>
 
-            <div className="mt-12 grid gap-10 border-y border-ink/12 py-10 md:grid-cols-2">
-              <div>
-                <h2 className="font-heading text-3xl tracking-[-0.055em]">Poster details</h2>
-                <ul className="mt-5 space-y-3 text-ink/58">
-                  {drop.detailBullets.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h2 className="font-heading text-3xl tracking-[-0.055em]">Before pre-order</h2>
-                <ul className="mt-5 space-y-3 text-ink/58">
-                  {drop.preOrderNotes.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-10 border-b border-ink/12 pb-10">
-              <h2 className="font-heading text-3xl tracking-[-0.055em]">Shipping indication</h2>
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                {drop.shipping.map((zone) => (
-                  <div key={zone.region} className="border border-ink/12 bg-white/50 p-5">
-                    <p className="text-xs uppercase tracking-[0.2em] text-ink/42">{zone.region}</p>
-                    <p className="mt-3 font-heading text-2xl tracking-[-0.045em]">
-                      {zone.estimate}
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-ink/52">{zone.note}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-4 text-sm leading-6 text-ink/45">{drop.shippingSummary}</p>
+            <div className="detail-steps">
+              <h2>How this drop works</h2>
+              <ol>
+                <li><span>01</span><div><strong>Join the drop</strong><p>A non-binding reservation of interest. No payment now.</p></div></li>
+                <li><span>02</span><div><strong>Reach the target</strong><p>Qualified reserved copies move the Print Meter.</p></div></li>
+                <li><span>03</span><div><strong>Confirm your order</strong><p>A personal invitation follows with final print, shipping and payment details.</p></div></li>
+              </ol>
             </div>
           </div>
         </div>
 
         {drop.roomImage ? (
-          <div className="mx-auto mt-16 grid max-w-[88rem] gap-10 border-t border-ink/12 pt-12 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
+          <div className="room-view">
             <div>
               <p className="eyebrow text-ink/42">Room view</p>
-              <h2 className="mt-4 font-heading text-[clamp(2.8rem,5vw,5.4rem)] font-semibold leading-[0.9] tracking-[-0.075em]">
-                A real sense of scale.
-              </h2>
-              <p className="mt-5 max-w-md text-base leading-7 text-ink/58">
-                A framed room view helps show how the {drop.dimensions.label} poster sits on a wall.
-                The release is sold as a poster; frame styling is shown for context only.
+              <h2>A real sense of scale.</h2>
+              <p>
+                The framed view shows how the {drop.dimensions.label} poster sits on a wall. The
+                release is sold as a poster; frame styling is shown for context only.
               </p>
             </div>
-            <div className="overflow-hidden border border-ink/12 bg-white p-3 shadow-poster">
-              <img
-                src={drop.roomImage}
-                alt={`${drop.title} poster shown framed on a wall for scale`}
-                width="640"
-                height="480"
-                className="aspect-[4/3] w-full object-cover"
-                loading="lazy"
-              />
-            </div>
+            <div><img src={drop.roomImage} alt={`${drop.title} poster shown framed on a wall for scale`} width="640" height="480" loading="lazy" /></div>
           </div>
+        ) : null}
+
+        <div className="detail-practical">
+          <div>
+            <p className="eyebrow text-ink/42">Print and delivery</p>
+            <h2>Clear before anything becomes final.</h2>
+            <ul>{drop.detailBullets.map((item) => <li key={item}>{item}</li>)}</ul>
+          </div>
+          <div className="shipping-grid">
+            {drop.shipping.map((zone) => (
+              <div key={zone.region}><p>{zone.region}</p><strong>{zone.estimate}</strong><span>{zone.note}</span></div>
+            ))}
+            <p>{drop.shippingSummary}</p>
+          </div>
+        </div>
+
+        {creator ? (
+          <section className="creator-story" aria-labelledby="creator-title">
+            <div className="creator-mark" aria-hidden="true">{creator.mark}</div>
+            <div>
+              <p className="eyebrow text-ink/42">About the creator</p>
+              <h2 id="creator-title">{creator.name}</h2>
+              {creator.isPrototype ? <p className="creator-prototype-note">Prototype identity · no real partnership is claimed.</p> : null}
+            </div>
+            <div>
+              <p>{creator.story}</p>
+              <p>{creator.designApproach}</p>
+              {creatorDrops.length > 0 ? (
+                <div className="creator-other-drops">
+                  <span>Also in this prototype</span>
+                  {creatorDrops.slice(0, 2).map((item) => <a key={item.id} href={item.href}>{item.title}</a>)}
+                </div>
+              ) : null}
+            </div>
+          </section>
         ) : null}
       </section>
 
-      <section className="section-pad bg-ink text-paper">
-        <div className="mx-auto max-w-[82rem]">
-          <DropInterestForm drop={drop} />
+      <section className="continue-section section-pad bg-ink text-paper">
+        <div className="mx-auto max-w-[88rem]">
+          <p className="eyebrow text-white/45">Continue exploring</p>
+          <h2>Other live drops on the wall.</h2>
+          <div className="continue-grid">{continueDrops.map((item) => <DropCard key={item.id} drop={item} compact />)}</div>
         </div>
       </section>
+
+      {drop.reservationEnabled ? (
+        <section className="section-pad bg-ink text-paper"><div className="mx-auto max-w-[82rem]"><DropInterestForm drop={drop} /></div></section>
+      ) : null}
     </>
   )
 }
 
 function InfoBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-t border-ink/14 pt-5">
-      <p className="text-xs uppercase tracking-[0.22em] text-ink/42">{label}</p>
-      <p className="mt-3 font-heading text-2xl tracking-[-0.055em]">{value}</p>
-    </div>
-  )
+  return <div><dt>{label}</dt><dd>{value}</dd></div>
+}
+
+function getPrimaryAction(drop: Drop) {
+  if (drop.status === 'live') return { label: 'Join the drop', href: '#drop-interest', note: 'No payment now. Final details follow in a personal order invitation.' }
+  if (drop.status === 'coming-next') return { label: 'Get notified', href: '/#waitlist', note: 'Participation is not open and no Print Meter is shown yet.' }
+  if (drop.status === 'target-reached') return { label: 'View confirmed status', href: '#design-story', note: 'The First Edition target is shown as confirmed in this frontend fixture.' }
+  if (drop.status === 'made-possible') return { label: 'View the story', href: '#design-story', note: 'This archive treatment is a visual fixture, not historical sales data.' }
+  return null
 }
